@@ -31,10 +31,10 @@
 - [x] 預設資金帳戶 seeder（現金／主要銀行／其他）
 
 ## 5. Auth Module
-- [ ] POST /api/login
-- [ ] POST /api/logout
-- [ ] GET /api/me
-- [ ] Middleware：未登入擋後台、停用使用者不可登入
+- [x] POST /api/login
+- [x] POST /api/logout
+- [x] GET /api/me
+- [x] Middleware：未登入擋後台、停用使用者不可登入
 
 ## 6. Dashboard Module
 - [ ] GET /api/dashboard/summary（Service 計算：帳戶餘額／本月收支／車輛狀態計數／本月成交數）
