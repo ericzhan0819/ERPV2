@@ -13,13 +13,22 @@ class DashboardService
     private const VEHICLE_STATUSES = ['preparing', 'listed', 'reserved', 'sold', 'cancelled'];
 
     /**
+     * Dashboard production consistency target is MySQL/MariaDB, where this
+     * explicitly sets REPEATABLE READ so every aggregate below reads against
+     * the same snapshot instead of racing with concurrent writes between the
+     * individual queries. SQLite is the automated-test driver only: it has
+     * no session-level isolation level to set (and none of its statements
+     * matter for cross-request concurrency in tests), so it just runs the
+     * queries inside a plain transaction.
+     *
      * @return array<string, mixed>
      */
     public function summary(): array
     {
-        // Wrapped in a transaction so every aggregate below reads against the
-        // same consistent snapshot instead of racing with concurrent writes
-        // between the individual queries.
+        if (DB::connection()->getDriverName() !== 'sqlite') {
+            DB::statement('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+        }
+
         return DB::transaction(fn () => $this->buildSummary());
     }
 

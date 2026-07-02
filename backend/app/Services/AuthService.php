@@ -87,9 +87,15 @@ class AuthService
         ];
     }
 
+    /**
+     * Idempotent: safe to call repeatedly (e.g. client retries after a lost
+     * response) whether or not a session is currently authenticated.
+     */
     public function logout(): void
     {
-        Auth::guard('web')->logout();
+        if (Auth::guard('web')->check()) {
+            Auth::guard('web')->logout();
+        }
 
         request()->session()->invalidate();
         request()->session()->regenerateToken();
