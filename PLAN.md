@@ -41,10 +41,10 @@
 - [x] 前端 Dashboard 頁（卡片 + 快捷操作，串真實 API）
 
 ## 7. Vehicle Module
-- [ ] Vehicle CRUD API（含 stock_no 自動產生、驗證規則）
-- [ ] 前端車輛列表頁（搜尋／狀態篩選／分頁）
-- [ ] 前端新增車輛頁
-- [ ] 前端車輛詳情頁（基本/採購/銷售資料＋單車收支摘要＋明細）
+- [x] Vehicle CRUD API（含 stock_no 自動產生、驗證規則）
+- [x] 前端車輛列表頁（搜尋／狀態篩選／分頁）
+- [x] 前端新增車輛頁
+- [x] 前端車輛詳情頁（基本/採購/銷售資料＋單車收支摘要＋明細）
 
 ## 8. Vehicle Workflow Module
 - [ ] POST /list（整備完成上架）
