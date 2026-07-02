@@ -27,8 +27,8 @@
 - [x] 第 3B：Codex review fixes completed（audit fields 移除 mass-assignable / direction enum(income,expense) / amount CHECK > 0 / created_by・updated_by 改 restrictOnDelete）
 
 ## 4. Seeder
-- [ ] 預設管理員帳號 seeder
-- [ ] 預設資金帳戶 seeder（現金／主要銀行／其他）
+- [x] 預設管理員帳號 seeder
+- [x] 預設資金帳戶 seeder（現金／主要銀行／其他）
 
 ## 5. Auth Module
 - [ ] POST /api/login
