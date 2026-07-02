@@ -6,11 +6,15 @@ import type { User } from '../types/auth'
 
 export type LogoutStatus = 'idle' | 'pending' | 'blocked'
 
-// Survives page refresh/close so a logout that never got confirmed (timeout,
-// CSRF failure, lost response) can't be silently forgotten: the server
-// session cookie may still be valid, so the next load must not restore the
-// authenticated UI via /api/me until logout is confirmed.
-const LOGOUT_PENDING_KEY = 'erpv2:logout-pending'
+// Cross-tab logout coordination. A boolean flag can't distinguish "still in
+// flight" from "confirmed failed" from "confirmed done", so this stores one
+// of LogoutMarker's three values instead (absence of the key means idle).
+// Every tab reacts to changes via the window 'storage' event, which fires in
+// every OTHER tab automatically - the tab that wrote the value has to update
+// its own React state directly since it never receives its own event.
+const LOGOUT_STATE_KEY = 'erpv2:logout-state'
+
+type LogoutMarker = 'pending' | 'failed' | 'completed'
 
 interface AuthContextValue {
   user: User | null
@@ -29,8 +33,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [logoutStatus, setLogoutStatus] = useState<LogoutStatus>('idle')
 
   useEffect(() => {
-    if (localStorage.getItem(LOGOUT_PENDING_KEY) === '1') {
+    const marker = localStorage.getItem(LOGOUT_STATE_KEY) as LogoutMarker | null
+
+    if (marker === 'pending') {
+      setLogoutStatus('pending')
+      setLoading(false)
+      return
+    }
+
+    if (marker === 'failed') {
       setLogoutStatus('blocked')
+      setLoading(false)
+      return
+    }
+
+    if (marker === 'completed') {
+      // Logout was already confirmed (possibly in another tab, or before a
+      // refresh). The session cookie is gone server-side, so there is no
+      // point calling /api/me - and doing so risks a race where a stale
+      // cookie briefly resurrects the authenticated UI.
+      setUser(null)
+      setLogoutStatus('idle')
       setLoading(false)
       return
     }
@@ -42,15 +65,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    function handleStorage(event: StorageEvent) {
+      if (event.key !== LOGOUT_STATE_KEY) {
+        return
+      }
+
+      const marker = event.newValue as LogoutMarker | null
+
+      if (marker === 'pending') {
+        setUser(null)
+        setLogoutStatus('pending')
+      } else if (marker === 'failed') {
+        setUser(null)
+        setLogoutStatus('blocked')
+      } else if (marker === 'completed') {
+        setUser(null)
+        setLogoutStatus('idle')
+      }
+      // marker === null means the key was cleared by a fresh login in
+      // another tab; this tab has no session to protect either way, so
+      // there is nothing to react to here.
+    }
+
+    window.addEventListener('storage', handleStorage)
+    return () => window.removeEventListener('storage', handleStorage)
+  }, [])
+
   const login = useCallback(async (email: string, password: string) => {
     const loggedInUser = await authApi.login(email, password)
-    localStorage.removeItem(LOGOUT_PENDING_KEY)
+    localStorage.removeItem(LOGOUT_STATE_KEY)
     setLogoutStatus('idle')
     setUser(loggedInUser)
   }, [])
 
   const performLogout = useCallback(async () => {
-    localStorage.setItem(LOGOUT_PENDING_KEY, '1')
+    localStorage.setItem(LOGOUT_STATE_KEY, 'pending' satisfies LogoutMarker)
     setLogoutStatus('pending')
 
     try {
@@ -64,13 +114,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (retryError) {
         setUser(null)
         setLogoutStatus('blocked')
+        localStorage.setItem(LOGOUT_STATE_KEY, 'failed' satisfies LogoutMarker)
         throw retryError
       }
     }
 
-    localStorage.removeItem(LOGOUT_PENDING_KEY)
     setUser(null)
     setLogoutStatus('idle')
+    // Left in place (not removed) until the next successful login, so any
+    // tab opened or refreshed afterward also stays logged out instead of
+    // silently restoring the authenticated UI.
+    localStorage.setItem(LOGOUT_STATE_KEY, 'completed' satisfies LogoutMarker)
   }, [])
 
   return (
