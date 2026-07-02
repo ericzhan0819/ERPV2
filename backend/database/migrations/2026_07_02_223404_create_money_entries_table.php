@@ -35,7 +35,10 @@ return new class extends Migration
         });
 
         // MariaDB/MySQL 尚無 Blueprint::check() 語法糖，改用原生 CHECK 約束確保 amount 為正整數。
-        DB::statement('ALTER TABLE money_entries ADD CONSTRAINT chk_money_entries_amount_positive CHECK (amount > 0)');
+        // SQLite（測試環境）不支援 ALTER TABLE ADD CONSTRAINT 語法，故僅在 MySQL/MariaDB 執行。
+        if (Schema::getConnection()->getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE money_entries ADD CONSTRAINT chk_money_entries_amount_positive CHECK (amount > 0)');
+        }
     }
 
     public function down(): void

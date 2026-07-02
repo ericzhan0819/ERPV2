@@ -37,8 +37,8 @@
 - [x] Middleware：未登入擋後台、停用使用者不可登入
 
 ## 6. Dashboard Module
-- [ ] GET /api/dashboard/summary（Service 計算：帳戶餘額／本月收支／車輛狀態計數／本月成交數）
-- [ ] 前端 Dashboard 頁（卡片 + 快捷操作，串真實 API）
+- [x] GET /api/dashboard/summary（Service 計算：帳戶餘額／本月收支／車輛狀態計數／本月成交數）
+- [x] 前端 Dashboard 頁（卡片 + 快捷操作，串真實 API）
 
 ## 7. Vehicle Module
 - [ ] Vehicle CRUD API（含 stock_no 自動產生、驗證規則）
