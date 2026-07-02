@@ -30,20 +30,28 @@ class AuthService
     public function login(string $email, string $password): User
     {
         $limiters = $this->limiters($email);
+        [$ipKey, $maxIpAttempts, $ipDecaySeconds] = $limiters['ip'];
 
-        foreach ($limiters as [$key, $maxAttempts]) {
-            if (RateLimiter::tooManyAttempts($key, $maxAttempts)) {
+        // The IP-wide limiter only ever counts failed logins, so it is safe to
+        // admission-check it read-only here without reserving an attempt.
+        if (RateLimiter::tooManyAttempts($ipKey, $maxIpAttempts)) {
+            throw new TooManyLoginAttemptsException(RateLimiter::availableIn($ipKey));
+        }
+
+        // Reserve (hit-then-admit) the email+IP and account attempts before calling
+        // Auth::attempt, so concurrent requests can't all read "under the limit"
+        // and slip through before any of them records a hit.
+        foreach (['email_ip', 'account'] as $name) {
+            [$key, $maxAttempts, $decaySeconds] = $limiters[$name];
+
+            if (RateLimiter::hit($key, $decaySeconds) > $maxAttempts) {
                 throw new TooManyLoginAttemptsException(RateLimiter::availableIn($key));
             }
         }
 
-        // Reserve the attempt for every limiter before calling Auth::attempt so a
-        // synchronized burst cannot all read "not blocked yet" and slip through.
-        foreach ($limiters as [$key, , $decaySeconds]) {
-            RateLimiter::hit($key, $decaySeconds);
-        }
-
         if (! Auth::attempt(['email' => $email, 'password' => $password])) {
+            RateLimiter::hit($ipKey, $ipDecaySeconds);
+
             throw new AuthenticationException('帳號或密碼錯誤');
         }
 
