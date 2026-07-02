@@ -7,10 +7,10 @@
 - [x] README.md 骨架（環境需求／安裝步驟／啟動方式章節先建立）
 
 ## 1. Backend 骨架
-- [ ] Laravel 專案建立於 backend/
-- [ ] Laravel Sanctum 安裝與 SPA 設定（CORS、CSRF、session driver）
-- [ ] .env.example 設定（DB 連線指向 docker-compose）
-- [ ] 基礎資料夾結構確認（Controllers/Requests/Resources/Services/Models/Policies）
+- [x] Laravel 專案建立於 backend/
+- [x] Laravel Sanctum 安裝與 SPA 設定（CORS、CSRF、session driver）
+- [x] .env.example 設定（DB 連線指向 docker-compose）
+- [x] 基礎資料夾結構確認（Controllers/Requests/Resources/Services/Models/Policies）
 
 ## 2. Frontend 骨架
 - [ ] Vite + React + TypeScript 專案建立於 frontend/
