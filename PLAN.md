@@ -13,10 +13,10 @@
 - [x] 基礎資料夾結構確認（Controllers/Requests/Resources/Services/Models/Policies）
 
 ## 2. Frontend 骨架
-- [ ] Vite + React + TypeScript 專案建立於 frontend/
-- [ ] Tailwind CSS 設定
-- [ ] 專案結構建立（api/ components/ layouts/ pages/ routes/ hooks/ types/ utils/）
-- [ ] API client（src/api/client.ts）與 axios/fetch credentials 設定
+- [x] Vite + React + TypeScript 專案建立於 frontend/
+- [x] Tailwind CSS 設定
+- [x] 專案結構建立（api/ components/ layouts/ pages/ routes/ hooks/ types/ utils/）
+- [x] API client（src/api/client.ts）與 axios/fetch credentials 設定
 
 ## 3. 資料模型與 Migration
 - [ ] users migration（含 is_admin, is_active）
