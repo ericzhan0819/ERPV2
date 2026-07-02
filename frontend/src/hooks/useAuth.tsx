@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import * as authApi from '../api/auth'
 import { ensureCsrfCookie } from '../api/client'
@@ -14,7 +14,33 @@ export type LogoutStatus = 'idle' | 'pending' | 'blocked'
 // its own React state directly since it never receives its own event.
 const LOGOUT_STATE_KEY = 'erpv2:logout-state'
 
+// Marker used by a previous version of this app. An unresolved value here
+// means an older tab/session started a logout that was never confirmed
+// server-side; it must be migrated to the new marker before anything else
+// runs, otherwise it is silently ignored and /api/me can resurrect a
+// session whose server-side logout is still unconfirmed.
+const LEGACY_LOGOUT_PENDING_KEY = 'erpv2:logout-pending'
+
 type LogoutMarker = 'pending' | 'failed' | 'completed'
+
+function migrateLegacyLogoutMarker(): LogoutMarker | null {
+  const legacy = localStorage.getItem(LEGACY_LOGOUT_PENDING_KEY)
+  if (legacy === null) {
+    return null
+  }
+
+  // Treat as 'failed' rather than 'pending': there is no in-flight request
+  // to wait for anymore (it belonged to a previous page load), so the safe
+  // assumption is that the server-side revocation was never confirmed.
+  const existing = localStorage.getItem(LOGOUT_STATE_KEY) as LogoutMarker | null
+  const migrated = existing ?? 'failed'
+  if (!existing) {
+    localStorage.setItem(LOGOUT_STATE_KEY, migrated satisfies LogoutMarker)
+  }
+  // Only drop the legacy key once the new marker is guaranteed to exist.
+  localStorage.removeItem(LEGACY_LOGOUT_PENDING_KEY)
+  return migrated
+}
 
 interface AuthContextValue {
   user: User | null
@@ -32,16 +58,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [logoutStatus, setLogoutStatus] = useState<LogoutStatus>('idle')
 
+  // Guards the initial /api/me request against resolving after a logout
+  // marker has since appeared (from another tab, or from this tab starting
+  // its own logout). Without this, a slow /api/me response can setUser()
+  // after the marker already cleared the user, resurrecting protected UI.
+  const meRequestValidRef = useRef(true)
+
   useEffect(() => {
-    const marker = localStorage.getItem(LOGOUT_STATE_KEY) as LogoutMarker | null
+    const legacyMigratedMarker = migrateLegacyLogoutMarker()
+    const marker = legacyMigratedMarker ?? (localStorage.getItem(LOGOUT_STATE_KEY) as LogoutMarker | null)
 
     if (marker === 'pending') {
+      meRequestValidRef.current = false
       setLogoutStatus('pending')
       setLoading(false)
       return
     }
 
     if (marker === 'failed') {
+      meRequestValidRef.current = false
       setLogoutStatus('blocked')
       setLoading(false)
       return
@@ -52,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // refresh). The session cookie is gone server-side, so there is no
       // point calling /api/me - and doing so risks a race where a stale
       // cookie briefly resurrects the authenticated UI.
+      meRequestValidRef.current = false
       setUser(null)
       setLogoutStatus('idle')
       setLoading(false)
@@ -60,8 +96,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     authApi
       .me()
-      .then(setUser)
-      .catch(() => setUser(null))
+      .then((fetchedUser) => {
+        if (!meRequestValidRef.current) {
+          // A logout marker arrived while this request was in flight; the
+          // response is stale and must not resurrect the authenticated UI.
+          return
+        }
+        setUser(fetchedUser)
+      })
+      .catch(() => {
+        if (meRequestValidRef.current) {
+          setUser(null)
+        }
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -74,12 +121,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const marker = event.newValue as LogoutMarker | null
 
       if (marker === 'pending') {
+        meRequestValidRef.current = false
         setUser(null)
         setLogoutStatus('pending')
       } else if (marker === 'failed') {
+        meRequestValidRef.current = false
         setUser(null)
         setLogoutStatus('blocked')
       } else if (marker === 'completed') {
+        meRequestValidRef.current = false
         setUser(null)
         setLogoutStatus('idle')
       }
@@ -94,12 +144,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const loggedInUser = await authApi.login(email, password)
+    // Any earlier /api/me from this mount is now moot regardless of marker
+    // state - a fresh, authoritative user just came back from /api/login.
+    meRequestValidRef.current = false
     localStorage.removeItem(LOGOUT_STATE_KEY)
     setLogoutStatus('idle')
     setUser(loggedInUser)
   }, [])
 
   const performLogout = useCallback(async () => {
+    // Same-tab equivalent of the storage-event invalidation below: this tab
+    // never receives its own 'storage' event, so the in-flight-request guard
+    // has to be set directly here too.
+    meRequestValidRef.current = false
     localStorage.setItem(LOGOUT_STATE_KEY, 'pending' satisfies LogoutMarker)
     setLogoutStatus('pending')
 
