@@ -1,12 +1,18 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { isAxiosError } from 'axios'
 import { useAuth } from '../hooks/useAuth'
+
+interface LoginLocationState {
+  logoutWarning?: string
+}
 
 export function Login() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const logoutWarning = (location.state as LoginLocationState | null)?.logoutWarning
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -38,6 +44,8 @@ export function Login() {
       >
         <h1 className="text-xl font-semibold text-gray-900">中古車行內部營運系統</h1>
         <p className="mt-1 text-sm text-gray-500">請登入以繼續</p>
+
+        {logoutWarning && <p className="mt-4 text-sm text-amber-600">{logoutWarning}</p>}
 
         <div className="mt-6 flex flex-col gap-4">
           <div>

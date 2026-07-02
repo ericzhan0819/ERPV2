@@ -10,12 +10,29 @@ const navItems = [
 ]
 
 export function AppLayout() {
-  const { user, logout } = useAuth()
+  const { user, logout, loggingOut } = useAuth()
   const navigate = useNavigate()
 
   async function handleLogout() {
-    await logout()
-    navigate('/login')
+    try {
+      await logout()
+      navigate('/login')
+    } catch {
+      // The client-side auth state is already cleared by useAuth's logout()
+      // regardless of outcome, so route away and surface a warning instead
+      // of leaving protected data on screen behind a rejected promise.
+      navigate('/login', {
+        state: { logoutWarning: '登出請求未確認，為保護資料已關閉後台畫面。若使用共用電腦，請關閉瀏覽器。' },
+      })
+    }
+  }
+
+  if (loggingOut) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
+        <p className="text-sm text-gray-500">登出中，請稍候...</p>
+      </div>
+    )
   }
 
   return (

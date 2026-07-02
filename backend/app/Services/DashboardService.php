@@ -6,6 +6,7 @@ use App\Models\CashAccount;
 use App\Models\MoneyEntry;
 use App\Models\Vehicle;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class DashboardService
 {
@@ -15,6 +16,17 @@ class DashboardService
      * @return array<string, mixed>
      */
     public function summary(): array
+    {
+        // Wrapped in a transaction so every aggregate below reads against the
+        // same consistent snapshot instead of racing with concurrent writes
+        // between the individual queries.
+        return DB::transaction(fn () => $this->buildSummary());
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildSummary(): array
     {
         $cashBalance = $this->accountBalance('cash');
         $bankBalance = $this->accountBalance('bank');
