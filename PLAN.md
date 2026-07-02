@@ -19,11 +19,12 @@
 - [x] API client（src/api/client.ts）與 axios/fetch credentials 設定
 
 ## 3. 資料模型與 Migration
-- [ ] users migration（含 is_admin, is_active）
-- [ ] vehicles migration
-- [ ] cash_accounts migration
-- [ ] money_entries migration
-- [ ] Model 關聯設定（Vehicle hasMany MoneyEntry 等）
+- [x] users migration（含 is_admin, is_active）
+- [x] vehicles migration
+- [x] cash_accounts migration
+- [x] money_entries migration
+- [x] Model 關聯設定（Vehicle hasMany MoneyEntry 等）
+- [x] 第 3B：Codex review fixes completed（audit fields 移除 mass-assignable / direction enum(income,expense) / amount CHECK > 0 / created_by・updated_by 改 restrictOnDelete）
 
 ## 4. Seeder
 - [ ] 預設管理員帳號 seeder
