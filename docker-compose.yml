@@ -1,0 +1,17 @@
+services:
+  db:
+    image: mariadb:10.11
+    container_name: erpv2-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: erpv2
+      MYSQL_USER: erpv2
+      MYSQL_PASSWORD: erpv2
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      - erpv2-db-data:/var/lib/mysql
+
+volumes:
+  erpv2-db-data:
