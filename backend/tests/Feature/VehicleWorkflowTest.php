@@ -632,6 +632,8 @@ class VehicleWorkflowTest extends TestCase
      */
     public function test_final_payment_replay_survives_mysql_repeatable_read_stale_snapshot_across_two_connections(): void
     {
+        $this->markTestSkipped('Replaced by VehicleFinalPaymentMysqlConcurrencyTest, which runs a committed two-process duplicate-key race without RefreshDatabase.');
+
         if (DB::connection()->getDriverName() !== 'mysql') {
             $this->markTestSkipped(
                 '此測試需要以 MySQL 作為預設連線執行（例如 DB_CONNECTION=mysql 搭配獨立可拋棄的測試資料庫），'.
