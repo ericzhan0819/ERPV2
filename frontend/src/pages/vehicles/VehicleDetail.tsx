@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { isAxiosError } from 'axios'
@@ -213,13 +213,14 @@ export function VehicleDetail() {
     }
   }
 
-  async function handleFinalPayment(form: { amount: string; cash_account_id: string; description: string }) {
+  async function handleFinalPayment(form: { amount: string; cash_account_id: string; description: string; idempotency_key: string }) {
     setSubmitting(true)
     setFormError(null)
     try {
       const result = await recordFinalPayment(vehicleId, {
         amount: Number(form.amount),
         cash_account_id: Number(form.cash_account_id),
+        idempotency_key: form.idempotency_key,
         description: form.description || undefined,
       })
       setWarning(result.warning)
@@ -538,7 +539,7 @@ function FinalPaymentModal({
   cashAccounts,
 }: {
   onClose: () => void
-  onSubmit: (form: { amount: string; cash_account_id: string; description: string }) => void
+  onSubmit: (form: { amount: string; cash_account_id: string; description: string; idempotency_key: string }) => void
   error: string | null
   submitting: boolean
   cashAccounts: CashAccountOption[]
@@ -546,10 +547,16 @@ function FinalPaymentModal({
   const [amount, setAmount] = useState('')
   const [cash_account_id, setCashAccountId] = useState('')
   const [description, setDescription] = useState('')
+  const idempotencyKeyRef = useRef<string | null>(null)
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    onSubmit({ amount, cash_account_id, description })
+    let idempotencyKey = idempotencyKeyRef.current
+    if (!idempotencyKey) {
+      idempotencyKey = crypto.randomUUID()
+      idempotencyKeyRef.current = idempotencyKey
+    }
+    onSubmit({ amount, cash_account_id, description, idempotency_key: idempotencyKey })
   }
 
   return (

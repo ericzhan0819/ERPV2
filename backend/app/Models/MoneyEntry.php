@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'amount',
     'counterparty_name',
     'description',
+    'idempotency_key',
 ])]
 class MoneyEntry extends Model
 {

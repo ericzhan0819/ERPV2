@@ -24,6 +24,7 @@ class MoneyEntryFactory extends Factory
             'amount' => fake()->numberBetween(1000, 100000),
             'counterparty_name' => null,
             'description' => null,
+            'idempotency_key' => null,
         ];
     }
 }

@@ -121,22 +121,27 @@ class VehicleService
      */
     public function reserveVehicle(Vehicle $vehicle, array $data, int $userId): Vehicle
     {
-        $this->assertStatus($vehicle, 'listed', '只有上架中的車輛可以收訂金並保留');
-        $this->assertCashAccountActive($data['cash_account_id']);
-
         return DB::transaction(function () use ($vehicle, $data, $userId) {
-            $vehicle->fill([
+            $lockedVehicle = Vehicle::query()
+                ->whereKey($vehicle->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $this->assertStatus($lockedVehicle, 'listed', '只有上架中的車輛可以收訂金並保留');
+            $this->assertCashAccountActive((int) $data['cash_account_id']);
+
+            $lockedVehicle->fill([
                 'buyer_name' => $data['buyer_name'],
                 'buyer_phone' => $data['buyer_phone'] ?? null,
                 'sold_price' => $data['sold_price'],
             ]);
-            $vehicle->status = 'reserved';
-            $vehicle->reserved_at = now();
-            $vehicle->updated_by = $userId;
-            $vehicle->save();
+            $lockedVehicle->status = 'reserved';
+            $lockedVehicle->reserved_at = now();
+            $lockedVehicle->updated_by = $userId;
+            $lockedVehicle->save();
 
             $entry = new MoneyEntry([
-                'vehicle_id' => $vehicle->id,
+                'vehicle_id' => $lockedVehicle->id,
                 'cash_account_id' => $data['cash_account_id'],
                 'entry_date' => $data['entry_date'] ?? now()->toDateString(),
                 'direction' => 'income',
@@ -149,7 +154,7 @@ class VehicleService
             $entry->updated_by = $userId;
             $entry->save();
 
-            return $vehicle;
+            return $lockedVehicle;
         });
     }
 
@@ -159,35 +164,46 @@ class VehicleService
      */
     public function recordFinalPayment(Vehicle $vehicle, array $data, int $userId): array
     {
-        $this->assertStatus($vehicle, 'reserved', '只有保留中的車輛可以收尾款');
-        $this->assertCashAccountActive($data['cash_account_id']);
-
         return DB::transaction(function () use ($vehicle, $data, $userId) {
+            $lockedVehicle = Vehicle::query()
+                ->whereKey($vehicle->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $this->assertStatus($lockedVehicle, 'reserved', '只有保留中的車輛可以收尾款');
+            $this->assertCashAccountActive((int) $data['cash_account_id']);
+
+            $idempotencyKey = (string) $data['idempotency_key'];
+            $existingEntry = MoneyEntry::query()
+                ->where('idempotency_key', $idempotencyKey)
+                ->first();
+
+            if ($existingEntry) {
+                return [
+                    'vehicle' => $lockedVehicle,
+                    'warning' => $this->buildFinalPaymentWarning($lockedVehicle),
+                ];
+            }
+
             $entry = new MoneyEntry([
-                'vehicle_id' => $vehicle->id,
+                'vehicle_id' => $lockedVehicle->id,
                 'cash_account_id' => $data['cash_account_id'],
                 'entry_date' => $data['entry_date'] ?? now()->toDateString(),
                 'direction' => 'income',
                 'category' => '尾款收入',
                 'amount' => $data['amount'],
-                'counterparty_name' => $vehicle->buyer_name,
+                'counterparty_name' => $lockedVehicle->buyer_name,
                 'description' => $data['description'] ?? null,
+                'idempotency_key' => $idempotencyKey,
             ]);
             $entry->created_by = $userId;
             $entry->updated_by = $userId;
             $entry->save();
 
-            $incomeTotal = (int) MoneyEntry::query()
-                ->where('vehicle_id', $vehicle->id)
-                ->where('direction', 'income')
-                ->sum('amount');
-
-            $warning = null;
-            if ($vehicle->sold_price !== null && $incomeTotal !== (int) $vehicle->sold_price) {
-                $warning = '訂金加尾款總額與成交價不相符，請確認金額是否正確';
-            }
-
-            return ['vehicle' => $vehicle->fresh(), 'warning' => $warning];
+            return [
+                'vehicle' => $lockedVehicle,
+                'warning' => $this->buildFinalPaymentWarning($lockedVehicle),
+            ];
         });
     }
 
@@ -234,13 +250,30 @@ class VehicleService
 
     private function assertCashAccountActive(int $cashAccountId): void
     {
-        $isActive = CashAccount::query()->where('id', $cashAccountId)->value('is_active');
+        $isActive = CashAccount::query()
+            ->whereKey($cashAccountId)
+            ->lockForUpdate()
+            ->value('is_active');
 
         if (! $isActive) {
             throw ValidationException::withMessages([
                 'cash_account_id' => ['停用帳戶不得新增收支'],
             ]);
         }
+    }
+
+    private function buildFinalPaymentWarning(Vehicle $vehicle): ?string
+    {
+        $incomeTotal = (int) MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('direction', 'income')
+            ->sum('amount');
+
+        if ($vehicle->sold_price !== null && $incomeTotal !== (int) $vehicle->sold_price) {
+            return '訂金加尾款總額與成交價不相符，請確認金額是否正確';
+        }
+
+        return null;
     }
 
     private function generateStockNo(): string
