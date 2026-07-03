@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CashAccountController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\VehicleController;
 use Illuminate\Support\Facades\Route;
@@ -19,4 +20,10 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
 
     Route::apiResource('vehicles', VehicleController::class);
+    Route::post('vehicles/{vehicle}/list', [VehicleController::class, 'list']);
+    Route::post('vehicles/{vehicle}/reserve', [VehicleController::class, 'reserve']);
+    Route::post('vehicles/{vehicle}/final-payment', [VehicleController::class, 'finalPayment']);
+    Route::post('vehicles/{vehicle}/close-sale', [VehicleController::class, 'closeSale']);
+
+    Route::get('cash-accounts', [CashAccountController::class, 'index']);
 });

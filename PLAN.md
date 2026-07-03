@@ -47,11 +47,11 @@
 - [x] 前端車輛詳情頁（基本/採購/銷售資料＋單車收支摘要＋明細）
 
 ## 8. Vehicle Workflow Module
-- [ ] POST /list（整備完成上架）
-- [ ] POST /reserve（收訂金並保留）
-- [ ] POST /final-payment（收尾款）
-- [ ] POST /close-sale（成交結案，含驗證：已有成交價/買方、至少一筆訂金或尾款）
-- [ ] 車輛詳情頁操作按鈕依狀態顯示
+- [x] POST /list（整備完成上架）
+- [x] POST /reserve（收訂金並保留）
+- [x] POST /final-payment（收尾款）
+- [x] POST /close-sale（成交結案，含驗證：已有成交價/買方、至少一筆訂金或尾款）
+- [x] 車輛詳情頁操作按鈕依狀態顯示
 
 ## 9. Money Entry Module
 - [ ] Money Entry CRUD API

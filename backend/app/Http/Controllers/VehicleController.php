@@ -2,7 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\CloseSaleVehicleRequest;
+use App\Http\Requests\FinalPaymentVehicleRequest;
 use App\Http\Requests\IndexVehicleRequest;
+use App\Http\Requests\ListVehicleRequest;
+use App\Http\Requests\ReserveVehicleRequest;
 use App\Http\Requests\StoreVehicleRequest;
 use App\Http\Requests\UpdateVehicleRequest;
 use App\Http\Resources\VehicleResource;
@@ -70,5 +74,36 @@ class VehicleController extends Controller
         $this->vehicleService->deleteVehicle($vehicle);
 
         return response()->json(['message' => '車輛已刪除']);
+    }
+
+    public function list(ListVehicleRequest $request, Vehicle $vehicle): VehicleResource
+    {
+        $vehicle = $this->vehicleService->listVehicle($vehicle, $request->validated(), $request->user()->id);
+
+        return new VehicleResource($vehicle);
+    }
+
+    public function reserve(ReserveVehicleRequest $request, Vehicle $vehicle): VehicleResource
+    {
+        $vehicle = $this->vehicleService->reserveVehicle($vehicle, $request->validated(), $request->user()->id);
+
+        return new VehicleResource($vehicle);
+    }
+
+    public function finalPayment(FinalPaymentVehicleRequest $request, Vehicle $vehicle): JsonResponse
+    {
+        $result = $this->vehicleService->recordFinalPayment($vehicle, $request->validated(), $request->user()->id);
+
+        return response()->json([
+            'vehicle' => new VehicleResource($result['vehicle']),
+            'warning' => $result['warning'],
+        ]);
+    }
+
+    public function closeSale(CloseSaleVehicleRequest $request, Vehicle $vehicle): VehicleResource
+    {
+        $vehicle = $this->vehicleService->closeSale($vehicle, $request->validated(), $request->user()->id);
+
+        return new VehicleResource($vehicle);
     }
 }

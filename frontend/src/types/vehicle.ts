@@ -71,6 +71,39 @@ export interface VehicleDetailResponse {
   money_entries: VehicleMoneyEntry[]
 }
 
+export interface ListVehiclePayload {
+  asking_price: number
+  floor_price?: number
+  listing_date?: string
+  sales_note?: string
+}
+
+export interface ReserveVehiclePayload {
+  buyer_name: string
+  buyer_phone?: string
+  sold_price: number
+  deposit_amount: number
+  cash_account_id: number
+  entry_date?: string
+  description?: string
+}
+
+export interface FinalPaymentPayload {
+  amount: number
+  cash_account_id: number
+  entry_date?: string
+  description?: string
+}
+
+export interface CloseSalePayload {
+  sold_at?: string
+}
+
+export interface FinalPaymentResponse {
+  vehicle: Vehicle
+  warning: string | null
+}
+
 export interface CreateVehiclePayload {
   brand: string
   model: string
