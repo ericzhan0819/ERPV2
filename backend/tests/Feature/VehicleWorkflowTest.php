@@ -8,6 +8,8 @@ use App\Models\User;
 use App\Models\Vehicle;
 use App\Services\VehicleService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -302,6 +304,127 @@ class VehicleWorkflowTest extends TestCase
             ])
             ->assertStatus(422)
             ->assertJsonValidationErrors('idempotency_key');
+
+        $this->assertSame(1, MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', '尾款收入')
+            ->count());
+    }
+
+    public function test_final_payment_rejects_same_idempotency_key_when_entry_date_is_omitted_after_being_set(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
+        $idempotencyKey = (string) Str::uuid();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/final-payment", [
+                'amount' => 380000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+                'entry_date' => '2026-07-01',
+            ])
+            ->assertSuccessful();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/final-payment", [
+                'amount' => 380000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('idempotency_key');
+
+        $this->assertSame(1, MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', '尾款收入')
+            ->count());
+    }
+
+    public function test_final_payment_replays_when_entry_date_omitted_then_explicitly_matches_today(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-03 10:00:00'));
+
+        try {
+            $user = User::factory()->create(['is_active' => true]);
+            $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+            $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
+            $idempotencyKey = (string) Str::uuid();
+
+            $this->actingAs($user, 'web')
+                ->postJson("/api/vehicles/{$vehicle->id}/final-payment", [
+                    'amount' => 380000,
+                    'cash_account_id' => $cashAccount->id,
+                    'idempotency_key' => $idempotencyKey,
+                ])
+                ->assertSuccessful();
+
+            $this->actingAs($user, 'web')
+                ->postJson("/api/vehicles/{$vehicle->id}/final-payment", [
+                    'amount' => 380000,
+                    'cash_account_id' => $cashAccount->id,
+                    'idempotency_key' => $idempotencyKey,
+                    'entry_date' => '2026-07-03',
+                ])
+                ->assertSuccessful()
+                ->assertJsonPath('warning', null);
+
+            $this->assertSame(1, MoneyEntry::query()
+                ->where('vehicle_id', $vehicle->id)
+                ->where('category', '尾款收入')
+                ->count());
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_final_payment_replays_after_concurrent_duplicate_key_insert_races_the_save(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
+        $idempotencyKey = (string) Str::uuid();
+
+        $payload = [
+            'amount' => 380000,
+            'cash_account_id' => $cashAccount->id,
+            'idempotency_key' => $idempotencyKey,
+        ];
+
+        $raced = false;
+        MoneyEntry::creating(function (MoneyEntry $entry) use (&$raced, $idempotencyKey, $user) {
+            if ($raced || $entry->idempotency_key !== $idempotencyKey) {
+                return;
+            }
+
+            $raced = true;
+
+            DB::table('money_entries')->insert([
+                'vehicle_id' => $entry->vehicle_id,
+                'cash_account_id' => $entry->cash_account_id,
+                'entry_date' => $entry->entry_date,
+                'direction' => $entry->direction,
+                'category' => $entry->category,
+                'amount' => $entry->amount,
+                'counterparty_name' => $entry->counterparty_name,
+                'description' => $entry->description,
+                'idempotency_key' => $entry->idempotency_key,
+                'created_by' => $user->id,
+                'updated_by' => $user->id,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        });
+
+        try {
+            $this->actingAs($user, 'web')
+                ->postJson("/api/vehicles/{$vehicle->id}/final-payment", $payload)
+                ->assertSuccessful()
+                ->assertJsonPath('warning', null);
+        } finally {
+            MoneyEntry::flushEventListeners();
+        }
 
         $this->assertSame(1, MoneyEntry::query()
             ->where('vehicle_id', $vehicle->id)

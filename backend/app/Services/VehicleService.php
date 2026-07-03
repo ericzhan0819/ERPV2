@@ -6,6 +6,7 @@ use App\Models\CashAccount;
 use App\Models\MoneyEntry;
 use App\Models\Vehicle;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -166,23 +167,14 @@ class VehicleService
     {
         return DB::transaction(function () use ($vehicle, $data, $userId) {
             $idempotencyKey = (string) $data['idempotency_key'];
+            $effectiveData = $this->normalizeFinalPaymentData($data);
+
             $existingEntry = MoneyEntry::query()
                 ->where('idempotency_key', $idempotencyKey)
                 ->first();
 
             if ($existingEntry) {
-                if (! $this->isSameFinalPaymentRequest($existingEntry, $vehicle->id, $data)) {
-                    throw ValidationException::withMessages([
-                        'idempotency_key' => ['此冪等鍵已被不同尾款付款內容使用，請重新整理後再試'],
-                    ]);
-                }
-
-                $replayVehicle = Vehicle::query()->whereKey($existingEntry->vehicle_id)->firstOrFail();
-
-                return [
-                    'vehicle' => $replayVehicle,
-                    'warning' => $this->buildFinalPaymentWarning($replayVehicle),
-                ];
+                return $this->replayOrRejectFinalPayment($existingEntry, $vehicle->id, $effectiveData);
             }
 
             $lockedVehicle = Vehicle::query()
@@ -191,22 +183,39 @@ class VehicleService
                 ->firstOrFail();
 
             $this->assertStatus($lockedVehicle, 'reserved', '只有保留中的車輛可以收尾款');
-            $this->assertCashAccountActive((int) $data['cash_account_id']);
+            $this->assertCashAccountActive($effectiveData['cash_account_id']);
 
             $entry = new MoneyEntry([
                 'vehicle_id' => $lockedVehicle->id,
-                'cash_account_id' => $data['cash_account_id'],
-                'entry_date' => $data['entry_date'] ?? now()->toDateString(),
+                'cash_account_id' => $effectiveData['cash_account_id'],
+                'entry_date' => $effectiveData['entry_date'],
                 'direction' => 'income',
                 'category' => '尾款收入',
-                'amount' => $data['amount'],
+                'amount' => $effectiveData['amount'],
                 'counterparty_name' => $lockedVehicle->buyer_name,
-                'description' => $data['description'] ?? null,
+                'description' => $effectiveData['description'],
                 'idempotency_key' => $idempotencyKey,
             ]);
             $entry->created_by = $userId;
             $entry->updated_by = $userId;
-            $entry->save();
+
+            try {
+                $entry->save();
+            } catch (QueryException $e) {
+                if (! $this->isIdempotencyKeyUniqueViolation($e)) {
+                    throw $e;
+                }
+
+                $racedEntry = MoneyEntry::query()
+                    ->where('idempotency_key', $idempotencyKey)
+                    ->first();
+
+                if (! $racedEntry) {
+                    throw $e;
+                }
+
+                return $this->replayOrRejectFinalPayment($racedEntry, $vehicle->id, $effectiveData);
+            }
 
             return [
                 'vehicle' => $lockedVehicle,
@@ -272,8 +281,42 @@ class VehicleService
 
     /**
      * @param  array<string, mixed>  $data
+     * @return array{amount: int, cash_account_id: int, description: string|null, entry_date: string}
      */
-    private function isSameFinalPaymentRequest(MoneyEntry $entry, int $vehicleId, array $data): bool
+    private function normalizeFinalPaymentData(array $data): array
+    {
+        return [
+            'amount' => (int) $data['amount'],
+            'cash_account_id' => (int) $data['cash_account_id'],
+            'description' => $data['description'] ?? null,
+            'entry_date' => $data['entry_date'] ?? now()->toDateString(),
+        ];
+    }
+
+    /**
+     * @param  array{amount: int, cash_account_id: int, description: string|null, entry_date: string}  $effectiveData
+     * @return array{vehicle: Vehicle, warning: string|null}
+     */
+    private function replayOrRejectFinalPayment(MoneyEntry $entry, int $vehicleId, array $effectiveData): array
+    {
+        if (! $this->isSameFinalPaymentRequest($entry, $vehicleId, $effectiveData)) {
+            throw ValidationException::withMessages([
+                'idempotency_key' => ['此冪等鍵已被不同尾款付款內容使用，請重新整理後再試'],
+            ]);
+        }
+
+        $replayVehicle = Vehicle::query()->whereKey($entry->vehicle_id)->firstOrFail();
+
+        return [
+            'vehicle' => $replayVehicle,
+            'warning' => $this->buildFinalPaymentWarning($replayVehicle),
+        ];
+    }
+
+    /**
+     * @param  array{amount: int, cash_account_id: int, description: string|null, entry_date: string}  $effectiveData
+     */
+    private function isSameFinalPaymentRequest(MoneyEntry $entry, int $vehicleId, array $effectiveData): bool
     {
         if ((int) $entry->vehicle_id !== $vehicleId) {
             return false;
@@ -283,23 +326,34 @@ class VehicleService
             return false;
         }
 
-        if ((int) $entry->amount !== (int) $data['amount']) {
+        if ((int) $entry->amount !== $effectiveData['amount']) {
             return false;
         }
 
-        if ((int) $entry->cash_account_id !== (int) $data['cash_account_id']) {
+        if ((int) $entry->cash_account_id !== $effectiveData['cash_account_id']) {
             return false;
         }
 
-        if ($entry->description !== ($data['description'] ?? null)) {
+        if ($entry->description !== $effectiveData['description']) {
             return false;
         }
 
-        if (! empty($data['entry_date']) && $entry->entry_date?->toDateString() !== $data['entry_date']) {
+        if ($entry->entry_date?->toDateString() !== $effectiveData['entry_date']) {
             return false;
         }
 
         return true;
+    }
+
+    private function isIdempotencyKeyUniqueViolation(QueryException $e): bool
+    {
+        $sqlState = $e->errorInfo[0] ?? null;
+
+        if ($sqlState !== '23000') {
+            return false;
+        }
+
+        return str_contains($e->getMessage(), 'idempotency_key');
     }
 
     private function buildFinalPaymentWarning(Vehicle $vehicle): ?string
