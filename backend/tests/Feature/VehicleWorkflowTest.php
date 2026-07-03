@@ -311,7 +311,48 @@ class VehicleWorkflowTest extends TestCase
             ->count());
     }
 
-    public function test_final_payment_rejects_same_idempotency_key_when_entry_date_is_omitted_after_being_set(): void
+    public function test_final_payment_replays_when_retry_omits_entry_date_even_though_first_call_set_it(): void
+    {
+        // New semantics: omitting entry_date on retry means "replay whatever date was
+        // originally stored", not "change the date to null/today". Only an explicitly
+        // supplied, mismatching entry_date should be rejected (see the "different date
+        // explicitly supplied" test below).
+        $user = User::factory()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
+        $idempotencyKey = (string) Str::uuid();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/final-payment", [
+                'amount' => 380000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+                'entry_date' => '2026-07-01',
+            ])
+            ->assertSuccessful();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/final-payment", [
+                'amount' => 380000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+            ])
+            ->assertSuccessful()
+            ->assertJsonPath('warning', null);
+
+        $this->assertSame(1, MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', '尾款收入')
+            ->count());
+        $this->assertSame('2026-07-01', MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', '尾款收入')
+            ->first()
+            ->entry_date
+            ->toDateString());
+    }
+
+    public function test_final_payment_rejects_same_idempotency_key_when_explicit_entry_date_differs(): void
     {
         $user = User::factory()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
@@ -332,6 +373,124 @@ class VehicleWorkflowTest extends TestCase
                 'amount' => 380000,
                 'cash_account_id' => $cashAccount->id,
                 'idempotency_key' => $idempotencyKey,
+                'entry_date' => '2026-07-02',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('idempotency_key');
+
+        $this->assertSame(1, MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', '尾款收入')
+            ->count());
+    }
+
+    public function test_final_payment_replays_across_midnight_when_entry_date_always_omitted(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-03 23:59:00'));
+
+        try {
+            $user = User::factory()->create(['is_active' => true]);
+            $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+            $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
+            $idempotencyKey = (string) Str::uuid();
+
+            $payload = [
+                'amount' => 380000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+            ];
+
+            $this->actingAs($user, 'web')
+                ->postJson("/api/vehicles/{$vehicle->id}/final-payment", $payload)
+                ->assertSuccessful();
+
+            Carbon::setTestNow(Carbon::parse('2026-07-04 00:01:00'));
+
+            $this->actingAs($user, 'web')
+                ->postJson("/api/vehicles/{$vehicle->id}/final-payment", $payload)
+                ->assertSuccessful()
+                ->assertJsonPath('warning', null);
+
+            $this->assertSame(1, MoneyEntry::query()
+                ->where('vehicle_id', $vehicle->id)
+                ->where('category', '尾款收入')
+                ->count());
+            $this->assertSame('2026-07-03', MoneyEntry::query()
+                ->where('vehicle_id', $vehicle->id)
+                ->where('category', '尾款收入')
+                ->first()
+                ->entry_date
+                ->toDateString());
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
+    public function test_final_payment_replays_when_retry_supplies_the_stored_entry_date(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
+        $idempotencyKey = (string) Str::uuid();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/final-payment", [
+                'amount' => 380000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+            ])
+            ->assertSuccessful();
+
+        $storedEntryDate = MoneyEntry::query()
+            ->where('idempotency_key', $idempotencyKey)
+            ->first()
+            ->entry_date
+            ->toDateString();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/final-payment", [
+                'amount' => 380000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+                'entry_date' => $storedEntryDate,
+            ])
+            ->assertSuccessful()
+            ->assertJsonPath('warning', null);
+
+        $this->assertSame(1, MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', '尾款收入')
+            ->count());
+    }
+
+    public function test_final_payment_rejects_when_retry_supplies_a_different_entry_date_than_stored(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
+        $idempotencyKey = (string) Str::uuid();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/final-payment", [
+                'amount' => 380000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+            ])
+            ->assertSuccessful();
+
+        $storedEntryDate = MoneyEntry::query()
+            ->where('idempotency_key', $idempotencyKey)
+            ->first()
+            ->entry_date
+            ->toDateString();
+        $differentDate = Carbon::parse($storedEntryDate)->addDay()->toDateString();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/final-payment", [
+                'amount' => 380000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+                'entry_date' => $differentDate,
             ])
             ->assertStatus(422)
             ->assertJsonValidationErrors('idempotency_key');
@@ -379,7 +538,15 @@ class VehicleWorkflowTest extends TestCase
         }
     }
 
-    public function test_final_payment_replays_after_concurrent_duplicate_key_insert_races_the_save(): void
+    /**
+     * Covers only the duplicate-key error recovery path (rollback -> fresh read -> replay),
+     * driven by injecting a duplicate insert before save() that is committed independently
+     * of the current (losing) transaction — simulating a concurrent request that already
+     * committed its winning row. It does NOT exercise the MySQL REPEATABLE READ
+     * stale-snapshot scenario, since SQLite has no second connection/transaction to race
+     * against — see the MySQL-only test below for that.
+     */
+    public function test_final_payment_replays_after_duplicate_key_error_from_same_connection_insert(): void
     {
         $user = User::factory()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
@@ -400,6 +567,13 @@ class VehicleWorkflowTest extends TestCase
 
             $raced = true;
 
+            // Commit the currently-open transaction early so the "winning" insert below is
+            // durable and survives the rollback that will happen once this request's own
+            // insert fails on the unique constraint, then reopen a transaction so the rest
+            // of the current call proceeds as normal. This mimics a genuinely concurrent
+            // request that committed before our insert executed.
+            DB::commit();
+
             DB::table('money_entries')->insert([
                 'vehicle_id' => $entry->vehicle_id,
                 'cash_account_id' => $entry->cash_account_id,
@@ -415,6 +589,8 @@ class VehicleWorkflowTest extends TestCase
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+
+            DB::beginTransaction();
         });
 
         try {
@@ -424,6 +600,80 @@ class VehicleWorkflowTest extends TestCase
                 ->assertJsonPath('warning', null);
         } finally {
             MoneyEntry::flushEventListeners();
+        }
+
+        $this->assertSame(1, MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', '尾款收入')
+            ->count());
+    }
+
+    /**
+     * MySQL-only: reproduces the REPEATABLE READ stale-snapshot problem that the SQLite
+     * duplicate-key test above cannot reach (SQLite has no second connection/transaction
+     * to race against). Uses two independent DB connections against a real MySQL instance
+     * and explicit transaction ordering as a deterministic barrier (no sleep, no forking):
+     *
+     *  1. Connection B opens a transaction and takes its REPEATABLE READ snapshot by
+     *     reading for the idempotency_key (finds nothing yet).
+     *  2. Connection A (the default connection, i.e. what the real request/service uses)
+     *     runs the actual recordFinalPayment() call end-to-end and commits the winning row.
+     *  3. We assert B's still-open transaction cannot see A's committed row — this is the
+     *     exact staleness that made the old "re-SELECT inside the same transaction" recovery
+     *     path broken in production.
+     *  4. After rolling B back and re-reading, the row becomes visible — this is what
+     *     VehicleService::replayRacedFinalPaymentAfterRollback() relies on: rollback the
+     *     failed transaction, then do a fresh read in a new transaction.
+     *
+     * This suite runs under SQLite by default (see phpunit.xml), so this test is skipped
+     * unless it is executed against a real MySQL connection, e.g.:
+     *   DB_CONNECTION=mysql DB_DATABASE=erpv2_testing php artisan test --filter=mysql_repeatable_read
+     * Point DB_DATABASE at a disposable schema — do not run this against a shared dev database.
+     */
+    public function test_final_payment_replay_survives_mysql_repeatable_read_stale_snapshot_across_two_connections(): void
+    {
+        if (DB::connection()->getDriverName() !== 'mysql') {
+            $this->markTestSkipped(
+                '此測試需要以 MySQL 作為預設連線執行（例如 DB_CONNECTION=mysql 搭配獨立可拋棄的測試資料庫），'.
+                '用來重現 REPEATABLE READ 下 stale snapshot 的兩個連線競態情境；SQLite 無法重現此問題，故略過。'
+            );
+        }
+
+        config(['database.connections.mysql_race' => config('database.connections.mysql')]);
+
+        $user = User::factory()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
+        $idempotencyKey = (string) Str::uuid();
+
+        $connB = DB::connection('mysql_race');
+
+        try {
+            $connB->beginTransaction();
+            $staleBeforeCommit = $connB->table('money_entries')->where('idempotency_key', $idempotencyKey)->first();
+            $this->assertNull($staleBeforeCommit);
+
+            app(VehicleService::class)->recordFinalPayment($vehicle, [
+                'amount' => 380000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+            ], $user->id);
+
+            $staleAfterCommit = $connB->table('money_entries')->where('idempotency_key', $idempotencyKey)->first();
+            $this->assertNull(
+                $staleAfterCommit,
+                'REPEATABLE READ 快照下，B 交易內不應看到 A 交易新提交的資料，這正是需要 rollback 後開新交易重讀的原因'
+            );
+
+            $connB->rollBack();
+
+            $freshRead = $connB->table('money_entries')->where('idempotency_key', $idempotencyKey)->first();
+            $this->assertNotNull($freshRead, 'rollback 後於新交易重讀，應能看到贏家已提交的資料');
+        } finally {
+            if ($connB->transactionLevel() > 0) {
+                $connB->rollBack();
+            }
+            DB::purge('mysql_race');
         }
 
         $this->assertSame(1, MoneyEntry::query()

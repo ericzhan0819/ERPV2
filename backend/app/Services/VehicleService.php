@@ -165,62 +165,92 @@ class VehicleService
      */
     public function recordFinalPayment(Vehicle $vehicle, array $data, int $userId): array
     {
-        return DB::transaction(function () use ($vehicle, $data, $userId) {
-            $idempotencyKey = (string) $data['idempotency_key'];
-            $effectiveData = $this->normalizeFinalPaymentData($data);
+        $idempotencyKey = (string) $data['idempotency_key'];
+        $effectiveData = $this->normalizeFinalPaymentData($data);
 
-            $existingEntry = MoneyEntry::query()
+        try {
+            return DB::transaction(fn () => $this->createFinalPaymentInsideTransaction(
+                $vehicle,
+                $idempotencyKey,
+                $effectiveData,
+                $userId
+            ));
+        } catch (QueryException $e) {
+            if (! $this->isIdempotencyKeyUniqueViolation($e)) {
+                throw $e;
+            }
+
+            return $this->replayRacedFinalPaymentAfterRollback($e, $vehicle->id, $idempotencyKey, $effectiveData);
+        }
+    }
+
+    /**
+     * @param  array{amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
+     * @return array{vehicle: Vehicle, warning: string|null}
+     */
+    private function createFinalPaymentInsideTransaction(Vehicle $vehicle, string $idempotencyKey, array $effectiveData, int $userId): array
+    {
+        $existingEntry = MoneyEntry::query()
+            ->where('idempotency_key', $idempotencyKey)
+            ->first();
+
+        if ($existingEntry) {
+            return $this->replayOrRejectFinalPayment($existingEntry, $vehicle->id, $effectiveData);
+        }
+
+        $lockedVehicle = Vehicle::query()
+            ->whereKey($vehicle->id)
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        $this->assertStatus($lockedVehicle, 'reserved', '只有保留中的車輛可以收尾款');
+        $this->assertCashAccountActive($effectiveData['cash_account_id']);
+
+        $entry = new MoneyEntry([
+            'vehicle_id' => $lockedVehicle->id,
+            'cash_account_id' => $effectiveData['cash_account_id'],
+            'entry_date' => $effectiveData['entry_date'],
+            'direction' => 'income',
+            'category' => '尾款收入',
+            'amount' => $effectiveData['amount'],
+            'counterparty_name' => $lockedVehicle->buyer_name,
+            'description' => $effectiveData['description'],
+            'idempotency_key' => $idempotencyKey,
+        ]);
+        $entry->created_by = $userId;
+        $entry->updated_by = $userId;
+
+        // Let a duplicate-key QueryException escape so DB::transaction rolls back;
+        // it is caught and retried against a fresh transaction/snapshot by the caller.
+        $entry->save();
+
+        return [
+            'vehicle' => $lockedVehicle,
+            'warning' => $this->buildFinalPaymentWarning($lockedVehicle),
+        ];
+    }
+
+    /**
+     * @param  array{amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
+     * @return array{vehicle: Vehicle, warning: string|null}
+     */
+    private function replayRacedFinalPaymentAfterRollback(QueryException $original, int $vehicleId, string $idempotencyKey, array $effectiveData): array
+    {
+        return DB::transaction(function () use ($original, $vehicleId, $idempotencyKey, $effectiveData) {
+            // Fresh transaction after rollback: under MySQL REPEATABLE READ, re-reading the
+            // idempotency_key inside the same (now rolled-back) transaction could still see
+            // the pre-race snapshot and miss the winner's row. Start a new transaction and
+            // take a locking read so we observe the committed winner.
+            $racedEntry = MoneyEntry::query()
                 ->where('idempotency_key', $idempotencyKey)
+                ->lockForUpdate()
                 ->first();
 
-            if ($existingEntry) {
-                return $this->replayOrRejectFinalPayment($existingEntry, $vehicle->id, $effectiveData);
+            if (! $racedEntry) {
+                throw $original;
             }
 
-            $lockedVehicle = Vehicle::query()
-                ->whereKey($vehicle->id)
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            $this->assertStatus($lockedVehicle, 'reserved', '只有保留中的車輛可以收尾款');
-            $this->assertCashAccountActive($effectiveData['cash_account_id']);
-
-            $entry = new MoneyEntry([
-                'vehicle_id' => $lockedVehicle->id,
-                'cash_account_id' => $effectiveData['cash_account_id'],
-                'entry_date' => $effectiveData['entry_date'],
-                'direction' => 'income',
-                'category' => '尾款收入',
-                'amount' => $effectiveData['amount'],
-                'counterparty_name' => $lockedVehicle->buyer_name,
-                'description' => $effectiveData['description'],
-                'idempotency_key' => $idempotencyKey,
-            ]);
-            $entry->created_by = $userId;
-            $entry->updated_by = $userId;
-
-            try {
-                $entry->save();
-            } catch (QueryException $e) {
-                if (! $this->isIdempotencyKeyUniqueViolation($e)) {
-                    throw $e;
-                }
-
-                $racedEntry = MoneyEntry::query()
-                    ->where('idempotency_key', $idempotencyKey)
-                    ->first();
-
-                if (! $racedEntry) {
-                    throw $e;
-                }
-
-                return $this->replayOrRejectFinalPayment($racedEntry, $vehicle->id, $effectiveData);
-            }
-
-            return [
-                'vehicle' => $lockedVehicle,
-                'warning' => $this->buildFinalPaymentWarning($lockedVehicle),
-            ];
+            return $this->replayOrRejectFinalPayment($racedEntry, $vehicleId, $effectiveData);
         });
     }
 
@@ -281,20 +311,25 @@ class VehicleService
 
     /**
      * @param  array<string, mixed>  $data
-     * @return array{amount: int, cash_account_id: int, description: string|null, entry_date: string}
+     * @return array{amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}
      */
     private function normalizeFinalPaymentData(array $data): array
     {
+        $entryDateWasSupplied = ! empty($data['entry_date']);
+
         return [
             'amount' => (int) $data['amount'],
             'cash_account_id' => (int) $data['cash_account_id'],
             'description' => $data['description'] ?? null,
-            'entry_date' => $data['entry_date'] ?? now()->toDateString(),
+            // Only used to populate a brand-new entry's date; retries that omit entry_date
+            // are not compared against this value (see entry_date_was_supplied below).
+            'entry_date' => $entryDateWasSupplied ? $data['entry_date'] : now()->toDateString(),
+            'entry_date_was_supplied' => $entryDateWasSupplied,
         ];
     }
 
     /**
-     * @param  array{amount: int, cash_account_id: int, description: string|null, entry_date: string}  $effectiveData
+     * @param  array{amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
      * @return array{vehicle: Vehicle, warning: string|null}
      */
     private function replayOrRejectFinalPayment(MoneyEntry $entry, int $vehicleId, array $effectiveData): array
@@ -314,7 +349,7 @@ class VehicleService
     }
 
     /**
-     * @param  array{amount: int, cash_account_id: int, description: string|null, entry_date: string}  $effectiveData
+     * @param  array{amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
      */
     private function isSameFinalPaymentRequest(MoneyEntry $entry, int $vehicleId, array $effectiveData): bool
     {
@@ -338,7 +373,10 @@ class VehicleService
             return false;
         }
 
-        if ($entry->entry_date?->toDateString() !== $effectiveData['entry_date']) {
+        // A retry that omits entry_date is a replay of "whatever date the entry was
+        // originally recorded on" — it must not be forced to match "today", which would
+        // make retries fail purely because they crossed midnight.
+        if ($effectiveData['entry_date_was_supplied'] && $entry->entry_date?->toDateString() !== $effectiveData['entry_date']) {
             return false;
         }
 
