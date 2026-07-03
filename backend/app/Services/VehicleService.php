@@ -165,6 +165,26 @@ class VehicleService
     public function recordFinalPayment(Vehicle $vehicle, array $data, int $userId): array
     {
         return DB::transaction(function () use ($vehicle, $data, $userId) {
+            $idempotencyKey = (string) $data['idempotency_key'];
+            $existingEntry = MoneyEntry::query()
+                ->where('idempotency_key', $idempotencyKey)
+                ->first();
+
+            if ($existingEntry) {
+                if (! $this->isSameFinalPaymentRequest($existingEntry, $vehicle->id, $data)) {
+                    throw ValidationException::withMessages([
+                        'idempotency_key' => ['此冪等鍵已被不同尾款付款內容使用，請重新整理後再試'],
+                    ]);
+                }
+
+                $replayVehicle = Vehicle::query()->whereKey($existingEntry->vehicle_id)->firstOrFail();
+
+                return [
+                    'vehicle' => $replayVehicle,
+                    'warning' => $this->buildFinalPaymentWarning($replayVehicle),
+                ];
+            }
+
             $lockedVehicle = Vehicle::query()
                 ->whereKey($vehicle->id)
                 ->lockForUpdate()
@@ -172,18 +192,6 @@ class VehicleService
 
             $this->assertStatus($lockedVehicle, 'reserved', '只有保留中的車輛可以收尾款');
             $this->assertCashAccountActive((int) $data['cash_account_id']);
-
-            $idempotencyKey = (string) $data['idempotency_key'];
-            $existingEntry = MoneyEntry::query()
-                ->where('idempotency_key', $idempotencyKey)
-                ->first();
-
-            if ($existingEntry) {
-                return [
-                    'vehicle' => $lockedVehicle,
-                    'warning' => $this->buildFinalPaymentWarning($lockedVehicle),
-                ];
-            }
 
             $entry = new MoneyEntry([
                 'vehicle_id' => $lockedVehicle->id,
@@ -260,6 +268,38 @@ class VehicleService
                 'cash_account_id' => ['停用帳戶不得新增收支'],
             ]);
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function isSameFinalPaymentRequest(MoneyEntry $entry, int $vehicleId, array $data): bool
+    {
+        if ((int) $entry->vehicle_id !== $vehicleId) {
+            return false;
+        }
+
+        if ($entry->direction !== 'income' || $entry->category !== '尾款收入') {
+            return false;
+        }
+
+        if ((int) $entry->amount !== (int) $data['amount']) {
+            return false;
+        }
+
+        if ((int) $entry->cash_account_id !== (int) $data['cash_account_id']) {
+            return false;
+        }
+
+        if ($entry->description !== ($data['description'] ?? null)) {
+            return false;
+        }
+
+        if (! empty($data['entry_date']) && $entry->entry_date?->toDateString() !== $data['entry_date']) {
+            return false;
+        }
+
+        return true;
     }
 
     private function buildFinalPaymentWarning(Vehicle $vehicle): ?string

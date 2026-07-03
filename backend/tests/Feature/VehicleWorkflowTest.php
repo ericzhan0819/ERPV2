@@ -187,6 +187,128 @@ class VehicleWorkflowTest extends TestCase
             ->count());
     }
 
+    public function test_final_payment_replay_succeeds_after_sale_is_closed(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
+        $idempotencyKey = (string) Str::uuid();
+
+        $payload = [
+            'amount' => 380000,
+            'cash_account_id' => $cashAccount->id,
+            'idempotency_key' => $idempotencyKey,
+        ];
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/final-payment", $payload)
+            ->assertSuccessful();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/close-sale", [])
+            ->assertSuccessful()
+            ->assertJsonPath('data.status', 'sold');
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/final-payment", $payload)
+            ->assertSuccessful();
+
+        $this->assertSame(1, MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', '尾款收入')
+            ->count());
+    }
+
+    public function test_final_payment_replay_succeeds_after_cash_account_is_deactivated(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
+        $idempotencyKey = (string) Str::uuid();
+
+        $payload = [
+            'amount' => 380000,
+            'cash_account_id' => $cashAccount->id,
+            'idempotency_key' => $idempotencyKey,
+        ];
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/final-payment", $payload)
+            ->assertSuccessful();
+
+        $cashAccount->update(['is_active' => false]);
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/final-payment", $payload)
+            ->assertSuccessful();
+
+        $this->assertSame(1, MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', '尾款收入')
+            ->count());
+    }
+
+    public function test_final_payment_rejects_same_idempotency_key_for_another_vehicle(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicleA = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
+        $vehicleB = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
+        $idempotencyKey = (string) Str::uuid();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicleA->id}/final-payment", [
+                'amount' => 380000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+            ])
+            ->assertSuccessful();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicleB->id}/final-payment", [
+                'amount' => 380000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('idempotency_key');
+
+        $this->assertSame(0, MoneyEntry::query()
+            ->where('vehicle_id', $vehicleB->id)
+            ->where('category', '尾款收入')
+            ->count());
+    }
+
+    public function test_final_payment_rejects_same_idempotency_key_when_payload_changes(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
+        $idempotencyKey = (string) Str::uuid();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/final-payment", [
+                'amount' => 380000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+            ])
+            ->assertSuccessful();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/final-payment", [
+                'amount' => 390000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('idempotency_key');
+
+        $this->assertSame(1, MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', '尾款收入')
+            ->count());
+    }
+
     public function test_reserve_vehicle_rechecks_database_state_before_writing(): void
     {
         $user = User::factory()->create(['is_active' => true]);
