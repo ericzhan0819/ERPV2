@@ -90,7 +90,6 @@ class CashAccountTest extends TestCase
             'name' => '管理員新增帳戶2',
             'type' => 'other',
             'opening_balance' => 2000,
-            'is_active' => true,
         ])->assertOk()->assertJsonPath('data.name', '管理員新增帳戶2');
 
         $this->actingAs($admin, 'web')->patchJson("/api/cash-accounts/{$accountId}/status", ['is_active' => false])
@@ -100,19 +99,26 @@ class CashAccountTest extends TestCase
         $this->assertDatabaseMissing('cash_accounts', ['id' => $accountId]);
     }
 
-    public function test_generic_update_cannot_change_is_active(): void
+    public function test_generic_update_rejects_is_active_field(): void
     {
         $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
-        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['name' => '原始名稱', 'is_active' => true]);
 
+        // A legacy/cached client that still sends is_active on the generic
+        // update endpoint must get a loud rejection, not a silent 200 that
+        // discards the field while implying the status change took effect.
         $this->actingAs($admin, 'web')->putJson("/api/cash-accounts/{$cashAccount->id}", [
-            'name' => $cashAccount->name,
+            'name' => '被忽略的名稱',
             'type' => $cashAccount->type,
             'opening_balance' => $cashAccount->opening_balance,
             'is_active' => false,
-        ])->assertOk()->assertJsonPath('data.is_active', true);
+        ])->assertStatus(422)->assertJsonValidationErrors('is_active');
 
-        $this->assertDatabaseHas('cash_accounts', ['id' => $cashAccount->id, 'is_active' => true]);
+        $this->assertDatabaseHas('cash_accounts', [
+            'id' => $cashAccount->id,
+            'name' => '原始名稱',
+            'is_active' => true,
+        ]);
     }
 
     public function test_stale_metadata_update_does_not_undo_concurrent_deactivation(): void
@@ -126,19 +132,19 @@ class CashAccountTest extends TestCase
         ]);
 
         // Simulates an admin who opened the edit form while the account was
-        // still active, captured its snapshot (including is_active: true),
-        // and only submits after a second admin deactivates it concurrently.
-        $staleFormSnapshot = [
+        // still active, and only submits (name/type/opening_balance only, per
+        // the current client contract) after a second admin deactivates it
+        // concurrently via the dedicated status endpoint.
+        $metadataOnlyUpdate = [
             'name' => '編輯後名稱',
             'type' => 'bank',
             'opening_balance' => 1000,
-            'is_active' => true,
         ];
 
         $this->actingAs($admin, 'web')->patchJson("/api/cash-accounts/{$cashAccount->id}/status", ['is_active' => false])
             ->assertOk()->assertJsonPath('data.is_active', false);
 
-        $this->actingAs($admin, 'web')->putJson("/api/cash-accounts/{$cashAccount->id}", $staleFormSnapshot)
+        $this->actingAs($admin, 'web')->putJson("/api/cash-accounts/{$cashAccount->id}", $metadataOnlyUpdate)
             ->assertOk()
             ->assertJsonPath('data.name', '編輯後名稱')
             ->assertJsonPath('data.is_active', false);
