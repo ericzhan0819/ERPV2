@@ -294,10 +294,18 @@ class MoneyEntrySourceTypeReviewService
         ]);
     }
 
+    /**
+     * Conditional update：只有 resolved_at 仍是 null 的 candidate 才會被寫入
+     * 第一次的 resolution evidence。若 candidate 已經 resolved（affected row
+     * 為 0），代表已存在人工確認紀錄，不得覆蓋原本的
+     * resolved_at/resolved_by/resolution_review_id；後續 reclassification
+     * 只靠 writeReviewLog() 留下新的 review 紀錄。
+     */
     private function resolveCandidate(int $candidateId, string $approver, int $reviewId): void
     {
         DB::table('money_entry_source_type_review_candidates')
             ->where('id', $candidateId)
+            ->whereNull('resolved_at')
             ->update([
                 'resolved_at' => now(),
                 'resolved_by' => $approver,

@@ -28,6 +28,12 @@ return new class extends Migration
      *
      * candidate 不加 FK，避免日後合法刪除 money_entry 卡住 migration／刪除
      * 動作；用 unsignedBigInteger + unique 索引避免重複捕捉同一筆。
+     *
+     * 非原子快照防護：capture 開始前先固定 cutoffId = money_entries 目前最大
+     * id，所有 candidate capture query 都加上 id <= cutoffId。migration
+     * 執行期間（或之後）新增的合法 vehicle_shortcut / vehicle_workflow
+     * 收支，id 必然大於 cutoffId，不會被補進 candidate，也就不會被 gate
+     * 誤擋。candidate 表語意維持「000003 migration 執行那一刻」的快照。
      */
     public function up(): void
     {
@@ -45,19 +51,26 @@ return new class extends Migration
             });
         }
 
-        $this->captureCandidates('legacy_unknown', 'legacy_vehicle_bound_manual_quarantine');
-        $this->captureCandidates(['vehicle_shortcut', 'vehicle_workflow'], 'preexisting_protected_source_type_needs_review');
+        $cutoffId = (int) (DB::table('money_entries')->max('id') ?? 0);
+
+        if ($cutoffId <= 0) {
+            return;
+        }
+
+        $this->captureCandidates('legacy_unknown', 'legacy_vehicle_bound_manual_quarantine', $cutoffId);
+        $this->captureCandidates(['vehicle_shortcut', 'vehicle_workflow'], 'preexisting_protected_source_type_needs_review', $cutoffId);
     }
 
     /**
      * @param  string|array<int, string>  $sourceTypes
      */
-    private function captureCandidates(string|array $sourceTypes, string $reason): void
+    private function captureCandidates(string|array $sourceTypes, string $reason, int $cutoffId): void
     {
         $now = now();
 
         DB::table('money_entries')
             ->whereIn('source_type', (array) $sourceTypes)
+            ->where('id', '<=', $cutoffId)
             ->orderBy('id')
             ->chunkById(200, function ($entries) use ($reason, $now) {
                 $rows = $entries->map(fn ($entry) => [
