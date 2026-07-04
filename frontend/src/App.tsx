@@ -7,6 +7,8 @@ import { Dashboard } from './pages/Dashboard'
 import { VehicleList } from './pages/vehicles/VehicleList'
 import { VehicleCreate } from './pages/vehicles/VehicleCreate'
 import { VehicleDetail } from './pages/vehicles/VehicleDetail'
+import { MoneyEntryList } from './pages/money-entries/MoneyEntryList'
+import { MoneyEntryCreate } from './pages/money-entries/MoneyEntryCreate'
 
 function App() {
   return (
@@ -24,6 +26,8 @@ function App() {
           <Route path="/vehicles" element={<VehicleList />} />
           <Route path="/vehicles/create" element={<VehicleCreate />} />
           <Route path="/vehicles/:id" element={<VehicleDetail />} />
+          <Route path="/money-entries" element={<MoneyEntryList />} />
+          <Route path="/money-entries/create" element={<MoneyEntryCreate />} />
         </Route>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Routes>

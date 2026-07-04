@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\CashAccount;
 use App\Models\MoneyEntry;
 use App\Models\Vehicle;
 use Illuminate\Support\Carbon;
@@ -11,6 +10,8 @@ use Illuminate\Support\Facades\DB;
 class DashboardService
 {
     private const VEHICLE_STATUSES = ['preparing', 'listed', 'reserved', 'sold', 'cancelled'];
+
+    public function __construct(private readonly MoneyEntryService $moneyEntryService) {}
 
     /**
      * Dashboard production consistency target is MySQL/MariaDB, where this
@@ -81,18 +82,6 @@ class DashboardService
 
     private function accountBalance(string $type): int
     {
-        $openingBalance = (int) CashAccount::query()->where('type', $type)->sum('opening_balance');
-
-        $income = (int) MoneyEntry::query()
-            ->whereHas('cashAccount', fn ($query) => $query->where('type', $type))
-            ->where('direction', 'income')
-            ->sum('amount');
-
-        $expense = (int) MoneyEntry::query()
-            ->whereHas('cashAccount', fn ($query) => $query->where('type', $type))
-            ->where('direction', 'expense')
-            ->sum('amount');
-
-        return $openingBalance + $income - $expense;
+        return $this->moneyEntryService->balanceForType($type);
     }
 }

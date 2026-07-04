@@ -3,21 +3,31 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\CloseSaleVehicleRequest;
+use App\Http\Requests\DepositVehicleRequest;
 use App\Http\Requests\FinalPaymentVehicleRequest;
+use App\Http\Requests\IndexMoneyEntryRequest;
 use App\Http\Requests\IndexVehicleRequest;
 use App\Http\Requests\ListVehicleRequest;
+use App\Http\Requests\PurchasePaymentVehicleRequest;
+use App\Http\Requests\RefundVehicleRequest;
 use App\Http\Requests\ReserveVehicleRequest;
 use App\Http\Requests\StoreVehicleRequest;
 use App\Http\Requests\UpdateVehicleRequest;
+use App\Http\Requests\VehicleExpenseRequest;
+use App\Http\Resources\MoneyEntryResource;
 use App\Http\Resources\VehicleResource;
 use App\Models\Vehicle;
+use App\Services\MoneyEntryService;
 use App\Services\VehicleService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class VehicleController extends Controller
 {
-    public function __construct(private readonly VehicleService $vehicleService) {}
+    public function __construct(
+        private readonly VehicleService $vehicleService,
+        private readonly MoneyEntryService $moneyEntryService,
+    ) {}
 
     public function index(IndexVehicleRequest $request): AnonymousResourceCollection
     {
@@ -105,5 +115,66 @@ class VehicleController extends Controller
         $vehicle = $this->vehicleService->closeSale($vehicle, $request->validated(), $request->user()->id);
 
         return new VehicleResource($vehicle);
+    }
+
+    public function purchasePayment(PurchasePaymentVehicleRequest $request, Vehicle $vehicle): MoneyEntryResource
+    {
+        $entry = $this->moneyEntryService->recordVehicleShortcut(
+            $vehicle,
+            'expense',
+            '購車付款',
+            $request->validated(),
+            $request->user()->id
+        );
+
+        return new MoneyEntryResource($entry);
+    }
+
+    public function expense(VehicleExpenseRequest $request, Vehicle $vehicle): MoneyEntryResource
+    {
+        $data = $request->validated();
+
+        $entry = $this->moneyEntryService->recordVehicleShortcut(
+            $vehicle,
+            'expense',
+            $data['category'],
+            $data,
+            $request->user()->id
+        );
+
+        return new MoneyEntryResource($entry);
+    }
+
+    public function deposit(DepositVehicleRequest $request, Vehicle $vehicle): MoneyEntryResource
+    {
+        $entry = $this->moneyEntryService->recordVehicleShortcut(
+            $vehicle,
+            'income',
+            '訂金收入',
+            $request->validated(),
+            $request->user()->id
+        );
+
+        return new MoneyEntryResource($entry);
+    }
+
+    public function refund(RefundVehicleRequest $request, Vehicle $vehicle): MoneyEntryResource
+    {
+        $entry = $this->moneyEntryService->recordVehicleShortcut(
+            $vehicle,
+            'expense',
+            '退款',
+            $request->validated(),
+            $request->user()->id
+        );
+
+        return new MoneyEntryResource($entry);
+    }
+
+    public function moneyEntries(IndexMoneyEntryRequest $request, Vehicle $vehicle): AnonymousResourceCollection
+    {
+        $filters = array_merge($request->validated(), ['vehicle_id' => $vehicle->id]);
+
+        return MoneyEntryResource::collection($this->moneyEntryService->listEntries($filters));
     }
 }

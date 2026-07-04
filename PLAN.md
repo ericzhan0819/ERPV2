@@ -54,11 +54,11 @@
 - [x] 車輛詳情頁操作按鈕依狀態顯示
 
 ## 9. Money Entry Module
-- [ ] Money Entry CRUD API
-- [ ] 車輛快捷收支 API（purchase-payment/expense/deposit/final-payment/refund）
-- [ ] 帳戶餘額即時計算 Service（供 Dashboard/CashAccount/Vehicle 共用）
-- [ ] 前端收支列表頁（多重篩選＋分頁）
-- [ ] 前端新增收支頁
+- [x] Money Entry CRUD API
+- [x] 車輛快捷收支 API（purchase-payment/expense/deposit/final-payment/refund）
+- [x] 帳戶餘額即時計算 Service（供 Dashboard/CashAccount/Vehicle 共用）
+- [x] 前端收支列表頁（多重篩選＋分頁）
+- [x] 前端新增收支頁
 
 ## 10. Cash Account Module
 - [ ] Cash Account CRUD API + /balances

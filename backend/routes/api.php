@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CashAccountController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\MoneyEntryController;
 use App\Http\Controllers\VehicleController;
 use Illuminate\Support\Facades\Route;
 
@@ -24,6 +25,13 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('vehicles/{vehicle}/reserve', [VehicleController::class, 'reserve']);
     Route::post('vehicles/{vehicle}/final-payment', [VehicleController::class, 'finalPayment']);
     Route::post('vehicles/{vehicle}/close-sale', [VehicleController::class, 'closeSale']);
+    Route::post('vehicles/{vehicle}/purchase-payment', [VehicleController::class, 'purchasePayment']);
+    Route::post('vehicles/{vehicle}/expense', [VehicleController::class, 'expense']);
+    Route::post('vehicles/{vehicle}/deposit', [VehicleController::class, 'deposit']);
+    Route::post('vehicles/{vehicle}/refund', [VehicleController::class, 'refund']);
+    Route::get('vehicles/{vehicle}/money-entries', [VehicleController::class, 'moneyEntries']);
+
+    Route::apiResource('money-entries', MoneyEntryController::class);
 
     Route::get('cash-accounts', [CashAccountController::class, 'index']);
 });
