@@ -7,6 +7,7 @@ use App\Models\MoneyEntry;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class CashAccountTest extends TestCase
@@ -99,19 +100,23 @@ class CashAccountTest extends TestCase
         $this->assertDatabaseMissing('cash_accounts', ['id' => $accountId]);
     }
 
-    public function test_generic_update_rejects_is_active_field(): void
+    #[DataProvider('presentIsActiveValueProvider')]
+    public function test_generic_update_rejects_any_present_is_active_value(mixed $isActiveValue): void
     {
         $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
         $cashAccount = CashAccount::factory()->create(['name' => '原始名稱', 'is_active' => true]);
 
         // A legacy/cached client that still sends is_active on the generic
-        // update endpoint must get a loud rejection, not a silent 200 that
-        // discards the field while implying the status change took effect.
+        // update endpoint - even as null, "", or [] - must get a loud
+        // rejection, not a silent 200 that discards the field while implying
+        // the status change took effect. `missing` (not `prohibited`) is what
+        // makes null/""/[] rejected too, since `prohibited` only rejects
+        // "truthy" values.
         $this->actingAs($admin, 'web')->putJson("/api/cash-accounts/{$cashAccount->id}", [
             'name' => '被忽略的名稱',
             'type' => $cashAccount->type,
             'opening_balance' => $cashAccount->opening_balance,
-            'is_active' => false,
+            'is_active' => $isActiveValue,
         ])->assertStatus(422)->assertJsonValidationErrors('is_active');
 
         $this->assertDatabaseHas('cash_accounts', [
@@ -119,6 +124,17 @@ class CashAccountTest extends TestCase
             'name' => '原始名稱',
             'is_active' => true,
         ]);
+    }
+
+    public static function presentIsActiveValueProvider(): array
+    {
+        return [
+            'boolean false' => [false],
+            'boolean true' => [true],
+            'null' => [null],
+            'empty string' => [''],
+            'empty array' => [[]],
+        ];
     }
 
     public function test_stale_metadata_update_does_not_undo_concurrent_deactivation(): void
