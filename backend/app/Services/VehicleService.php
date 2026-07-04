@@ -290,6 +290,27 @@ class VehicleService
             return false;
         }
 
+        // Deposit entry 本身沒有記錄 sold_price/buyer_phone，但 reserve request 會把
+        // 這些欄位寫進 vehicle。retry 必須確認 vehicle 上目前的值仍與 request 一致，
+        // 否則會 silently replay 成功但漏掉 sold_price/buyer_phone 已被改過的事實。
+        $vehicle = Vehicle::query()->whereKey($entry->vehicle_id)->first();
+
+        if (! $vehicle) {
+            return false;
+        }
+
+        if ($vehicle->buyer_name !== $effectiveData['buyer_name']) {
+            return false;
+        }
+
+        if ($vehicle->buyer_phone !== $effectiveData['buyer_phone']) {
+            return false;
+        }
+
+        if ((int) $vehicle->sold_price !== $effectiveData['sold_price']) {
+            return false;
+        }
+
         return true;
     }
 

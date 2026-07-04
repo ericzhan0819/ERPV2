@@ -795,6 +795,80 @@ class VehicleWorkflowTest extends TestCase
             ->count());
     }
 
+    public function test_reserve_rejects_same_idempotency_key_when_sold_price_changes(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'listed']);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $idempotencyKey = (string) Str::uuid();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/reserve", [
+                'buyer_name' => '王小明',
+                'buyer_phone' => '0911111111',
+                'sold_price' => 480000,
+                'deposit_amount' => 100000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+            ])
+            ->assertSuccessful();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/reserve", [
+                'buyer_name' => '王小明',
+                'buyer_phone' => '0911111111',
+                'sold_price' => 500000,
+                'deposit_amount' => 100000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('idempotency_key');
+
+        $this->assertDatabaseHas('vehicles', ['id' => $vehicle->id, 'sold_price' => 480000]);
+        $this->assertSame(1, MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', '訂金收入')
+            ->count());
+    }
+
+    public function test_reserve_rejects_same_idempotency_key_when_buyer_phone_changes(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'listed']);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $idempotencyKey = (string) Str::uuid();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/reserve", [
+                'buyer_name' => '王小明',
+                'buyer_phone' => '0911111111',
+                'sold_price' => 480000,
+                'deposit_amount' => 100000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+            ])
+            ->assertSuccessful();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/reserve", [
+                'buyer_name' => '王小明',
+                'buyer_phone' => '0922222222',
+                'sold_price' => 480000,
+                'deposit_amount' => 100000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('idempotency_key');
+
+        $this->assertDatabaseHas('vehicles', ['id' => $vehicle->id, 'buyer_phone' => '0911111111']);
+        $this->assertSame(1, MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', '訂金收入')
+            ->count());
+    }
+
     public function test_reserve_idempotency_key_is_required(): void
     {
         $user = User::factory()->create(['is_active' => true]);
