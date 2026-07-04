@@ -33,5 +33,6 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
 
     Route::apiResource('money-entries', MoneyEntryController::class);
 
-    Route::get('cash-accounts', [CashAccountController::class, 'index']);
+    Route::get('cash-accounts/balances', [CashAccountController::class, 'balances']);
+    Route::apiResource('cash-accounts', CashAccountController::class);
 });

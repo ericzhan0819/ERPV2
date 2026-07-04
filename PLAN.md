@@ -61,9 +61,9 @@
 - [x] 前端新增收支頁
 
 ## 10. Cash Account Module
-- [ ] Cash Account CRUD API + /balances
-- [ ] 停用帳戶不可新增收支規則
-- [ ] 前端資金帳戶頁
+- [x] Cash Account CRUD API + /balances
+- [x] 停用帳戶不可新增收支規則
+- [x] 前端資金帳戶頁
 
 ## 11. User Module
 - [ ] User CRUD + reset-password + disable/enable API
