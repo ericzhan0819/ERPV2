@@ -107,4 +107,37 @@ class VehicleTest extends TestCase
 
         $this->assertDatabaseMissing('vehicles', ['id' => $vehicle->id]);
     }
+
+    public function test_cannot_delete_vehicle_with_money_entries(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'preparing']);
+        $cashAccount = CashAccount::factory()->create();
+
+        $entry = MoneyEntry::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'cash_account_id' => $cashAccount->id,
+            'direction' => 'income',
+            'amount' => 10000,
+        ]);
+
+        $this->actingAs($user, 'web')
+            ->deleteJson("/api/vehicles/{$vehicle->id}")
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('vehicles', ['id' => $vehicle->id]);
+        $this->assertDatabaseHas('money_entries', ['id' => $entry->id]);
+    }
+
+    public function test_cannot_delete_vehicle_that_is_not_preparing(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'listed']);
+
+        $this->actingAs($user, 'web')
+            ->deleteJson("/api/vehicles/{$vehicle->id}")
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('vehicles', ['id' => $vehicle->id]);
+    }
 }

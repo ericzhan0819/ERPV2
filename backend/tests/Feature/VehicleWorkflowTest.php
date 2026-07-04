@@ -121,6 +121,23 @@ class VehicleWorkflowTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_cannot_reserve_with_zero_sold_price(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'listed']);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/reserve", [
+                'buyer_name' => '王小明',
+                'sold_price' => 0,
+                'deposit_amount' => 100000,
+                'cash_account_id' => $cashAccount->id,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('sold_price');
+    }
+
     public function test_cannot_close_sale_without_any_income_entry(): void
     {
         $user = User::factory()->create(['is_active' => true]);

@@ -70,6 +70,22 @@ class VehicleService
 
     public function deleteVehicle(Vehicle $vehicle): void
     {
+        if ($vehicle->status !== 'preparing') {
+            throw ValidationException::withMessages([
+                'status' => ['只有整備中的新建車輛可以刪除'],
+            ]);
+        }
+
+        $hasMoneyEntries = MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->exists();
+
+        if ($hasMoneyEntries) {
+            throw ValidationException::withMessages([
+                'status' => ['已有收支紀錄的車輛不得刪除，請改用取消/退車流程'],
+            ]);
+        }
+
         $vehicle->delete();
     }
 
@@ -259,32 +275,37 @@ class VehicleService
      */
     public function closeSale(Vehicle $vehicle, array $data, int $userId): Vehicle
     {
-        $this->assertStatus($vehicle, 'reserved', '只有保留中的車輛可以成交結案');
-
-        if (! $vehicle->sold_price || ! $vehicle->buyer_name) {
-            throw ValidationException::withMessages([
-                'sold_price' => ['成交結案前必須已有成交價與買方資料'],
-            ]);
-        }
-
-        $hasIncome = MoneyEntry::query()
-            ->where('vehicle_id', $vehicle->id)
-            ->where('direction', 'income')
-            ->exists();
-
-        if (! $hasIncome) {
-            throw ValidationException::withMessages([
-                'sold_price' => ['成交結案前必須至少已有一筆訂金或尾款收入'],
-            ]);
-        }
-
         return DB::transaction(function () use ($vehicle, $data, $userId) {
-            $vehicle->status = 'sold';
-            $vehicle->sold_at = $data['sold_at'] ?? now();
-            $vehicle->updated_by = $userId;
-            $vehicle->save();
+            $lockedVehicle = Vehicle::query()
+                ->whereKey($vehicle->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-            return $vehicle;
+            $this->assertStatus($lockedVehicle, 'reserved', '只有保留中的車輛可以成交結案');
+
+            if (! $lockedVehicle->sold_price || ! $lockedVehicle->buyer_name) {
+                throw ValidationException::withMessages([
+                    'sold_price' => ['成交結案前必須已有成交價與買方資料'],
+                ]);
+            }
+
+            $hasIncome = MoneyEntry::query()
+                ->where('vehicle_id', $lockedVehicle->id)
+                ->where('direction', 'income')
+                ->exists();
+
+            if (! $hasIncome) {
+                throw ValidationException::withMessages([
+                    'sold_price' => ['成交結案前必須至少已有一筆訂金或尾款收入'],
+                ]);
+            }
+
+            $lockedVehicle->status = 'sold';
+            $lockedVehicle->sold_at = $data['sold_at'] ?? now();
+            $lockedVehicle->updated_by = $userId;
+            $lockedVehicle->save();
+
+            return $lockedVehicle;
         });
     }
 

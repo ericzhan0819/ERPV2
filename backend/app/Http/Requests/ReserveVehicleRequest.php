@@ -16,7 +16,7 @@ class ReserveVehicleRequest extends FormRequest
         return [
             'buyer_name' => ['required', 'string', 'max:255'],
             'buyer_phone' => ['nullable', 'string', 'max:255'],
-            'sold_price' => ['required', 'integer', 'min:0'],
+            'sold_price' => ['required', 'integer', 'min:1'],
             'deposit_amount' => ['required', 'integer', 'min:1'],
             'cash_account_id' => ['required', 'integer', 'exists:cash_accounts,id'],
             'entry_date' => ['nullable', 'date'],
