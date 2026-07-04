@@ -183,7 +183,7 @@ class MoneyEntryService
 
             if ($lockedEntry->source_type !== MoneyEntry::SOURCE_MANUAL) {
                 throw ValidationException::withMessages([
-                    'source_type' => ['流程或快捷建立的收支不得透過一般收支功能修改'],
+                    'source_type' => ['流程、快捷或來源未確認的既有收支不得透過一般收支功能修改'],
                 ]);
             }
 
@@ -214,7 +214,7 @@ class MoneyEntryService
 
             if ($lockedEntry->source_type !== MoneyEntry::SOURCE_MANUAL) {
                 throw ValidationException::withMessages([
-                    'source_type' => ['流程或快捷建立的收支不得刪除'],
+                    'source_type' => ['流程、快捷或來源未確認的既有收支不得透過一般收支功能刪除'],
                 ]);
             }
 

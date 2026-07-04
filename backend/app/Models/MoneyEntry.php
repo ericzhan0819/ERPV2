@@ -38,6 +38,13 @@ class MoneyEntry extends Model
      */
     public const SOURCE_VEHICLE_WORKFLOW = 'vehicle_workflow';
 
+    /**
+     * source_type 欄位導入前已存在、且綁定車輛但無 durable provenance marker 的既有收支。
+     * 預設保護狀態，不得透過一般 CRUD 修改/刪除，需人工確認後才能改成
+     * manual / vehicle_shortcut / vehicle_workflow。
+     */
+    public const SOURCE_LEGACY_UNKNOWN = 'legacy_unknown';
+
     protected function casts(): array
     {
         return [
