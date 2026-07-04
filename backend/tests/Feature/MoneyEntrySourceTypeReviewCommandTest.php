@@ -324,9 +324,10 @@ class MoneyEntrySourceTypeReviewCommandTest extends TestCase
         $migrationPath = database_path('migrations/2026_07_05_000002_quarantine_legacy_unknown_money_entry_source_type.php');
 
         // RefreshDatabase 已經在 money_entries 為空時跑過一次完整 migration，
-        // 這裡移除 cohort 表，模擬這支 migration 第一次真正遇到既有 legacy
-        // 資料的正式部署情境。
+        // 這裡移除 cohort 表與 state 表，模擬這支 migration 第一次真正遇到
+        // 既有 legacy 資料的正式部署情境。
         Schema::dropIfExists('money_entry_source_type_quarantine_cohort');
+        Schema::dropIfExists('money_entry_source_type_quarantine_state');
 
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
         $vehicle = Vehicle::factory()->create(['status' => 'preparing']);
@@ -377,6 +378,7 @@ class MoneyEntrySourceTypeReviewCommandTest extends TestCase
 
         // 模擬這支 migration 第一次真正遇到既有 legacy 資料的正式部署情境。
         Schema::dropIfExists('money_entry_source_type_quarantine_cohort');
+        Schema::dropIfExists('money_entry_source_type_quarantine_state');
 
         (require $migrationPath)->up();
 
@@ -474,6 +476,12 @@ class MoneyEntrySourceTypeReviewCommandTest extends TestCase
     public function test_candidate_capture_migration_does_not_capture_entries_created_after_cutoff(): void
     {
         $migrationPath = database_path('migrations/2026_07_05_000003_capture_money_entry_source_type_review_candidates.php');
+
+        // RefreshDatabase 已經在 money_entries 為空時跑過一次完整 migration，
+        // 固定了 cutoff=0 且標記完成。這裡移除 capture state 表，模擬這支
+        // migration 第一次真正遇到既有資料的正式部署情境。
+        Schema::dropIfExists('money_entry_source_type_review_candidate_capture_state');
+
         $migration = require $migrationPath;
 
         $preexistingEntry = $this->makeVehicleShortcutEntry();
@@ -503,5 +511,208 @@ class MoneyEntrySourceTypeReviewCommandTest extends TestCase
         // 完成即可通過；cutoff 之後新增的 entryAfterCutoff 不應該造成 gate
         // 失敗。
         $this->artisan('money-entries:source-type-gate')->assertExitCode(0);
+    }
+
+    /**
+     * 000003 candidate capture 必須用 durable cutoff：rollback（down() no-op，
+     * 但 migrations ledger 移除）後重新 migrate 呼叫 up()，不得用「目前」
+     * money_entries 最大 id 重新算出更大的 cutoff。若用目前最大 id 重算，
+     * rollback 與重新 migrate 之間新增的合法 vehicle_shortcut 收支就會落在
+     * 新 cutoff 內被誤補進 candidate、誤擋 gate。
+     */
+    public function test_rerunning_candidate_capture_migration_after_rollback_does_not_expand_snapshot_to_new_legitimate_entries(): void
+    {
+        $migrationPath = database_path('migrations/2026_07_05_000003_capture_money_entry_source_type_review_candidates.php');
+
+        // 模擬這支 migration 第一次真正遇到既有資料的正式部署情境。
+        Schema::dropIfExists('money_entry_source_type_review_candidate_capture_state');
+
+        $preexistingEntry = $this->makeVehicleShortcutEntry();
+
+        (require $migrationPath)->up();
+
+        $this->assertDatabaseHas('money_entry_source_type_review_candidates', [
+            'money_entry_id' => $preexistingEntry->id,
+        ]);
+
+        // 模擬 rollback：down() no-op，但 migrations ledger 移除。
+        (require $migrationPath)->down();
+
+        // rollback 與重新 migrate 之間，正常新增的合法 vehicle_shortcut 收支。
+        $newLegitEntry = $this->makeVehicleShortcutEntry();
+
+        // 模擬重新 migrate：再次呼叫 up()。
+        (require $migrationPath)->up();
+
+        $this->assertDatabaseMissing('money_entry_source_type_review_candidates', [
+            'money_entry_id' => $newLegitEntry->id,
+        ]);
+
+        $this->artisan('money-entries:source-type-review', [
+            '--ids' => (string) $preexistingEntry->id,
+            '--to' => 'vehicle_shortcut',
+            '--approver' => '王小美',
+            '--reason' => '人工核對確認快捷收支來源正確',
+        ])->assertExitCode(0);
+
+        // gate 不應該被 rollback 後、重新 migrate 前新增的合法收支擋住。
+        $this->artisan('money-entries:source-type-gate')->assertExitCode(0);
+    }
+
+    /**
+     * 模擬 000002 crash 情境一：cohort table 已建立且完整 populate，但
+     * quarantine update 尚未套用完成（quarantine_completed_at 仍是 null）。
+     * 下一次重跑 up() 必須完成剩餘的 quarantine 套用，不得誤判成已完成而
+     * 跳過。
+     */
+    public function test_rerunning_quarantine_migration_completes_pending_quarantine_when_cohort_already_populated(): void
+    {
+        $migrationPath = database_path('migrations/2026_07_05_000002_quarantine_legacy_unknown_money_entry_source_type.php');
+
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'preparing']);
+
+        $entryId = DB::table('money_entries')->insertGetId([
+            'vehicle_id' => $vehicle->id,
+            'cash_account_id' => $cashAccount->id,
+            'entry_date' => '2026-06-01',
+            'direction' => 'expense',
+            'category' => '維修支出',
+            'amount' => 1000,
+            'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
+            'created_at' => now(),
+            'updated_at' => now(),
+            // source_type intentionally omitted -> falls back to column default 'manual'
+        ]);
+
+        $state = DB::table('money_entry_source_type_quarantine_state')->first();
+        $this->assertNotNull($state);
+
+        // 模擬 crash：cohort 已完整 populate（把新 entry 補進 cohort），但
+        // quarantine update 尚未套用。
+        DB::table('money_entry_source_type_quarantine_cohort')->insert([
+            'money_entry_id' => $entryId,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('money_entry_source_type_quarantine_state')->where('id', $state->id)->update([
+            'cutoff_id' => $entryId,
+            'cohort_completed_at' => now(),
+            'quarantine_completed_at' => null,
+            'updated_at' => now(),
+        ]);
+
+        (require $migrationPath)->up();
+
+        $this->assertSame('legacy_unknown', DB::table('money_entries')->where('id', $entryId)->value('source_type'));
+        $this->assertNotNull(
+            DB::table('money_entry_source_type_quarantine_state')->where('id', $state->id)->value('quarantine_completed_at')
+        );
+    }
+
+    /**
+     * 模擬 000002 crash 情境二：cohort table 已建立，但只 populate 一部分
+     * （cohort_completed_at 仍是 null）。下一次重跑 up() 必須補齊剩餘符合
+     * 條件的 legacy vehicle-bound manual 收支，不得因為 cohort 目前已有資料
+     * 就誤判成完成而漏掉其餘的。
+     */
+    public function test_rerunning_quarantine_migration_backfills_remaining_rows_after_partial_cohort_population(): void
+    {
+        $migrationPath = database_path('migrations/2026_07_05_000002_quarantine_legacy_unknown_money_entry_source_type.php');
+
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicleA = Vehicle::factory()->create(['status' => 'preparing']);
+        $vehicleB = Vehicle::factory()->create(['status' => 'preparing']);
+
+        $entryIdA = DB::table('money_entries')->insertGetId([
+            'vehicle_id' => $vehicleA->id,
+            'cash_account_id' => $cashAccount->id,
+            'entry_date' => '2026-06-01',
+            'direction' => 'expense',
+            'category' => '維修支出',
+            'amount' => 1000,
+            'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $entryIdB = DB::table('money_entries')->insertGetId([
+            'vehicle_id' => $vehicleB->id,
+            'cash_account_id' => $cashAccount->id,
+            'entry_date' => '2026-06-01',
+            'direction' => 'expense',
+            'category' => '購車付款',
+            'amount' => 2000,
+            'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $state = DB::table('money_entry_source_type_quarantine_state')->first();
+        $this->assertNotNull($state);
+
+        // 模擬 partial cohort population：cutoff 涵蓋兩筆，但 cohort 只補進
+        // 其中一筆，另一筆尚未寫入，且尚未標記 cohort_completed_at。
+        DB::table('money_entry_source_type_quarantine_cohort')->insert([
+            'money_entry_id' => $entryIdA,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('money_entry_source_type_quarantine_state')->where('id', $state->id)->update([
+            'cutoff_id' => $entryIdB,
+            'cohort_completed_at' => null,
+            'quarantine_completed_at' => null,
+            'updated_at' => now(),
+        ]);
+
+        (require $migrationPath)->up();
+
+        $this->assertSame('legacy_unknown', DB::table('money_entries')->where('id', $entryIdA)->value('source_type'));
+        $this->assertSame('legacy_unknown', DB::table('money_entries')->where('id', $entryIdB)->value('source_type'));
+        $this->assertDatabaseHas('money_entry_source_type_quarantine_cohort', ['money_entry_id' => $entryIdB]);
+    }
+
+    /**
+     * 模擬 000002 crash 情境三：000002 完整跑完一輪（cohort/quarantine 皆
+     * completed），但 000003 建立的 candidate 表尚不存在（例如部署順序中
+     * 000003 尚未執行到，或該環境曾經只跑到 000002 就中斷）。重新 migrate
+     * 重跑 000002 up() 進入排除已 review id 的分支時，不得因為查詢不存在的
+     * candidate 表而失敗。
+     */
+    public function test_rerunning_quarantine_migration_up_does_not_fail_when_candidate_table_missing(): void
+    {
+        $migrationPath = database_path('migrations/2026_07_05_000002_quarantine_legacy_unknown_money_entry_source_type.php');
+
+        Schema::dropIfExists('money_entry_source_type_quarantine_cohort');
+        Schema::dropIfExists('money_entry_source_type_quarantine_state');
+
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'preparing']);
+
+        $entryId = DB::table('money_entries')->insertGetId([
+            'vehicle_id' => $vehicle->id,
+            'cash_account_id' => $cashAccount->id,
+            'entry_date' => '2026-06-01',
+            'direction' => 'expense',
+            'category' => '維修支出',
+            'amount' => 1000,
+            'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        (require $migrationPath)->up();
+
+        $this->assertSame('legacy_unknown', DB::table('money_entries')->where('id', $entryId)->value('source_type'));
+
+        // 模擬 000003 candidate 表尚不存在（例如部署中斷在 000002 之後、
+        // 000003 之前）。
+        Schema::dropIfExists('money_entry_source_type_review_candidates');
+
+        // 模擬 rollback 後重新 migrate：再次呼叫 up()，此時應進入完整 rerun
+        // 分支（quarantine_completed_at 已標記完成）。
+        (require $migrationPath)->up();
+
+        $this->assertSame('legacy_unknown', DB::table('money_entries')->where('id', $entryId)->value('source_type'));
     }
 }

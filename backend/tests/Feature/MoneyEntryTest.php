@@ -493,11 +493,12 @@ class MoneyEntryTest extends TestCase
         ]);
 
         // RefreshDatabase 在整個測試流程開始前已經先跑過一次完整 migration
-        // （當時 money_entries 是空的），所以 000002 up() 的「第一次執行」
-        // cohort 快照早已在那次跑完並固定下來。為了模擬「這支 migration 第一
-        // 次真正遇到既有 legacy 資料」的正式部署情境，這裡先移除 up() 用來
-        // 判斷是否為第一次執行的 cohort 表，讓 up() 重新進入第一次執行分支。
+        // （當時 money_entries 是空的），所以 000002 up() 的 durable cutoff 與
+        // 完成 state 早已在那次跑完並固定下來。為了模擬「這支 migration 第一
+        // 次真正遇到既有 legacy 資料」的正式部署情境，這裡先移除 cohort 表與
+        // state 表，讓 up() 重新進入第一次執行分支。
         Schema::dropIfExists('money_entry_source_type_quarantine_cohort');
+        Schema::dropIfExists('money_entry_source_type_quarantine_state');
 
         $migrationPath = database_path('migrations/2026_07_05_000002_quarantine_legacy_unknown_money_entry_source_type.php');
         (require $migrationPath)->up();
