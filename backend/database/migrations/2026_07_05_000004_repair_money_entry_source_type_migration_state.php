@@ -90,23 +90,24 @@ return new class extends Migration
         //     資料：那批可能包含本次修復之前已經人工 review 確認回 manual
         //     的資料，也可能包含本次修復之後才合法新增的資料，兩者都不應
         //     該被納入 cohort。
-        $legacyUnknownIds = DB::table('money_entries')
+        // 用 chunkById() 在資料庫端分批游標讀取，避免 pluck() 把整批
+        // legacy_unknown id 一次載入 PHP 記憶體 —— 舊環境的既有 legacy 資料量
+        // 未知，可能遠大於單次可安全載入記憶體的規模。
+        DB::table('money_entries')
             ->where('source_type', 'legacy_unknown')
-            ->pluck('id');
+            ->select('id')
+            ->orderBy('id')
+            ->chunkById(500, function ($entries) {
+                $now = now();
 
-        if ($legacyUnknownIds->isNotEmpty()) {
-            $now = now();
-
-            $legacyUnknownIds->chunk(500)->each(function ($chunk) use ($now) {
                 DB::table('money_entry_source_type_quarantine_cohort')->insertOrIgnore(
-                    $chunk->map(fn ($id) => [
-                        'money_entry_id' => $id,
+                    $entries->map(fn ($entry) => [
+                        'money_entry_id' => $entry->id,
                         'created_at' => $now,
                         'updated_at' => $now,
                     ])->all()
                 );
             });
-        }
 
         // 這些 row 目前就是 legacy_unknown，quarantine 這個動作本身已經
         // 完成，只是缺 durable state 紀錄；因此 cohort/quarantine 都直接
