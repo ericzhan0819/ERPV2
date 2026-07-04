@@ -6,7 +6,9 @@ use App\Models\CashAccount;
 use App\Models\MoneyEntry;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Services\VehicleService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class VehicleTest extends TestCase
@@ -139,5 +141,50 @@ class VehicleTest extends TestCase
             ->assertStatus(422);
 
         $this->assertDatabaseHas('vehicles', ['id' => $vehicle->id]);
+    }
+
+    public function test_delete_vehicle_rechecks_database_state_before_deleting(): void
+    {
+        $vehicle = Vehicle::factory()->create(['status' => 'preparing']);
+        $staleVehicle = Vehicle::query()->whereKey($vehicle->id)->firstOrFail();
+
+        Vehicle::query()->whereKey($vehicle->id)->update(['status' => 'listed']);
+
+        try {
+            app(VehicleService::class)->deleteVehicle($staleVehicle);
+
+            $this->fail('應該因為車輛狀態已變更而拋出 ValidationException');
+        } catch (ValidationException $exception) {
+            $this->assertSame(422, $exception->status);
+            $this->assertArrayHasKey('status', $exception->errors());
+        }
+
+        $this->assertDatabaseHas('vehicles', ['id' => $vehicle->id]);
+    }
+
+    public function test_delete_vehicle_rechecks_money_entries_before_deleting(): void
+    {
+        $vehicle = Vehicle::factory()->create(['status' => 'preparing']);
+        $staleVehicle = Vehicle::query()->whereKey($vehicle->id)->firstOrFail();
+        $cashAccount = CashAccount::factory()->create();
+
+        $entry = MoneyEntry::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'cash_account_id' => $cashAccount->id,
+            'direction' => 'income',
+            'amount' => 10000,
+        ]);
+
+        try {
+            app(VehicleService::class)->deleteVehicle($staleVehicle);
+
+            $this->fail('應該因為已有收支紀錄而拋出 ValidationException');
+        } catch (ValidationException $exception) {
+            $this->assertSame(422, $exception->status);
+            $this->assertArrayHasKey('status', $exception->errors());
+        }
+
+        $this->assertDatabaseHas('vehicles', ['id' => $vehicle->id]);
+        $this->assertDatabaseHas('money_entries', ['id' => $entry->id]);
     }
 }

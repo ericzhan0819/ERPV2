@@ -70,23 +70,30 @@ class VehicleService
 
     public function deleteVehicle(Vehicle $vehicle): void
     {
-        if ($vehicle->status !== 'preparing') {
-            throw ValidationException::withMessages([
-                'status' => ['只有整備中的新建車輛可以刪除'],
-            ]);
-        }
+        DB::transaction(function () use ($vehicle) {
+            $lockedVehicle = Vehicle::query()
+                ->whereKey($vehicle->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        $hasMoneyEntries = MoneyEntry::query()
-            ->where('vehicle_id', $vehicle->id)
-            ->exists();
+            if ($lockedVehicle->status !== 'preparing') {
+                throw ValidationException::withMessages([
+                    'status' => ['只有整備中的新建車輛可以刪除'],
+                ]);
+            }
 
-        if ($hasMoneyEntries) {
-            throw ValidationException::withMessages([
-                'status' => ['已有收支紀錄的車輛不得刪除，請改用取消/退車流程'],
-            ]);
-        }
+            $hasMoneyEntries = MoneyEntry::query()
+                ->where('vehicle_id', $lockedVehicle->id)
+                ->exists();
 
-        $vehicle->delete();
+            if ($hasMoneyEntries) {
+                throw ValidationException::withMessages([
+                    'status' => ['已有收支紀錄的車輛不得刪除，請改用取消/退車流程'],
+                ]);
+            }
+
+            $lockedVehicle->delete();
+        });
     }
 
     /**
@@ -116,20 +123,25 @@ class VehicleService
      */
     public function listVehicle(Vehicle $vehicle, array $data, int $userId): Vehicle
     {
-        $this->assertStatus($vehicle, 'preparing', '只有整備中的車輛可以上架');
-
         return DB::transaction(function () use ($vehicle, $data, $userId) {
-            $vehicle->fill([
+            $lockedVehicle = Vehicle::query()
+                ->whereKey($vehicle->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $this->assertStatus($lockedVehicle, 'preparing', '只有整備中的車輛可以上架');
+
+            $lockedVehicle->fill([
                 'asking_price' => $data['asking_price'],
                 'floor_price' => $data['floor_price'] ?? null,
                 'listing_date' => $data['listing_date'] ?? now()->toDateString(),
                 'sales_note' => $data['sales_note'] ?? null,
             ]);
-            $vehicle->status = 'listed';
-            $vehicle->updated_by = $userId;
-            $vehicle->save();
+            $lockedVehicle->status = 'listed';
+            $lockedVehicle->updated_by = $userId;
+            $lockedVehicle->save();
 
-            return $vehicle;
+            return $lockedVehicle;
         });
     }
 

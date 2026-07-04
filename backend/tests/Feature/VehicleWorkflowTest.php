@@ -727,6 +727,29 @@ class VehicleWorkflowTest extends TestCase
         $this->assertDatabaseCount('money_entries', 0);
     }
 
+    public function test_list_vehicle_rechecks_database_state_before_writing(): void
+    {
+        $vehicle = Vehicle::factory()->create(['status' => 'preparing']);
+        $staleVehicle = Vehicle::query()->whereKey($vehicle->id)->firstOrFail();
+
+        Vehicle::query()->whereKey($vehicle->id)->update(['status' => 'reserved']);
+
+        try {
+            app(VehicleService::class)->listVehicle($staleVehicle, [
+                'asking_price' => 500000,
+                'floor_price' => 450000,
+                'listing_date' => '2026-01-01',
+            ], User::factory()->create(['is_active' => true])->id);
+
+            $this->fail('應該因為車輛狀態已變更而拋出 ValidationException');
+        } catch (ValidationException $exception) {
+            $this->assertSame(422, $exception->status);
+            $this->assertArrayHasKey('status', $exception->errors());
+        }
+
+        $this->assertDatabaseHas('vehicles', ['id' => $vehicle->id, 'status' => 'reserved']);
+    }
+
     public function test_second_reservation_on_same_vehicle_returns_422_and_keeps_single_deposit(): void
     {
         $user = User::factory()->create(['is_active' => true]);
