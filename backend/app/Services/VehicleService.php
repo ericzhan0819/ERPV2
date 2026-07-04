@@ -150,41 +150,167 @@ class VehicleService
      */
     public function reserveVehicle(Vehicle $vehicle, array $data, int $userId): Vehicle
     {
-        return DB::transaction(function () use ($vehicle, $data, $userId) {
-            $lockedVehicle = Vehicle::query()
-                ->whereKey($vehicle->id)
+        $idempotencyKey = (string) $data['idempotency_key'];
+        $effectiveData = $this->normalizeReserveData($data);
+
+        try {
+            return DB::transaction(fn () => $this->createReservationInsideTransaction(
+                $vehicle,
+                $idempotencyKey,
+                $effectiveData,
+                $userId
+            ));
+        } catch (QueryException $e) {
+            if (! $this->isIdempotencyKeyUniqueViolation($e)) {
+                throw $e;
+            }
+
+            return $this->replayRacedReservationAfterRollback($e, $vehicle->id, $idempotencyKey, $effectiveData);
+        }
+    }
+
+    /**
+     * @param  array{buyer_name: string, buyer_phone: string|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
+     */
+    private function createReservationInsideTransaction(Vehicle $vehicle, string $idempotencyKey, array $effectiveData, int $userId): Vehicle
+    {
+        $existingEntry = MoneyEntry::query()
+            ->where('idempotency_key', $idempotencyKey)
+            ->first();
+
+        if ($existingEntry) {
+            return $this->replayOrRejectReservation($existingEntry, $vehicle->id, $effectiveData);
+        }
+
+        $lockedVehicle = Vehicle::query()
+            ->whereKey($vehicle->id)
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        $this->assertStatus($lockedVehicle, 'listed', '只有上架中的車輛可以收訂金並保留');
+        $this->assertCashAccountActive($effectiveData['cash_account_id']);
+
+        $lockedVehicle->fill([
+            'buyer_name' => $effectiveData['buyer_name'],
+            'buyer_phone' => $effectiveData['buyer_phone'],
+            'sold_price' => $effectiveData['sold_price'],
+        ]);
+        $lockedVehicle->status = 'reserved';
+        $lockedVehicle->reserved_at = now();
+        $lockedVehicle->updated_by = $userId;
+        $lockedVehicle->save();
+
+        $entry = new MoneyEntry([
+            'vehicle_id' => $lockedVehicle->id,
+            'cash_account_id' => $effectiveData['cash_account_id'],
+            'entry_date' => $effectiveData['entry_date'],
+            'direction' => 'income',
+            'category' => '訂金收入',
+            'amount' => $effectiveData['deposit_amount'],
+            'counterparty_name' => $effectiveData['buyer_name'],
+            'description' => $effectiveData['description'],
+            'idempotency_key' => $idempotencyKey,
+            'source_type' => MoneyEntry::SOURCE_VEHICLE_WORKFLOW,
+        ]);
+        $entry->created_by = $userId;
+        $entry->updated_by = $userId;
+
+        // Let a duplicate-key QueryException escape so DB::transaction rolls back;
+        // it is caught and retried against a fresh transaction/snapshot by the caller.
+        $entry->save();
+
+        return $lockedVehicle;
+    }
+
+    /**
+     * @param  array{buyer_name: string, buyer_phone: string|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
+     */
+    private function replayRacedReservationAfterRollback(QueryException $original, int $vehicleId, string $idempotencyKey, array $effectiveData): Vehicle
+    {
+        return DB::transaction(function () use ($original, $vehicleId, $idempotencyKey, $effectiveData) {
+            // Same MySQL REPEATABLE READ stale-snapshot concern as final payment: after a
+            // rollback, re-read the idempotency_key in a fresh transaction/locking read.
+            $racedEntry = MoneyEntry::query()
+                ->where('idempotency_key', $idempotencyKey)
                 ->lockForUpdate()
-                ->firstOrFail();
+                ->first();
 
-            $this->assertStatus($lockedVehicle, 'listed', '只有上架中的車輛可以收訂金並保留');
-            $this->assertCashAccountActive((int) $data['cash_account_id']);
+            if (! $racedEntry) {
+                throw $original;
+            }
 
-            $lockedVehicle->fill([
-                'buyer_name' => $data['buyer_name'],
-                'buyer_phone' => $data['buyer_phone'] ?? null,
-                'sold_price' => $data['sold_price'],
-            ]);
-            $lockedVehicle->status = 'reserved';
-            $lockedVehicle->reserved_at = now();
-            $lockedVehicle->updated_by = $userId;
-            $lockedVehicle->save();
-
-            $entry = new MoneyEntry([
-                'vehicle_id' => $lockedVehicle->id,
-                'cash_account_id' => $data['cash_account_id'],
-                'entry_date' => $data['entry_date'] ?? now()->toDateString(),
-                'direction' => 'income',
-                'category' => '訂金收入',
-                'amount' => $data['deposit_amount'],
-                'counterparty_name' => $data['buyer_name'],
-                'description' => $data['description'] ?? null,
-            ]);
-            $entry->created_by = $userId;
-            $entry->updated_by = $userId;
-            $entry->save();
-
-            return $lockedVehicle;
+            return $this->replayOrRejectReservation($racedEntry, $vehicleId, $effectiveData);
         });
+    }
+
+    /**
+     * @param  array{buyer_name: string, buyer_phone: string|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
+     */
+    private function replayOrRejectReservation(MoneyEntry $entry, int $vehicleId, array $effectiveData): Vehicle
+    {
+        if (! $this->isSameReservationRequest($entry, $vehicleId, $effectiveData)) {
+            throw ValidationException::withMessages([
+                'idempotency_key' => ['此冪等鍵已被不同保留/訂金內容使用，請重新整理後再試'],
+            ]);
+        }
+
+        return Vehicle::query()->whereKey($entry->vehicle_id)->firstOrFail();
+    }
+
+    /**
+     * @param  array{buyer_name: string, buyer_phone: string|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
+     */
+    private function isSameReservationRequest(MoneyEntry $entry, int $vehicleId, array $effectiveData): bool
+    {
+        if ((int) $entry->vehicle_id !== $vehicleId) {
+            return false;
+        }
+
+        if ($entry->direction !== 'income' || $entry->category !== '訂金收入') {
+            return false;
+        }
+
+        if ((int) $entry->amount !== $effectiveData['deposit_amount']) {
+            return false;
+        }
+
+        if ((int) $entry->cash_account_id !== $effectiveData['cash_account_id']) {
+            return false;
+        }
+
+        if ($entry->counterparty_name !== $effectiveData['buyer_name']) {
+            return false;
+        }
+
+        if ($entry->description !== $effectiveData['description']) {
+            return false;
+        }
+
+        if ($effectiveData['entry_date_was_supplied'] && $entry->entry_date?->toDateString() !== $effectiveData['entry_date']) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{buyer_name: string, buyer_phone: string|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}
+     */
+    private function normalizeReserveData(array $data): array
+    {
+        $entryDateWasSupplied = ! empty($data['entry_date']);
+
+        return [
+            'buyer_name' => $data['buyer_name'],
+            'buyer_phone' => $data['buyer_phone'] ?? null,
+            'sold_price' => (int) $data['sold_price'],
+            'deposit_amount' => (int) $data['deposit_amount'],
+            'cash_account_id' => (int) $data['cash_account_id'],
+            'description' => $data['description'] ?? null,
+            'entry_date' => $entryDateWasSupplied ? $data['entry_date'] : now()->toDateString(),
+            'entry_date_was_supplied' => $entryDateWasSupplied,
+        ];
     }
 
     /**
@@ -244,6 +370,7 @@ class VehicleService
             'counterparty_name' => $lockedVehicle->buyer_name,
             'description' => $effectiveData['description'],
             'idempotency_key' => $idempotencyKey,
+            'source_type' => MoneyEntry::SOURCE_VEHICLE_WORKFLOW,
         ]);
         $entry->created_by = $userId;
         $entry->updated_by = $userId;

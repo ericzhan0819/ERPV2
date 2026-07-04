@@ -398,6 +398,7 @@ class VehicleFinalPaymentMysqlConcurrencyTest extends TestCase
             'deposit_amount' => $depositAmount,
             'cash_account_id' => $cashAccount->id,
             'entry_date' => '2026-01-01',
+            'idempotency_key' => (string) Str::uuid(),
         ], $user->id)->refresh();
     }
 }

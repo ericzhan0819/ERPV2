@@ -23,6 +23,7 @@ class StoreMoneyEntryRequest extends FormRequest
             'vehicle_id' => ['nullable', 'integer', 'exists:vehicles,id'],
             'counterparty_name' => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
+            'idempotency_key' => ['required', 'string', 'max:100'],
         ];
     }
 }

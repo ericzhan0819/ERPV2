@@ -61,4 +61,5 @@ export interface CreateMoneyEntryPayload {
   vehicle_id?: number
   counterparty_name?: string
   description?: string
+  idempotency_key: string
 }

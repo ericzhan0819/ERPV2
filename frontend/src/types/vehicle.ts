@@ -86,6 +86,7 @@ export interface ReserveVehiclePayload {
   cash_account_id: number
   entry_date?: string
   description?: string
+  idempotency_key: string
 }
 
 export interface FinalPaymentPayload {

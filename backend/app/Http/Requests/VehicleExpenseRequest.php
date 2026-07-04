@@ -20,6 +20,7 @@ class VehicleExpenseRequest extends FormRequest
             'entry_date' => ['nullable', 'date'],
             'counterparty_name' => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
+            'idempotency_key' => ['required', 'string', 'max:100'],
         ];
     }
 }

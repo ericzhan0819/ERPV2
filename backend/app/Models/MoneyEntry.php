@@ -17,10 +17,26 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'counterparty_name',
     'description',
     'idempotency_key',
+    'source_type',
 ])]
 class MoneyEntry extends Model
 {
     use HasFactory;
+
+    /**
+     * 由 /api/money-entries 一般 CRUD 建立，成交前可修改/刪除。
+     */
+    public const SOURCE_MANUAL = 'manual';
+
+    /**
+     * 由購車付款/單車支出/收訂金/退款快捷建立，不得由一般 CRUD 修改/刪除。
+     */
+    public const SOURCE_VEHICLE_SHORTCUT = 'vehicle_shortcut';
+
+    /**
+     * 由 reserve（收訂金並保留）/ final-payment（收尾款）流程建立，不得由一般 CRUD 修改/刪除。
+     */
+    public const SOURCE_VEHICLE_WORKFLOW = 'vehicle_workflow';
 
     protected function casts(): array
     {

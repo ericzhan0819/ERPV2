@@ -192,6 +192,7 @@ export function VehicleDetail() {
     deposit_amount: string
     cash_account_id: string
     description: string
+    idempotency_key: string
   }) {
     setSubmitting(true)
     setFormError(null)
@@ -203,6 +204,7 @@ export function VehicleDetail() {
         deposit_amount: Number(form.deposit_amount),
         cash_account_id: Number(form.cash_account_id),
         description: form.description || undefined,
+        idempotency_key: form.idempotency_key,
       })
       closeModal()
       loadDetail()
@@ -484,6 +486,7 @@ function ReserveModal({
     deposit_amount: string
     cash_account_id: string
     description: string
+    idempotency_key: string
   }) => void
   error: string | null
   submitting: boolean
@@ -495,10 +498,16 @@ function ReserveModal({
   const [deposit_amount, setDepositAmount] = useState('')
   const [cash_account_id, setCashAccountId] = useState('')
   const [description, setDescription] = useState('')
+  const idempotencyKeyRef = useRef<string | null>(null)
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    onSubmit({ buyer_name, buyer_phone, sold_price, deposit_amount, cash_account_id, description })
+    let idempotencyKey = idempotencyKeyRef.current
+    if (!idempotencyKey) {
+      idempotencyKey = crypto.randomUUID()
+      idempotencyKeyRef.current = idempotencyKey
+    }
+    onSubmit({ buyer_name, buyer_phone, sold_price, deposit_amount, cash_account_id, description, idempotency_key: idempotencyKey })
   }
 
   return (

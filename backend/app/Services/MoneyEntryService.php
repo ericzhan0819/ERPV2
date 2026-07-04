@@ -6,6 +6,7 @@ use App\Models\CashAccount;
 use App\Models\MoneyEntry;
 use App\Models\Vehicle;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -48,6 +49,11 @@ class MoneyEntryService
     private const GENERAL_ONLY_CATEGORIES = [
         '一般收入', '租金', '水電', '廣告', '平台費', '薪資 / 佣金', '稅金支出',
     ];
+
+    /**
+     * 已售出/已取消的車輛不得再新增或修改綁定的收支。
+     */
+    private const LOCKED_VEHICLE_STATUSES = ['sold', 'cancelled'];
 
     public static function categories(): array
     {
@@ -104,17 +110,67 @@ class MoneyEntryService
      */
     public function createEntry(array $data, int $userId): MoneyEntry
     {
-        return DB::transaction(function () use ($data, $userId) {
-            $this->assertCashAccountActive((int) $data['cash_account_id']);
-            $this->assertCategoryRules($data['category'], $data['direction'], $data['vehicle_id'] ?? null);
+        $idempotencyKey = (string) $data['idempotency_key'];
+        $effectiveData = [
+            'vehicle_id' => isset($data['vehicle_id']) ? (int) $data['vehicle_id'] : null,
+            'cash_account_id' => (int) $data['cash_account_id'],
+            'entry_date' => $data['entry_date'],
+            'direction' => $data['direction'],
+            'category' => $data['category'],
+            'amount' => (int) $data['amount'],
+            'counterparty_name' => $data['counterparty_name'] ?? null,
+            'description' => $data['description'] ?? null,
+        ];
 
-            $entry = new MoneyEntry($data);
-            $entry->created_by = $userId;
-            $entry->updated_by = $userId;
-            $entry->save();
+        try {
+            return DB::transaction(fn () => $this->createGeneralEntryInsideTransaction($idempotencyKey, $effectiveData, $userId));
+        } catch (QueryException $e) {
+            if (! $this->isIdempotencyKeyUniqueViolation($e)) {
+                throw $e;
+            }
 
-            return $entry;
-        });
+            return $this->replayRacedEntryAfterRollback($e, $idempotencyKey, $effectiveData, true);
+        }
+    }
+
+    /**
+     * @param  array{vehicle_id: int|null, cash_account_id: int, entry_date: string, direction: string, category: string, amount: int, counterparty_name: string|null, description: string|null}  $effectiveData
+     */
+    private function createGeneralEntryInsideTransaction(string $idempotencyKey, array $effectiveData, int $userId): MoneyEntry
+    {
+        $existingEntry = MoneyEntry::query()->where('idempotency_key', $idempotencyKey)->first();
+
+        if ($existingEntry) {
+            return $this->replayOrRejectEntry($existingEntry, $effectiveData, true);
+        }
+
+        if ($effectiveData['vehicle_id'] !== null) {
+            $this->assertVehicleMutable($effectiveData['vehicle_id']);
+        }
+
+        $this->assertCashAccountActive($effectiveData['cash_account_id']);
+        $this->assertCategoryRules($effectiveData['category'], $effectiveData['direction'], $effectiveData['vehicle_id']);
+
+        $entry = new MoneyEntry([
+            'vehicle_id' => $effectiveData['vehicle_id'],
+            'cash_account_id' => $effectiveData['cash_account_id'],
+            'entry_date' => $effectiveData['entry_date'],
+            'direction' => $effectiveData['direction'],
+            'category' => $effectiveData['category'],
+            'amount' => $effectiveData['amount'],
+            'counterparty_name' => $effectiveData['counterparty_name'],
+            'description' => $effectiveData['description'],
+            'idempotency_key' => $idempotencyKey,
+            'source_type' => MoneyEntry::SOURCE_MANUAL,
+        ]);
+        $entry->created_by = $userId;
+        $entry->updated_by = $userId;
+
+        // Let a duplicate-key QueryException escape so DB::transaction rolls back;
+        // it is caught and retried against a fresh transaction/snapshot by the caller.
+        $entry->save();
+
+        return $entry;
     }
 
     /**
@@ -124,6 +180,21 @@ class MoneyEntryService
     {
         return DB::transaction(function () use ($entry, $data, $userId) {
             $lockedEntry = MoneyEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedEntry->source_type !== MoneyEntry::SOURCE_MANUAL) {
+                throw ValidationException::withMessages([
+                    'source_type' => ['流程或快捷建立的收支不得透過一般收支功能修改'],
+                ]);
+            }
+
+            if ($lockedEntry->vehicle_id !== null) {
+                $this->assertVehicleMutable((int) $lockedEntry->vehicle_id);
+            }
+
+            $newVehicleId = isset($data['vehicle_id']) ? (int) $data['vehicle_id'] : null;
+            if ($newVehicleId !== null && $newVehicleId !== (int) $lockedEntry->vehicle_id) {
+                $this->assertVehicleMutable($newVehicleId);
+            }
 
             $this->assertCashAccountActive((int) $data['cash_account_id']);
             $this->assertCategoryRules($data['category'], $data['direction'], $data['vehicle_id'] ?? null);
@@ -139,7 +210,19 @@ class MoneyEntryService
     public function deleteEntry(MoneyEntry $entry): void
     {
         DB::transaction(function () use ($entry) {
-            MoneyEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail()->delete();
+            $lockedEntry = MoneyEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
+
+            if ($lockedEntry->source_type !== MoneyEntry::SOURCE_MANUAL) {
+                throw ValidationException::withMessages([
+                    'source_type' => ['流程或快捷建立的收支不得刪除'],
+                ]);
+            }
+
+            if ($lockedEntry->vehicle_id !== null) {
+                $this->assertVehicleMutable((int) $lockedEntry->vehicle_id);
+            }
+
+            $lockedEntry->delete();
         });
     }
 
@@ -150,25 +233,142 @@ class MoneyEntryService
      */
     public function recordVehicleShortcut(Vehicle $vehicle, string $direction, string $category, array $data, int $userId): MoneyEntry
     {
-        return DB::transaction(function () use ($vehicle, $direction, $category, $data, $userId) {
-            $this->assertCashAccountActive((int) $data['cash_account_id']);
+        $idempotencyKey = (string) $data['idempotency_key'];
+        $entryDateWasSupplied = ! empty($data['entry_date']);
+        $effectiveData = [
+            'vehicle_id' => $vehicle->id,
+            'cash_account_id' => (int) $data['cash_account_id'],
+            'entry_date' => $entryDateWasSupplied ? $data['entry_date'] : now()->toDateString(),
+            'direction' => $direction,
+            'category' => $category,
+            'amount' => (int) $data['amount'],
+            'counterparty_name' => $data['counterparty_name'] ?? null,
+            'description' => $data['description'] ?? null,
+        ];
 
-            $entry = new MoneyEntry([
-                'vehicle_id' => $vehicle->id,
-                'cash_account_id' => $data['cash_account_id'],
-                'entry_date' => $data['entry_date'] ?? now()->toDateString(),
-                'direction' => $direction,
-                'category' => $category,
-                'amount' => $data['amount'],
-                'counterparty_name' => $data['counterparty_name'] ?? null,
-                'description' => $data['description'] ?? null,
+        try {
+            return DB::transaction(fn () => $this->createShortcutEntryInsideTransaction($idempotencyKey, $effectiveData, $userId, $entryDateWasSupplied));
+        } catch (QueryException $e) {
+            if (! $this->isIdempotencyKeyUniqueViolation($e)) {
+                throw $e;
+            }
+
+            return $this->replayRacedEntryAfterRollback($e, $idempotencyKey, $effectiveData, $entryDateWasSupplied);
+        }
+    }
+
+    /**
+     * @param  array{vehicle_id: int, cash_account_id: int, entry_date: string, direction: string, category: string, amount: int, counterparty_name: string|null, description: string|null}  $effectiveData
+     */
+    private function createShortcutEntryInsideTransaction(string $idempotencyKey, array $effectiveData, int $userId, bool $entryDateWasSupplied): MoneyEntry
+    {
+        $existingEntry = MoneyEntry::query()->where('idempotency_key', $idempotencyKey)->first();
+
+        if ($existingEntry) {
+            return $this->replayOrRejectEntry($existingEntry, $effectiveData, $entryDateWasSupplied);
+        }
+
+        $this->assertVehicleMutable($effectiveData['vehicle_id']);
+        $this->assertCashAccountActive($effectiveData['cash_account_id']);
+
+        $entry = new MoneyEntry([
+            'vehicle_id' => $effectiveData['vehicle_id'],
+            'cash_account_id' => $effectiveData['cash_account_id'],
+            'entry_date' => $effectiveData['entry_date'],
+            'direction' => $effectiveData['direction'],
+            'category' => $effectiveData['category'],
+            'amount' => $effectiveData['amount'],
+            'counterparty_name' => $effectiveData['counterparty_name'],
+            'description' => $effectiveData['description'],
+            'idempotency_key' => $idempotencyKey,
+            'source_type' => MoneyEntry::SOURCE_VEHICLE_SHORTCUT,
+        ]);
+        $entry->created_by = $userId;
+        $entry->updated_by = $userId;
+
+        // Let a duplicate-key QueryException escape so DB::transaction rolls back;
+        // it is caught and retried against a fresh transaction/snapshot by the caller.
+        $entry->save();
+
+        return $entry;
+    }
+
+    /**
+     * @param  array{vehicle_id: int|null, cash_account_id: int, entry_date: string, direction: string, category: string, amount: int, counterparty_name: string|null, description: string|null}  $effectiveData
+     */
+    private function replayOrRejectEntry(MoneyEntry $entry, array $effectiveData, bool $entryDateWasSupplied): MoneyEntry
+    {
+        if (! $this->isSameEntryRequest($entry, $effectiveData, $entryDateWasSupplied)) {
+            throw ValidationException::withMessages([
+                'idempotency_key' => ['此冪等鍵已被不同收支內容使用，請重新整理後再試'],
             ]);
-            $entry->created_by = $userId;
-            $entry->updated_by = $userId;
-            $entry->save();
+        }
 
-            return $entry;
+        return $entry;
+    }
+
+    /**
+     * @param  array{vehicle_id: int|null, cash_account_id: int, entry_date: string, direction: string, category: string, amount: int, counterparty_name: string|null, description: string|null}  $effectiveData
+     */
+    private function replayRacedEntryAfterRollback(QueryException $original, string $idempotencyKey, array $effectiveData, bool $entryDateWasSupplied): MoneyEntry
+    {
+        return DB::transaction(function () use ($original, $idempotencyKey, $effectiveData, $entryDateWasSupplied) {
+            // Fresh transaction after rollback: under MySQL REPEATABLE READ, re-reading the
+            // idempotency_key inside the same (now rolled-back) transaction could still see
+            // the pre-race snapshot and miss the winner's row. Start a new transaction and
+            // take a locking read so we observe the committed winner.
+            $racedEntry = MoneyEntry::query()
+                ->where('idempotency_key', $idempotencyKey)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $racedEntry) {
+                throw $original;
+            }
+
+            return $this->replayOrRejectEntry($racedEntry, $effectiveData, $entryDateWasSupplied);
         });
+    }
+
+    /**
+     * @param  array{vehicle_id: int|null, cash_account_id: int, entry_date: string, direction: string, category: string, amount: int, counterparty_name: string|null, description: string|null}  $effectiveData
+     */
+    private function isSameEntryRequest(MoneyEntry $entry, array $effectiveData, bool $entryDateWasSupplied): bool
+    {
+        $entryVehicleId = $entry->vehicle_id !== null ? (int) $entry->vehicle_id : null;
+
+        if ($entryVehicleId !== $effectiveData['vehicle_id']) {
+            return false;
+        }
+
+        if ((int) $entry->cash_account_id !== $effectiveData['cash_account_id']) {
+            return false;
+        }
+
+        if ($entry->direction !== $effectiveData['direction'] || $entry->category !== $effectiveData['category']) {
+            return false;
+        }
+
+        if ((int) $entry->amount !== $effectiveData['amount']) {
+            return false;
+        }
+
+        if ($entry->counterparty_name !== $effectiveData['counterparty_name']) {
+            return false;
+        }
+
+        if ($entry->description !== $effectiveData['description']) {
+            return false;
+        }
+
+        // A retry that omits entry_date is a replay of "whatever date the entry was
+        // originally recorded on" — it must not be forced to match "today", which would
+        // make retries fail purely because they crossed midnight.
+        if ($entryDateWasSupplied && $entry->entry_date?->toDateString() !== $effectiveData['entry_date']) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -209,6 +409,26 @@ class MoneyEntryService
         return $openingBalance + $income - $expense;
     }
 
+    private function assertVehicleMutable(int $vehicleId): void
+    {
+        $status = Vehicle::query()
+            ->whereKey($vehicleId)
+            ->lockForUpdate()
+            ->value('status');
+
+        if ($status === null) {
+            throw ValidationException::withMessages([
+                'vehicle_id' => ['找不到指定的車輛'],
+            ]);
+        }
+
+        if (in_array($status, self::LOCKED_VEHICLE_STATUSES, true)) {
+            throw ValidationException::withMessages([
+                'vehicle_id' => ['已售出或已取消的車輛不得新增/修改/刪除收支'],
+            ]);
+        }
+    }
+
     private function assertCashAccountActive(int $cashAccountId): void
     {
         $isActive = CashAccount::query()
@@ -244,5 +464,16 @@ class MoneyEntryService
                 'vehicle_id' => ['一般營運收支不得綁定車輛'],
             ]);
         }
+    }
+
+    private function isIdempotencyKeyUniqueViolation(QueryException $e): bool
+    {
+        $sqlState = $e->errorInfo[0] ?? null;
+
+        if ($sqlState !== '23000') {
+            return false;
+        }
+
+        return str_contains($e->getMessage(), 'idempotency_key');
     }
 }

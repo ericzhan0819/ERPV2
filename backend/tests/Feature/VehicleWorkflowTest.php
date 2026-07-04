@@ -39,6 +39,7 @@ class VehicleWorkflowTest extends TestCase
                 'sold_price' => 480000,
                 'deposit_amount' => 100000,
                 'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => (string) Str::uuid(),
             ])
             ->assertSuccessful()
             ->assertJsonPath('data.status', 'reserved')
@@ -101,6 +102,7 @@ class VehicleWorkflowTest extends TestCase
                 'sold_price' => 480000,
                 'deposit_amount' => 100000,
                 'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => (string) Str::uuid(),
             ])
             ->assertStatus(422);
     }
@@ -117,6 +119,7 @@ class VehicleWorkflowTest extends TestCase
                 'sold_price' => 480000,
                 'deposit_amount' => 100000,
                 'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => (string) Str::uuid(),
             ])
             ->assertStatus(422);
     }
@@ -133,6 +136,7 @@ class VehicleWorkflowTest extends TestCase
                 'sold_price' => 0,
                 'deposit_amount' => 100000,
                 'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => (string) Str::uuid(),
             ])
             ->assertStatus(422)
             ->assertJsonValidationErrors('sold_price');
@@ -716,6 +720,7 @@ class VehicleWorkflowTest extends TestCase
                 'sold_price' => 480000,
                 'deposit_amount' => 100000,
                 'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => (string) Str::uuid(),
             ], $user->id);
 
             $this->fail('應該因為車輛狀態已變更而拋出 ValidationException');
@@ -770,6 +775,7 @@ class VehicleWorkflowTest extends TestCase
                 'sold_price' => 480000,
                 'deposit_amount' => 100000,
                 'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => (string) Str::uuid(),
             ])
             ->assertSuccessful();
 
@@ -779,6 +785,7 @@ class VehicleWorkflowTest extends TestCase
                 'sold_price' => 480000,
                 'deposit_amount' => 100000,
                 'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => (string) Str::uuid(),
             ])
             ->assertStatus(422);
 
@@ -786,6 +793,197 @@ class VehicleWorkflowTest extends TestCase
             ->where('vehicle_id', $vehicle->id)
             ->where('category', '訂金收入')
             ->count());
+    }
+
+    public function test_reserve_idempotency_key_is_required(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'listed']);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/reserve", [
+                'buyer_name' => '王小明',
+                'sold_price' => 480000,
+                'deposit_amount' => 100000,
+                'cash_account_id' => $cashAccount->id,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('idempotency_key');
+    }
+
+    public function test_reserve_retry_with_same_idempotency_key_does_not_create_second_deposit(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'listed']);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $idempotencyKey = (string) Str::uuid();
+
+        $payload = [
+            'buyer_name' => '王小明',
+            'sold_price' => 480000,
+            'deposit_amount' => 100000,
+            'cash_account_id' => $cashAccount->id,
+            'idempotency_key' => $idempotencyKey,
+        ];
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/reserve", $payload)
+            ->assertSuccessful()
+            ->assertJsonPath('data.status', 'reserved');
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/reserve", $payload)
+            ->assertSuccessful()
+            ->assertJsonPath('data.status', 'reserved');
+
+        $this->assertSame(1, MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', '訂金收入')
+            ->count());
+    }
+
+    public function test_reserve_retry_with_same_idempotency_key_but_different_payload_is_rejected(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'listed']);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $idempotencyKey = (string) Str::uuid();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/reserve", [
+                'buyer_name' => '王小明',
+                'sold_price' => 480000,
+                'deposit_amount' => 100000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+            ])
+            ->assertSuccessful();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/reserve", [
+                'buyer_name' => '王小明',
+                'sold_price' => 480000,
+                'deposit_amount' => 200000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => $idempotencyKey,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('idempotency_key');
+
+        $this->assertSame(1, MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', '訂金收入')
+            ->count());
+    }
+
+    public function test_reserve_deposit_entry_cannot_be_updated_or_deleted_via_general_money_entry_crud(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
+
+        $depositEntry = MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', '訂金收入')
+            ->firstOrFail();
+
+        $this->actingAs($user, 'web')
+            ->patchJson("/api/money-entries/{$depositEntry->id}", [
+                'entry_date' => '2026-07-02',
+                'direction' => 'income',
+                'category' => '訂金收入',
+                'amount' => 200000,
+                'cash_account_id' => $cashAccount->id,
+                'vehicle_id' => $vehicle->id,
+            ])
+            ->assertStatus(422);
+
+        $this->actingAs($user, 'web')
+            ->deleteJson("/api/money-entries/{$depositEntry->id}")
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('money_entries', ['id' => $depositEntry->id, 'amount' => 100000]);
+    }
+
+    public function test_final_payment_entry_cannot_be_updated_or_deleted_via_general_money_entry_crud(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/final-payment", [
+                'amount' => 380000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => (string) Str::uuid(),
+            ])
+            ->assertSuccessful();
+
+        $finalPaymentEntry = MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', '尾款收入')
+            ->firstOrFail();
+
+        $this->actingAs($user, 'web')
+            ->patchJson("/api/money-entries/{$finalPaymentEntry->id}", [
+                'entry_date' => '2026-07-02',
+                'direction' => 'income',
+                'category' => '尾款收入',
+                'amount' => 400000,
+                'cash_account_id' => $cashAccount->id,
+                'vehicle_id' => $vehicle->id,
+            ])
+            ->assertStatus(422);
+
+        $this->actingAs($user, 'web')
+            ->deleteJson("/api/money-entries/{$finalPaymentEntry->id}")
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('money_entries', ['id' => $finalPaymentEntry->id, 'amount' => 380000]);
+    }
+
+    public function test_closed_sale_income_entry_cannot_be_deleted_or_updated(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/final-payment", [
+                'amount' => 380000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => (string) Str::uuid(),
+            ])
+            ->assertSuccessful();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/close-sale", [])
+            ->assertSuccessful()
+            ->assertJsonPath('data.status', 'sold');
+
+        $depositEntry = MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', '訂金收入')
+            ->firstOrFail();
+
+        $this->actingAs($user, 'web')
+            ->deleteJson("/api/money-entries/{$depositEntry->id}")
+            ->assertStatus(422);
+
+        $this->actingAs($user, 'web')
+            ->patchJson("/api/money-entries/{$depositEntry->id}", [
+                'entry_date' => '2026-07-02',
+                'direction' => 'income',
+                'category' => '訂金收入',
+                'amount' => 200000,
+                'cash_account_id' => $cashAccount->id,
+                'vehicle_id' => $vehicle->id,
+            ])
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('money_entries', ['id' => $depositEntry->id, 'amount' => 100000]);
+        $this->assertDatabaseHas('vehicles', ['id' => $vehicle->id, 'status' => 'sold']);
     }
 
     /**
@@ -809,6 +1007,7 @@ class VehicleWorkflowTest extends TestCase
                 'sold_price' => $soldPrice,
                 'deposit_amount' => $depositAmount,
                 'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => (string) Str::uuid(),
             ])
             ->assertSuccessful();
 

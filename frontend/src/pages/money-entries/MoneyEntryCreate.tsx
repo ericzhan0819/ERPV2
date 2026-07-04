@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { isAxiosError } from 'axios'
@@ -33,6 +33,7 @@ export function MoneyEntryCreate() {
 
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const idempotencyKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     listCashAccounts().then((accounts) => setCashAccounts(accounts.filter((a) => a.is_active))).catch(() => setCashAccounts([]))
@@ -61,12 +62,17 @@ export function MoneyEntryCreate() {
       return
     }
 
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = crypto.randomUUID()
+    }
+
     const payload: CreateMoneyEntryPayload = {
       entry_date: entryDate,
       direction,
       category,
       amount: Number(amount),
       cash_account_id: Number(cashAccountId),
+      idempotency_key: idempotencyKeyRef.current,
     }
     if (vehicleId) payload.vehicle_id = Number(vehicleId)
     if (counterpartyName) payload.counterparty_name = counterpartyName

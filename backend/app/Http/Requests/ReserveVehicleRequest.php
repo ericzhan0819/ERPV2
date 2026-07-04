@@ -21,6 +21,7 @@ class ReserveVehicleRequest extends FormRequest
             'cash_account_id' => ['required', 'integer', 'exists:cash_accounts,id'],
             'entry_date' => ['nullable', 'date'],
             'description' => ['nullable', 'string'],
+            'idempotency_key' => ['required', 'string', 'max:100'],
         ];
     }
 }
