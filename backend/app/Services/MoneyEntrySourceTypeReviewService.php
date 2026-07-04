@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use RuntimeException;
 
 /**
  * 支援 money-entries:source-type-review / money-entries:source-type-gate
@@ -122,14 +123,30 @@ class MoneyEntrySourceTypeReviewService
 
         $this->assertAllIdsFound($ids, $entries);
 
+        $candidates = $this->fetchCandidates($ids);
+
         $rows = [];
         $changed = 0;
         $skipped = 0;
 
         foreach ($ids as $id) {
             $entry = $entries[$id];
+            $candidate = $candidates->get($id);
+            $isUnresolvedCandidate = $candidate !== null && $candidate->resolved_at === null;
 
             if ($entry->source_type === $to) {
+                if ($isUnresolvedCandidate) {
+                    $changed++;
+                    $rows[] = [
+                        'id' => $id,
+                        'previous_source_type' => $entry->source_type,
+                        'new_source_type' => $to,
+                        'action' => 'would_confirm_candidate_no_change',
+                    ];
+
+                    continue;
+                }
+
                 $skipped++;
                 $rows[] = [
                     'id' => $id,
@@ -168,8 +185,14 @@ class MoneyEntrySourceTypeReviewService
 
         $this->assertAllIdsFound($ids, $entries);
 
+        $candidates = $this->fetchCandidates($ids);
+
         $rowsToChange = $entries->filter(fn (MoneyEntry $entry) => $entry->source_type !== $to);
 
+        // Backup is written before any DB mutation and before any review log row,
+        // and only for rows that will actually have source_type mutated. If the
+        // backup cannot be written and read back, this throws and nothing below
+        // (source_type update, review log insert, candidate resolution) happens.
         $backupPath = null;
 
         if ($rowsToChange->isNotEmpty()) {
@@ -182,8 +205,29 @@ class MoneyEntrySourceTypeReviewService
 
         foreach ($ids as $id) {
             $entry = $entries[$id];
+            $candidate = $candidates->get($id);
+            $isUnresolvedCandidate = $candidate !== null && $candidate->resolved_at === null;
 
             if ($entry->source_type === $to) {
+                if ($isUnresolvedCandidate) {
+                    // Candidate row already matches --to, but has never had an explicit
+                    // human review decision recorded. Write a review log confirming the
+                    // current value is correct (previous === new) and resolve the
+                    // candidate. No data mutation happens, so no backup is needed.
+                    $reviewId = $this->writeReviewLog($entry, $entry->source_type, $to, $approver, $reason, null);
+                    $this->resolveCandidate($candidate->id, $approver, $reviewId);
+
+                    $changed++;
+                    $rows[] = [
+                        'id' => $id,
+                        'previous_source_type' => $entry->source_type,
+                        'new_source_type' => $to,
+                        'action' => 'confirmed_candidate_no_change',
+                    ];
+
+                    continue;
+                }
+
                 $skipped++;
                 $rows[] = [
                     'id' => $id,
@@ -199,17 +243,11 @@ class MoneyEntrySourceTypeReviewService
             $entry->source_type = $to;
             $entry->save();
 
-            DB::table('money_entry_source_type_reviews')->insert([
-                'money_entry_id' => $entry->id,
-                'previous_source_type' => $previousSourceType,
-                'new_source_type' => $to,
-                'approver' => $approver,
-                'reason' => $reason,
-                'backup_path' => $backupPath,
-                'money_entry_snapshot' => json_encode($this->snapshot($entry), JSON_THROW_ON_ERROR),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+            $reviewId = $this->writeReviewLog($entry, $previousSourceType, $to, $approver, $reason, $backupPath);
+
+            if ($candidate !== null) {
+                $this->resolveCandidate($candidate->id, $approver, $reviewId);
+            }
 
             $changed++;
             $rows[] = [
@@ -231,6 +269,45 @@ class MoneyEntrySourceTypeReviewService
 
     /**
      * @param  array<int, int>  $ids
+     * @return \Illuminate\Support\Collection<int, object>
+     */
+    private function fetchCandidates(array $ids)
+    {
+        return DB::table('money_entry_source_type_review_candidates')
+            ->whereIn('money_entry_id', $ids)
+            ->get()
+            ->keyBy('money_entry_id');
+    }
+
+    private function writeReviewLog(MoneyEntry $entry, string $previousSourceType, string $to, string $approver, string $reason, ?string $backupPath): int
+    {
+        return DB::table('money_entry_source_type_reviews')->insertGetId([
+            'money_entry_id' => $entry->id,
+            'previous_source_type' => $previousSourceType,
+            'new_source_type' => $to,
+            'approver' => $approver,
+            'reason' => $reason,
+            'backup_path' => $backupPath,
+            'money_entry_snapshot' => json_encode($this->snapshot($entry), JSON_THROW_ON_ERROR),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function resolveCandidate(int $candidateId, string $approver, int $reviewId): void
+    {
+        DB::table('money_entry_source_type_review_candidates')
+            ->where('id', $candidateId)
+            ->update([
+                'resolved_at' => now(),
+                'resolved_by' => $approver,
+                'resolution_review_id' => $reviewId,
+                'updated_at' => now(),
+            ]);
+    }
+
+    /**
+     * @param  array<int, int>  $ids
      * @param  \Illuminate\Support\Collection<int, MoneyEntry>  $rowsToChange
      */
     private function writeBackup(array $ids, string $to, string $approver, string $reason, $rowsToChange): string
@@ -243,7 +320,7 @@ class MoneyEntrySourceTypeReviewService
 
         $relativePath = self::BACKUP_DIRECTORY.'/'.$filename;
 
-        Storage::disk('local')->put($relativePath, json_encode([
+        $payload = json_encode([
             'command_input' => [
                 'ids' => $ids,
                 'to' => $to,
@@ -254,9 +331,27 @@ class MoneyEntrySourceTypeReviewService
             'rows_before_update' => $rowsToChange->values()
                 ->map(fn (MoneyEntry $entry) => $this->snapshot($entry))
                 ->all(),
-        ], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT));
+        ], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT);
 
-        return Storage::disk('local')->path($relativePath);
+        $disk = Storage::disk('local');
+
+        // put() with the default (throw=false) local disk config can return false
+        // instead of throwing when the write fails. Any mutation to money_entries
+        // or the review log must not happen unless the backup is verifiably
+        // written and readable, so every failure mode here throws.
+        if ($disk->put($relativePath, $payload) !== true) {
+            throw new RuntimeException("備份寫入失敗，已中止本次來源修正，未異動任何資料：{$relativePath}");
+        }
+
+        if (! $disk->exists($relativePath)) {
+            throw new RuntimeException("備份寫入後找不到檔案，已中止本次來源修正，未異動任何資料：{$relativePath}");
+        }
+
+        if ($disk->get($relativePath) !== $payload) {
+            throw new RuntimeException("備份寫入後讀回內容不符，已中止本次來源修正，未異動任何資料：{$relativePath}");
+        }
+
+        return $disk->path($relativePath);
     }
 
     /**
@@ -288,28 +383,61 @@ class MoneyEntrySourceTypeReviewService
     }
 
     /**
-     * @return array{count: int, sample: array<int, array{id: int, category: string, amount: int, vehicle_id: int|null, source_type: string}>}
+     * gate 必須同時擋兩件事：
+     * 1. 仍有 source_type = legacy_unknown 的收支（000002 quarantine 造成，
+     *    尚未人工確認真實來源）。
+     * 2. 仍有 money_entry_source_type_review_candidates 裡尚未 resolved 的
+     *    candidate —— 這批是 000003 migration 執行當下拍照下來、可能被舊版
+     *    不安全 backfill 誤標成 vehicle_shortcut / vehicle_workflow 的既有
+     *    收支，即使目前已經不是 legacy_unknown，也必須等人工明確 review。
+     *
+     * @return array{legacy_unknown_count: int, unresolved_candidate_count: int, passed: bool, sample: array<int, array{id: int, category: string|null, amount: int|null, vehicle_id: int|null, current_source_type: string|null, captured_source_type: string, candidate_reason: string}>}
      */
     public function gate(int $sampleLimit = 20): array
     {
-        $count = MoneyEntry::query()->where('source_type', MoneyEntry::SOURCE_LEGACY_UNKNOWN)->count();
+        $legacyUnknownIds = MoneyEntry::query()->where('source_type', MoneyEntry::SOURCE_LEGACY_UNKNOWN)->pluck('id');
+        $legacyUnknownCount = $legacyUnknownIds->count();
 
-        $sample = MoneyEntry::query()
-            ->where('source_type', MoneyEntry::SOURCE_LEGACY_UNKNOWN)
-            ->orderBy('id')
-            ->limit($sampleLimit)
-            ->get(['id', 'category', 'amount', 'vehicle_id', 'source_type'])
-            ->map(fn (MoneyEntry $entry) => [
-                'id' => $entry->id,
-                'category' => $entry->category,
-                'amount' => $entry->amount,
-                'vehicle_id' => $entry->vehicle_id,
-                'source_type' => $entry->source_type,
-            ])
-            ->all();
+        $unresolvedCandidateIds = DB::table('money_entry_source_type_review_candidates')
+            ->whereNull('resolved_at')
+            ->pluck('money_entry_id');
+        $unresolvedCandidateCount = $unresolvedCandidateIds->count();
+
+        $sampleIds = $legacyUnknownIds->merge($unresolvedCandidateIds)->unique()->values()->take($sampleLimit);
+
+        $sample = [];
+
+        if ($sampleIds->isNotEmpty()) {
+            $entries = MoneyEntry::query()
+                ->whereIn('id', $sampleIds)
+                ->get(['id', 'category', 'amount', 'vehicle_id', 'source_type'])
+                ->keyBy('id');
+
+            $candidatesById = DB::table('money_entry_source_type_review_candidates')
+                ->whereIn('money_entry_id', $sampleIds)
+                ->get()
+                ->keyBy('money_entry_id');
+
+            $sample = $sampleIds->map(function (int $id) use ($entries, $candidatesById) {
+                $entry = $entries->get($id);
+                $candidate = $candidatesById->get($id);
+
+                return [
+                    'id' => $id,
+                    'category' => $entry?->category,
+                    'amount' => $entry?->amount,
+                    'vehicle_id' => $entry?->vehicle_id,
+                    'current_source_type' => $entry?->source_type,
+                    'captured_source_type' => $candidate->captured_source_type ?? ($entry?->source_type ?? 'unknown'),
+                    'candidate_reason' => $candidate->candidate_reason ?? 'legacy_unknown_without_candidate_snapshot',
+                ];
+            })->values()->all();
+        }
 
         return [
-            'count' => $count,
+            'legacy_unknown_count' => $legacyUnknownCount,
+            'unresolved_candidate_count' => $unresolvedCandidateCount,
+            'passed' => $legacyUnknownCount === 0 && $unresolvedCandidateCount === 0,
             'sample' => $sample,
         ];
     }

@@ -41,6 +41,37 @@ forward-only migration，執行 `php artisan migrate` 時會：
 也**不可**用另一種批次 heuristic 反向覆蓋改回 manual，只能人工確認 ID 後
 用下面的指令個別處理。
 
+## Review candidate 快照（`2026_07_05_000003...`）
+
+只看 `legacy_unknown` 不足以擋住上面這種情境：如果某個環境曾經跑過舊版
+不安全 backfill，被誤標成 `vehicle_shortcut` / `vehicle_workflow` 的既有
+manual 收支，不會被 `2026_07_05_000002...` quarantine 成 `legacy_unknown`，
+gate 若只檢查 `legacy_unknown` 會誤判「沒有問題」而放行部署。
+
+`2026_07_05_000003_capture_money_entry_source_type_review_candidates.php`
+是 forward-only migration，會建立 `money_entry_source_type_review_candidates`
+表，並在**這支 migration 執行的當下**，把以下既有收支拍照存進 candidate 表：
+
+- 執行當下所有 `source_type = legacy_unknown` 的收支（理由標記為
+  `legacy_vehicle_bound_manual_quarantine`）。
+- 執行當下所有 `source_type IN ('vehicle_shortcut', 'vehicle_workflow')`
+  的收支（理由標記為 `preexisting_protected_source_type_needs_review`），
+  因為這批可能是舊版不安全 backfill 誤標的結果，也可能本來就正確，兩者都
+  必須人工逐筆確認才能排除嫌疑。
+
+candidate 只是**執行當下的快照**：migration 跑完之後，由
+`MoneyEntryService::recordVehicleShortcut()`、
+`VehicleService::reserveVehicle()` / `recordFinalPayment()` 正常建立的新
+`vehicle_shortcut` / `vehicle_workflow` 收支，不會被追加進 candidate 表，
+也就不會被 gate 檔住 —— gate 不會把「未來正常建立的流程收支」誤認為待
+review 對象。
+
+candidate 表不加 FK（`money_entry_id` 只是 `unsignedBigInteger` + unique
+索引），避免日後合法刪除 money_entry 卡住操作。每筆 candidate 記錄
+`captured_source_type`、`candidate_reason`、`money_entry_snapshot`，以及
+`resolved_at` / `resolved_by` / `resolution_review_id`（解決時對應寫入的
+`money_entry_source_type_reviews` id）。
+
 ## 恢復流程
 
 ### 1. 查詢候選資料，交給人工比對
@@ -96,8 +127,27 @@ php artisan money-entries:source-type-review \
 - 每一筆實際變更都會寫入 `money_entry_source_type_reviews`，記錄
   `previous_source_type`、`new_source_type`、approver、reason、backup 路徑與
   該筆資料變更前的完整快照。
-- 指令是 idempotent：同一批 ID 重跑到同一個 `--to`，已經是目標狀態的 row
-  會標示 skipped，不會報錯、也不會產生重複的 backup/review 紀錄。
+- 指令是 idempotent：同一批 ID 重跑到同一個 `--to`，已經是目標狀態、且沒有
+  待解決 candidate 的 row 會標示 `skipped_noop`，不會報錯、也不會產生重複的
+  backup/review 紀錄。
+- 若某筆 ID 對應到一個尚未解決的 candidate、但目前 `source_type` 剛好已經
+  等於 `--to`（例如人工核對後認定「目前的值就是對的」），指令仍會寫入一筆
+  `previous_source_type === new_source_type` 的 review 紀錄，標記
+  `action = confirmed_candidate_no_change`，並把該筆 candidate 標記為
+  resolved（`resolved_at`/`resolved_by`/`resolution_review_id`）。這種情況
+  不會產生 backup（因為沒有任何資料被修改）。重跑同一批到同一個 `--to`
+  時，該 candidate 已 resolved，不會重複寫入 review 紀錄。
+- 任一 ID 不存在會整批失敗，不會部分更新。
+- 執行前，只針對「實際會被修改 `source_type` 的 rows」把即將變更的資料
+  完整備份成 JSON，存於 `storage/app/money-entry-source-type-backups/`。
+  備份寫入後會立即驗證 `Storage::disk('local')->put()` 回傳成功、檔案
+  `exists()`、且可以 `get()` 讀回與寫入內容一致；任何一步驟失敗都會直接
+  丟出例外，指令以非 0 exit code 失敗，**不會**修改 `money_entries`、
+  不會寫入 review 紀錄，也不會留下指向不存在檔案的紀錄。
+- 每一筆實際變更（或 candidate 確認）都會寫入
+  `money_entry_source_type_reviews`，記錄 `previous_source_type`、
+  `new_source_type`、approver、reason、backup 路徑（confirm-only 時為
+  `null`）與該筆資料變更前的完整快照。
 
 ### 4. 部署 gate
 
@@ -105,11 +155,40 @@ php artisan money-entries:source-type-review \
 php artisan money-entries:source-type-gate
 ```
 
-- 若仍有 `source_type = legacy_unknown` 的收支，列出數量與前幾筆
-  id/category/amount/vehicle_id/source_type，並以非 0 exit code 失敗，
-  提示必須先用 `money-entries:source-type-review` 人工確認分類。
-- 全部確認完成、數量為 0 時成功退出。建議放進部署流程，卡住交付直到
-  gate 通過。
+gate 通過條件是**同時滿足**：
+
+- 沒有任何 `source_type = legacy_unknown` 的收支。
+- 沒有任何尚未 resolved 的 `money_entry_source_type_review_candidates`
+  （包含 000003 執行當下拍下的 `legacy_unknown` 與
+  `vehicle_shortcut` / `vehicle_workflow` candidate）。
+
+只要其中一項不滿足，gate 就以非 0 exit code 失敗，列出待處理數量與樣本
+（每筆樣本包含 `id`/`category`/`amount`/`vehicle_id`/`current_source_type`/
+`captured_source_type`/`candidate_reason`），提示必須先用
+`money-entries:source-type-review` 人工確認分類。建議放進部署流程，卡住
+交付直到 gate 通過。
+
+## Rollback 不刪除證據
+
+`2026_07_05_000002...` 與 `2026_07_05_000003...` 的 `down()` 都刻意保持
+no-op，不會 `dropIfExists` `money_entry_source_type_reviews` 或
+`money_entry_source_type_review_candidates`。理由：這兩張表記錄的是人工
+approver/reason/前後狀態/資料快照/解決紀錄，一旦 rollback 就會連帶銷毀已經
+完成的人工審核證據，且無法復原。schema rollback（例如
+`php artisan migrate:rollback`）不應該連帶刪除已產生的人工審核紀錄。
+
+## Backup 失敗即中止
+
+`money-entries:source-type-review` 的備份行為必須「寫入成功且可讀回」才
+繼續：
+
+1. 只有實際會被修改 `source_type` 的 rows 才需要備份。
+2. 備份必須先寫入本地磁碟，再修改 `money_entries` 與寫入
+   `money_entry_source_type_reviews`。
+3. `Storage::disk('local')->put()` 回傳值不是 `true`、或寫入後
+   `exists()` 為否、或 `get()` 讀回內容與寫入內容不一致，都會直接丟出
+   例外，整個指令以非 0 exit code 失敗，資料庫完全不會被異動（因為備份
+   在任何 DB 寫入之前完成，失敗時 transaction 內尚未發生任何 mutation）。
 
 ## 範圍限制
 

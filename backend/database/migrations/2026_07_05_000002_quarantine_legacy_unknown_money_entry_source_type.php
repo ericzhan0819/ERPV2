@@ -49,9 +49,15 @@ return new class extends Migration
      * 有意保持保守：不批次把 legacy_unknown 改回 manual，避免又用另一種
      * heuristic 誤傷資料。若需要 rollback，資料復原請透過
      * money-entries:source-type-review 人工確認每一筆的正確來源。
+     *
+     * down() 刻意保持 no-op、不 drop money_entry_source_type_reviews：這張表
+     * 記錄的是人工 approver/reason/前後狀態/資料快照，一旦 rollback 就會刪掉
+     * 已完成的人工確認證據，之後重新 up() 也救不回來。schema rollback 不應該
+     * 連帶銷毀已經產生的人工審核紀錄。
      */
     public function down(): void
     {
-        Schema::dropIfExists('money_entry_source_type_reviews');
+        // 有意保持不刪除 money_entry_source_type_reviews，避免刪掉已完成的
+        // 人工審核證據。
     }
 };

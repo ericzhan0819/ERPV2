@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Services\MoneyEntrySourceTypeReviewService;
 use Illuminate\Console\Command;
 use InvalidArgumentException;
+use RuntimeException;
 
 /**
  * 人工確認既有收支來源後，針對明確 ID 清單改 source_type。
@@ -37,7 +38,7 @@ class MoneyEntrySourceTypeReviewCommand extends Command
                 $this->option('reason'),
                 $dryRun
             );
-        } catch (InvalidArgumentException $e) {
+        } catch (InvalidArgumentException|RuntimeException $e) {
             $this->error($e->getMessage());
 
             return self::FAILURE;
