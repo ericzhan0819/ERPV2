@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreCashAccountRequest;
 use App\Http\Requests\UpdateCashAccountRequest;
+use App\Http\Requests\UpdateCashAccountStatusRequest;
 use App\Http\Resources\CashAccountResource;
 use App\Models\CashAccount;
 use App\Services\CashAccountService;
@@ -38,6 +39,13 @@ class CashAccountController extends Controller
     public function update(UpdateCashAccountRequest $request, CashAccount $cashAccount): CashAccountResource
     {
         $account = $this->cashAccountService->updateAccount($cashAccount, $request->validated());
+
+        return new CashAccountResource($account);
+    }
+
+    public function updateStatus(UpdateCashAccountStatusRequest $request, CashAccount $cashAccount): CashAccountResource
+    {
+        $account = $this->cashAccountService->setActive($cashAccount, $request->boolean('is_active'));
 
         return new CashAccountResource($account);
     }

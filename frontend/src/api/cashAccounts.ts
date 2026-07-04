@@ -1,5 +1,11 @@
 import { apiClient } from './client'
-import type { CashAccount, CashAccountBalance, CashAccountOption, CashAccountPayload } from '../types/cashAccount'
+import type {
+  CashAccount,
+  CashAccountBalance,
+  CashAccountOption,
+  CashAccountPayload,
+  CashAccountUpdatePayload,
+} from '../types/cashAccount'
 
 export async function listCashAccounts(): Promise<CashAccountOption[]> {
   const { data } = await apiClient.get<{ data: CashAccountOption[] }>('/api/cash-accounts')
@@ -16,11 +22,16 @@ export async function createCashAccount(payload: CashAccountPayload): Promise<Ca
   return data.data
 }
 
-export async function updateCashAccount(id: number, payload: CashAccountPayload): Promise<CashAccount> {
+export async function updateCashAccount(id: number, payload: CashAccountUpdatePayload): Promise<CashAccount> {
   const { data } = await apiClient.put<{ data: CashAccount }>(`/api/cash-accounts/${id}`, payload)
   return data.data
 }
 
 export async function deleteCashAccount(id: number): Promise<void> {
   await apiClient.delete(`/api/cash-accounts/${id}`)
+}
+
+export async function setCashAccountActive(id: number, isActive: boolean): Promise<CashAccount> {
+  const { data } = await apiClient.patch<{ data: CashAccount }>(`/api/cash-accounts/${id}/status`, { is_active: isActive })
+  return data.data
 }

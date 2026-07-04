@@ -38,9 +38,21 @@ class CashAccountService
             'name' => $data['name'],
             'type' => $data['type'],
             'opening_balance' => (int) $data['opening_balance'],
-            'is_active' => $data['is_active'],
         ]);
         $account->save();
+
+        return $account;
+    }
+
+    /**
+     * 冪等地將帳戶設為指定的啟用狀態；重複呼叫相同目標狀態不會有額外副作用。
+     */
+    public function setActive(CashAccount $account, bool $isActive): CashAccount
+    {
+        if ($account->is_active !== $isActive) {
+            $account->is_active = $isActive;
+            $account->save();
+        }
 
         return $account;
     }

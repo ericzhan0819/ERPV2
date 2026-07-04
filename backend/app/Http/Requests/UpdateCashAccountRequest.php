@@ -17,7 +17,6 @@ class UpdateCashAccountRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'type' => ['required', 'string', 'in:cash,bank,other'],
             'opening_balance' => ['required', 'integer', 'min:0'],
-            'is_active' => ['required', 'boolean'],
         ];
     }
 }

@@ -34,5 +34,10 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::apiResource('money-entries', MoneyEntryController::class);
 
     Route::get('cash-accounts/balances', [CashAccountController::class, 'balances']);
-    Route::apiResource('cash-accounts', CashAccountController::class);
+    Route::apiResource('cash-accounts', CashAccountController::class)->only(['index', 'show']);
+
+    Route::middleware('admin')->group(function () {
+        Route::apiResource('cash-accounts', CashAccountController::class)->only(['store', 'update', 'destroy']);
+        Route::patch('cash-accounts/{cash_account}/status', [CashAccountController::class, 'updateStatus']);
+    });
 });

@@ -25,3 +25,12 @@ export interface CashAccountPayload {
   opening_balance: number
   is_active: boolean
 }
+
+// Update only changes metadata; is_active can only be changed via the dedicated
+// status endpoint so a stale edit-form submission can never silently undo a
+// concurrent deactivation.
+export interface CashAccountUpdatePayload {
+  name: string
+  type: CashAccountType
+  opening_balance: number
+}

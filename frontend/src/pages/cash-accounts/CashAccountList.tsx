@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { isAxiosError } from 'axios'
-import { createCashAccount, deleteCashAccount, listCashAccountBalances, updateCashAccount } from '../../api/cashAccounts'
-import type { CashAccountBalance, CashAccountPayload, CashAccountType } from '../../types/cashAccount'
+import {
+  createCashAccount,
+  deleteCashAccount,
+  listCashAccountBalances,
+  setCashAccountActive,
+  updateCashAccount,
+} from '../../api/cashAccounts'
+import { useAuth } from '../../hooks/useAuth'
+import type { CashAccountBalance, CashAccountPayload, CashAccountType, CashAccountUpdatePayload } from '../../types/cashAccount'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
@@ -19,9 +26,19 @@ interface AccountFormState {
   is_active: boolean
 }
 
+interface EditFormState {
+  name: string
+  type: CashAccountType
+  opening_balance: string
+}
+
 const emptyForm: AccountFormState = { name: '', type: 'cash', opening_balance: '0', is_active: true }
+const emptyEditForm: EditFormState = { name: '', type: 'cash', opening_balance: '0' }
 
 export function CashAccountList() {
+  const { user } = useAuth()
+  const isAdmin = user?.is_admin ?? false
+
   const [accounts, setAccounts] = useState<CashAccountBalance[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -32,7 +49,7 @@ export function CashAccountList() {
   const [submitting, setSubmitting] = useState(false)
 
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [editForm, setEditForm] = useState<AccountFormState>(emptyForm)
+  const [editForm, setEditForm] = useState<EditFormState>(emptyEditForm)
   const [editError, setEditError] = useState<string | null>(null)
 
   function loadAccounts() {
@@ -98,7 +115,6 @@ export function CashAccountList() {
       name: account.name,
       type: account.type,
       opening_balance: String(account.opening_balance),
-      is_active: account.is_active,
     })
   }
 
@@ -116,11 +132,10 @@ export function CashAccountList() {
       return
     }
 
-    const payload: CashAccountPayload = {
+    const payload: CashAccountUpdatePayload = {
       name: editForm.name.trim(),
       type: editForm.type,
       opening_balance: openingBalance,
-      is_active: editForm.is_active,
     }
 
     setSubmitting(true)
@@ -151,12 +166,7 @@ export function CashAccountList() {
   async function toggleActive(account: CashAccountBalance) {
     setError(null)
     try {
-      await updateCashAccount(account.id, {
-        name: account.name,
-        type: account.type,
-        opening_balance: account.opening_balance,
-        is_active: !account.is_active,
-      })
+      await setCashAccountActive(account.id, !account.is_active)
       loadAccounts()
     } catch (err) {
       setError(extractErrorMessage(err, '更新帳戶狀態失敗'))
@@ -170,19 +180,21 @@ export function CashAccountList() {
           <h1 className="text-xl font-semibold text-gray-900">資金帳戶</h1>
           <p className="mt-1 text-sm text-gray-500">現金／銀行／其他帳戶與即時餘額</p>
         </div>
-        <button
-          onClick={() => {
-            setCreating((v) => !v)
-            setCreateError(null)
-            setCreateForm(emptyForm)
-          }}
-          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
-        >
-          {creating ? '取消新增' : '新增帳戶'}
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => {
+              setCreating((v) => !v)
+              setCreateError(null)
+              setCreateForm(emptyForm)
+            }}
+            className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          >
+            {creating ? '取消新增' : '新增帳戶'}
+          </button>
+        )}
       </div>
 
-      {creating && (
+      {isAdmin && creating && (
         <form onSubmit={handleCreateSubmit} className="max-w-2xl rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
@@ -275,11 +287,11 @@ export function CashAccountList() {
             )}
             {!loading &&
               accounts.map((account) =>
-                editingId === account.id ? (
+                isAdmin && editingId === account.id ? (
                   <tr key={account.id} className="bg-gray-50">
                     <td colSpan={6} className="px-4 py-4">
                       <form onSubmit={(e) => handleEditSubmit(e, account.id)} className="flex flex-col gap-4">
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                           <div>
                             <label className="mb-1 block text-sm font-medium text-gray-700">帳戶名稱</label>
                             <input
@@ -313,17 +325,8 @@ export function CashAccountList() {
                               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
                             />
                           </div>
-                          <div className="flex items-end">
-                            <label className="flex items-center gap-2 text-sm text-gray-700">
-                              <input
-                                type="checkbox"
-                                checked={editForm.is_active}
-                                onChange={(e) => setEditForm((f) => ({ ...f, is_active: e.target.checked }))}
-                              />
-                              啟用中
-                            </label>
-                          </div>
                         </div>
+                        <p className="text-xs text-gray-500">啟用／停用請使用列表中的「停用／啟用」按鈕。</p>
 
                         {editError && <p className="text-sm text-red-600">{editError}</p>}
 
@@ -362,17 +365,21 @@ export function CashAccountList() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex gap-3">
-                        <button onClick={() => startEdit(account)} className="text-sm font-medium text-gray-900 hover:underline">
-                          編輯
-                        </button>
-                        <button onClick={() => toggleActive(account)} className="text-sm font-medium text-gray-600 hover:underline">
-                          {account.is_active ? '停用' : '啟用'}
-                        </button>
-                        <button onClick={() => handleDelete(account)} className="text-sm font-medium text-red-600 hover:underline">
-                          刪除
-                        </button>
-                      </div>
+                      {isAdmin ? (
+                        <div className="flex gap-3">
+                          <button onClick={() => startEdit(account)} className="text-sm font-medium text-gray-900 hover:underline">
+                            編輯
+                          </button>
+                          <button onClick={() => toggleActive(account)} className="text-sm font-medium text-gray-600 hover:underline">
+                            {account.is_active ? '停用' : '啟用'}
+                          </button>
+                          <button onClick={() => handleDelete(account)} className="text-sm font-medium text-red-600 hover:underline">
+                            刪除
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400">-</span>
+                      )}
                     </td>
                   </tr>
                 ),
