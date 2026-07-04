@@ -410,12 +410,14 @@ class MoneyEntryTest extends TestCase
 
     /**
      * 模擬 source_type migration 已跑完（欄位存在，default manual）但
-     * backfill migration 還沒跑的升級路徑：用 DB::table insert 略過
-     * Eloquent/Model 邏輯直接塞入不帶 source_type 的舊資料，讓它們落到
-     * default manual，再手動執行 backfill migration 的 up()，驗證
-     * 分類回填規則正確且不誤傷一般營運收支與其他單車收入。
+     * legacy row 沒有 durable provenance marker 的升級路徑：用 DB::table
+     * insert 略過 Eloquent/Model 邏輯直接塞入不帶 source_type 的舊資料，
+     * 讓它們落到 default manual，再手動執行 backfill migration 的
+     * up()，驗證即使 legacy row 符合舊版不安全 heuristic 的分類與車輛
+     * 狀態特徵，也必須維持 manual，不能被自動改成
+     * vehicle_shortcut / vehicle_workflow，因為這些特徵不足以證明來源。
      */
-    public function test_backfill_migration_reclassifies_legacy_vehicle_bound_entries(): void
+    public function test_backfill_migration_keeps_legacy_entries_manual(): void
     {
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
 
@@ -424,57 +426,66 @@ class MoneyEntryTest extends TestCase
             'sold_price' => 480000,
             'buyer_name' => '王小明',
         ]);
-        $shortcutDepositVehicle = Vehicle::factory()->create([
-            'status' => 'listed',
-            'sold_price' => null,
-            'buyer_name' => null,
-        ]);
         $expenseVehicle = Vehicle::factory()->create(['status' => 'preparing']);
 
         $legacyRows = [
-            // vehicle_workflow：訂金收入，關聯車輛符合 reserve 特徵且 buyer_name 相符
+            // 舊版不安全 heuristic 會誤判成 vehicle_workflow，實際上是一般 CRUD 建立
             [
                 'vehicle_id' => $reservedVehicle->id,
                 'category' => '訂金收入',
                 'direction' => 'income',
                 'counterparty_name' => '王小明',
                 'amount' => 100000,
-                'expected' => 'vehicle_workflow',
             ],
-            // vehicle_workflow：尾款收入一律視為 workflow
             [
                 'vehicle_id' => $reservedVehicle->id,
                 'category' => '尾款收入',
                 'direction' => 'income',
                 'counterparty_name' => '王小明',
                 'amount' => 380000,
-                'expected' => 'vehicle_workflow',
             ],
-            // vehicle_shortcut：訂金收入，但車輛不具備 reserve 特徵（未進 reserved/sold、無 sold_price）
-            [
-                'vehicle_id' => $shortcutDepositVehicle->id,
-                'category' => '訂金收入',
-                'direction' => 'income',
-                'counterparty_name' => null,
-                'amount' => 50000,
-                'expected' => 'vehicle_shortcut',
-            ],
-            // vehicle_shortcut：單車支出快捷分類
-            [
-                'vehicle_id' => $expenseVehicle->id,
-                'category' => '維修支出',
-                'direction' => 'expense',
-                'counterparty_name' => null,
-                'amount' => 3000,
-                'expected' => 'vehicle_shortcut',
-            ],
+            // 舊版不安全 heuristic 會誤判成 vehicle_shortcut，實際上是一般 CRUD 建立
             [
                 'vehicle_id' => $expenseVehicle->id,
                 'category' => '購車付款',
                 'direction' => 'expense',
                 'counterparty_name' => null,
                 'amount' => 200000,
-                'expected' => 'vehicle_shortcut',
+            ],
+            [
+                'vehicle_id' => $expenseVehicle->id,
+                'category' => '維修支出',
+                'direction' => 'expense',
+                'counterparty_name' => null,
+                'amount' => 3000,
+            ],
+            [
+                'vehicle_id' => $expenseVehicle->id,
+                'category' => '美容支出',
+                'direction' => 'expense',
+                'counterparty_name' => null,
+                'amount' => 1500,
+            ],
+            [
+                'vehicle_id' => $expenseVehicle->id,
+                'category' => '代辦支出',
+                'direction' => 'expense',
+                'counterparty_name' => null,
+                'amount' => 2500,
+            ],
+            [
+                'vehicle_id' => $expenseVehicle->id,
+                'category' => '拍場支出',
+                'direction' => 'expense',
+                'counterparty_name' => null,
+                'amount' => 4000,
+            ],
+            [
+                'vehicle_id' => $expenseVehicle->id,
+                'category' => '其他支出',
+                'direction' => 'expense',
+                'counterparty_name' => null,
+                'amount' => 1000,
             ],
             [
                 'vehicle_id' => $expenseVehicle->id,
@@ -482,23 +493,7 @@ class MoneyEntryTest extends TestCase
                 'direction' => 'expense',
                 'counterparty_name' => null,
                 'amount' => 1000,
-                'expected' => 'vehicle_shortcut',
             ],
-            // manual：其他單車收入沒有 shortcut endpoint，維持 manual
-            [
-                'vehicle_id' => $expenseVehicle->id,
-                'category' => '其他單車收入',
-                'direction' => 'income',
-                'counterparty_name' => null,
-                'amount' => 2000,
-                'expected' => 'manual',
-            ],
-        ];
-
-        $generalRows = [
-            ['category' => '一般收入', 'direction' => 'income', 'amount' => 5000],
-            ['category' => '租金', 'direction' => 'expense', 'amount' => 1000],
-            ['category' => '其他支出', 'direction' => 'expense', 'amount' => 1000, 'vehicle_id' => null],
         ];
 
         $ids = [];
@@ -519,60 +514,52 @@ class MoneyEntryTest extends TestCase
             ]);
         }
 
-        $generalIds = [];
-        foreach ($generalRows as $index => $row) {
-            $generalIds[$index] = DB::table('money_entries')->insertGetId([
-                'vehicle_id' => $row['vehicle_id'] ?? null,
-                'cash_account_id' => $cashAccount->id,
-                'entry_date' => '2026-06-01',
-                'direction' => $row['direction'],
-                'category' => $row['category'],
-                'amount' => $row['amount'],
-                'idempotency_key' => (string) Str::uuid(),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        }
-
         $migrationPath = database_path('migrations/2026_07_05_000001_backfill_money_entry_source_type.php');
         (require $migrationPath)->up();
 
         foreach ($legacyRows as $index => $row) {
             $this->assertSame(
-                $row['expected'],
-                DB::table('money_entries')->where('id', $ids[$index])->value('source_type'),
-                "category {$row['category']} on vehicle {$row['vehicle_id']} should backfill to {$row['expected']}"
-            );
-        }
-
-        foreach ($generalRows as $index => $row) {
-            $this->assertSame(
                 'manual',
-                DB::table('money_entries')->where('id', $generalIds[$index])->value('source_type'),
-                "general category {$row['category']} must remain manual"
+                DB::table('money_entries')->where('id', $ids[$index])->value('source_type'),
+                "category {$row['category']} on vehicle {$row['vehicle_id']} must remain manual without provenance"
             );
         }
 
-        // API 層驗證：backfill 後的非 manual entry 透過一般收支 CRUD 修改/刪除應回 422
+        // API 層驗證：仍為 manual 的 legacy entry 可透過一般收支 CRUD 修改/刪除，
+        // 只要車輛不是 sold/cancelled。
         $user = User::factory()->create(['is_active' => true]);
-        $protectedEntry = MoneyEntry::query()->whereKey($ids[0])->firstOrFail();
 
+        $depositEntry = MoneyEntry::query()->whereKey($ids[0])->firstOrFail();
         $this->actingAs($user, 'web')
-            ->patchJson("/api/money-entries/{$protectedEntry->id}", [
+            ->patchJson("/api/money-entries/{$depositEntry->id}", [
                 'entry_date' => '2026-06-02',
                 'direction' => 'income',
                 'category' => '訂金收入',
-                'amount' => 999999,
+                'amount' => 110000,
                 'cash_account_id' => $cashAccount->id,
                 'vehicle_id' => $reservedVehicle->id,
             ])
-            ->assertStatus(422);
+            ->assertStatus(200);
+        $this->assertDatabaseHas('money_entries', ['id' => $depositEntry->id, 'amount' => 110000]);
 
+        $finalPaymentEntry = MoneyEntry::query()->whereKey($ids[1])->firstOrFail();
         $this->actingAs($user, 'web')
-            ->deleteJson("/api/money-entries/{$protectedEntry->id}")
-            ->assertStatus(422);
+            ->deleteJson("/api/money-entries/{$finalPaymentEntry->id}")
+            ->assertStatus(200);
+        $this->assertDatabaseMissing('money_entries', ['id' => $finalPaymentEntry->id]);
 
-        $this->assertDatabaseHas('money_entries', ['id' => $protectedEntry->id, 'amount' => 100000]);
+        $expenseEntry = MoneyEntry::query()->whereKey($ids[2])->firstOrFail();
+        $this->actingAs($user, 'web')
+            ->patchJson("/api/money-entries/{$expenseEntry->id}", [
+                'entry_date' => '2026-06-02',
+                'direction' => 'expense',
+                'category' => '購車付款',
+                'amount' => 210000,
+                'cash_account_id' => $cashAccount->id,
+                'vehicle_id' => $expenseVehicle->id,
+            ])
+            ->assertStatus(200);
+        $this->assertDatabaseHas('money_entries', ['id' => $expenseEntry->id, 'amount' => 210000]);
     }
 
     public function test_dashboard_and_account_balance_reflect_entries(): void
