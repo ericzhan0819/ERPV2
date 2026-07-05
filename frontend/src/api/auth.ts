@@ -3,8 +3,8 @@ import type { User } from '../types/auth'
 
 export async function login(email: string, password: string): Promise<User> {
   await ensureCsrfCookie()
-  const { data } = await apiClient.post<User>('/api/login', { email, password })
-  return data
+  const { data } = await apiClient.post<{ data: User }>('/api/login', { email, password })
+  return data.data
 }
 
 export async function logout(): Promise<void> {
@@ -12,6 +12,6 @@ export async function logout(): Promise<void> {
 }
 
 export async function me(): Promise<User> {
-  const { data } = await apiClient.get<User>('/api/me')
-  return data
+  const { data } = await apiClient.get<{ data: User }>('/api/me')
+  return data.data
 }
