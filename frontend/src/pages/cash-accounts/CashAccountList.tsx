@@ -9,6 +9,7 @@ import {
   updateCashAccount,
 } from '../../api/cashAccounts'
 import { useAuth } from '../../hooks/useAuth'
+import { ActiveStatusBadge } from '../../components/ActiveStatusBadge'
 import type { CashAccountBalance, CashAccountPayload, CashAccountType, CashAccountUpdatePayload } from '../../types/cashAccount'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
@@ -177,8 +178,8 @@ export function CashAccountList() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">資金帳戶</h1>
-          <p className="mt-1 text-sm text-gray-500">現金／銀行／其他帳戶與即時餘額</p>
+          <h1 className="text-xl font-semibold text-fg">資金帳戶</h1>
+          <p className="mt-1 text-sm text-fg-muted">現金／銀行／其他帳戶與即時餘額</p>
         </div>
         {isAdmin && (
           <button
@@ -187,7 +188,7 @@ export function CashAccountList() {
               setCreateError(null)
               setCreateForm(emptyForm)
             }}
-            className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover"
           >
             {creating ? '取消新增' : '新增帳戶'}
           </button>
@@ -195,24 +196,24 @@ export function CashAccountList() {
       </div>
 
       {isAdmin && creating && (
-        <form onSubmit={handleCreateSubmit} className="max-w-2xl rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <form onSubmit={handleCreateSubmit} className="max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">帳戶名稱</label>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">帳戶名稱</label>
               <input
                 type="text"
                 required
                 value={createForm.name}
                 onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">類型</label>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">類型</label>
               <select
                 value={createForm.type}
                 onChange={(e) => setCreateForm((f) => ({ ...f, type: e.target.value as CashAccountType }))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               >
                 <option value="cash">{typeLabels.cash}</option>
                 <option value="bank">{typeLabels.bank}</option>
@@ -220,18 +221,18 @@ export function CashAccountList() {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">期初餘額</label>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">期初餘額</label>
               <input
                 type="number"
                 required
                 min={0}
                 value={createForm.opening_balance}
                 onChange={(e) => setCreateForm((f) => ({ ...f, opening_balance: e.target.value }))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
             </div>
             <div className="flex items-end">
-              <label className="flex items-center gap-2 text-sm text-gray-700">
+              <label className="flex items-center gap-2 text-sm text-fg-muted">
                 <input
                   type="checkbox"
                   checked={createForm.is_active}
@@ -242,13 +243,13 @@ export function CashAccountList() {
             </div>
           </div>
 
-          {createError && <p className="mt-4 text-sm text-red-600">{createError}</p>}
+          {createError && <p className="mt-4 text-sm text-error">{createError}</p>}
 
           <div className="mt-6 flex gap-3">
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
             >
               {submitting ? '建立中...' : '建立帳戶'}
             </button>
@@ -256,31 +257,31 @@ export function CashAccountList() {
         </form>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-error">{error}</p>}
 
-      <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
+      <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
+        <table className="min-w-full divide-y divide-border text-sm">
+          <thead className="bg-surface-2">
             <tr>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">帳戶名稱</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">類型</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">期初餘額</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">目前餘額</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">狀態</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">操作</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">帳戶名稱</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">類型</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">期初餘額</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">目前餘額</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">狀態</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">操作</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-border">
             {loading && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-fg-muted">
                   載入中...
                 </td>
               </tr>
             )}
             {!loading && accounts.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={6} className="px-4 py-6 text-center text-fg-muted">
                   尚無資金帳戶
                 </td>
               </tr>
@@ -288,26 +289,26 @@ export function CashAccountList() {
             {!loading &&
               accounts.map((account) =>
                 isAdmin && editingId === account.id ? (
-                  <tr key={account.id} className="bg-gray-50">
+                  <tr key={account.id} className="bg-surface-2">
                     <td colSpan={6} className="px-4 py-4">
                       <form onSubmit={(e) => handleEditSubmit(e, account.id)} className="flex flex-col gap-4">
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                           <div>
-                            <label className="mb-1 block text-sm font-medium text-gray-700">帳戶名稱</label>
+                            <label className="mb-1 block text-sm font-medium text-fg-muted">帳戶名稱</label>
                             <input
                               type="text"
                               required
                               value={editForm.name}
                               onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+                              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                             />
                           </div>
                           <div>
-                            <label className="mb-1 block text-sm font-medium text-gray-700">類型</label>
+                            <label className="mb-1 block text-sm font-medium text-fg-muted">類型</label>
                             <select
                               value={editForm.type}
                               onChange={(e) => setEditForm((f) => ({ ...f, type: e.target.value as CashAccountType }))}
-                              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+                              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                             >
                               <option value="cash">{typeLabels.cash}</option>
                               <option value="bank">{typeLabels.bank}</option>
@@ -315,33 +316,33 @@ export function CashAccountList() {
                             </select>
                           </div>
                           <div>
-                            <label className="mb-1 block text-sm font-medium text-gray-700">期初餘額</label>
+                            <label className="mb-1 block text-sm font-medium text-fg-muted">期初餘額</label>
                             <input
                               type="number"
                               required
                               min={0}
                               value={editForm.opening_balance}
                               onChange={(e) => setEditForm((f) => ({ ...f, opening_balance: e.target.value }))}
-                              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+                              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                             />
                           </div>
                         </div>
-                        <p className="text-xs text-gray-500">啟用／停用請使用列表中的「停用／啟用」按鈕。</p>
+                        <p className="text-xs text-fg-muted">啟用／停用請使用列表中的「停用／啟用」按鈕。</p>
 
-                        {editError && <p className="text-sm text-red-600">{editError}</p>}
+                        {editError && <p className="text-sm text-error">{editError}</p>}
 
                         <div className="flex gap-3">
                           <button
                             type="submit"
                             disabled={submitting}
-                            className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
                           >
                             {submitting ? '儲存中...' : '儲存'}
                           </button>
                           <button
                             type="button"
                             onClick={() => setEditingId(null)}
-                            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                            className="rounded-lg border border-border-strong px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
                           >
                             取消
                           </button>
@@ -350,35 +351,29 @@ export function CashAccountList() {
                     </td>
                   </tr>
                 ) : (
-                  <tr key={account.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{account.name}</td>
+                  <tr key={account.id} className="hover:bg-surface-2">
+                    <td className="px-4 py-3 font-medium text-fg">{account.name}</td>
                     <td className="px-4 py-3">{typeLabels[account.type]}</td>
-                    <td className="px-4 py-3">{currencyFormatter.format(account.opening_balance)}</td>
-                    <td className="px-4 py-3">{currencyFormatter.format(account.current_balance)}</td>
+                    <td className="px-4 py-3 tabular-nums">{currencyFormatter.format(account.opening_balance)}</td>
+                    <td className="px-4 py-3 tabular-nums">{currencyFormatter.format(account.current_balance)}</td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs font-medium ${
-                          account.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-600'
-                        }`}
-                      >
-                        {account.is_active ? '啟用中' : '已停用'}
-                      </span>
+                      <ActiveStatusBadge active={account.is_active} />
                     </td>
                     <td className="px-4 py-3">
                       {isAdmin ? (
                         <div className="flex gap-3">
-                          <button onClick={() => startEdit(account)} className="text-sm font-medium text-gray-900 hover:underline">
+                          <button onClick={() => startEdit(account)} className="text-sm font-medium text-fg hover:underline">
                             編輯
                           </button>
-                          <button onClick={() => toggleActive(account)} className="text-sm font-medium text-gray-600 hover:underline">
+                          <button onClick={() => toggleActive(account)} className="text-sm font-medium text-fg-muted hover:underline">
                             {account.is_active ? '停用' : '啟用'}
                           </button>
-                          <button onClick={() => handleDelete(account)} className="text-sm font-medium text-red-600 hover:underline">
+                          <button onClick={() => handleDelete(account)} className="text-sm font-medium text-error hover:underline">
                             刪除
                           </button>
                         </div>
                       ) : (
-                        <span className="text-sm text-gray-400">-</span>
+                        <span className="text-sm text-fg-subtle">-</span>
                       )}
                     </td>
                   </tr>

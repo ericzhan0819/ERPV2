@@ -67,13 +67,13 @@ interface FieldProps {
 function Field({ label, value, onChange, type = 'text', required }: FieldProps) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-gray-700">{label}</label>
+      <label className="mb-1 block text-sm font-medium text-fg-muted">{label}</label>
       <input
         type={type}
         required={required}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+        className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
       />
     </div>
   )
@@ -116,11 +116,11 @@ export function VehicleCreate() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">新增買入車輛</h1>
-        <p className="mt-1 text-sm text-gray-500">建立後系統會自動產生庫存編號，狀態為整備中</p>
+        <h1 className="text-xl font-semibold text-fg">新增買入車輛</h1>
+        <p className="mt-1 text-sm text-fg-muted">建立後系統會自動產生庫存編號，狀態為整備中</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="max-w-3xl rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+      <form onSubmit={handleSubmit} className="max-w-3xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="廠牌" value={form.brand} onChange={(v) => set('brand', v)} required />
           <Field label="車型" value={form.model} onChange={(v) => set('model', v)} required />
@@ -137,29 +137,29 @@ export function VehicleCreate() {
         </div>
 
         <div className="mt-4">
-          <label className="mb-1 block text-sm font-medium text-gray-700">備註</label>
+          <label className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
           <textarea
             value={form.notes}
             onChange={(e) => set('notes', e.target.value)}
             rows={3}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+            className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
           />
         </div>
 
-        {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+        {error && <p className="mt-4 text-sm text-error">{error}</p>}
 
         <div className="mt-6 flex gap-3">
           <button
             type="submit"
             disabled={submitting}
-            className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
           >
             {submitting ? '建立中...' : '建立車輛'}
           </button>
           <button
             type="button"
             onClick={() => navigate('/vehicles')}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            className="rounded-lg border border-border-strong px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
           >
             取消
           </button>

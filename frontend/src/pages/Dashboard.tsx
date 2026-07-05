@@ -16,9 +16,9 @@ interface CardProps {
 
 function Card({ label, value }: CardProps) {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <p className="text-sm text-gray-500">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-gray-900">{value}</p>
+    <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      <p className="text-sm text-fg-muted">{label}</p>
+      <p className="mt-2 text-3xl font-bold text-fg tabular-nums">{value}</p>
     </div>
   )
 }
@@ -42,18 +42,18 @@ export function Dashboard() {
   }, [])
 
   if (error) {
-    return <p className="text-sm text-red-600">{error}</p>
+    return <p className="text-sm text-error">{error}</p>
   }
 
   if (!summary) {
-    return <p className="text-sm text-gray-500">載入中...</p>
+    return <p className="text-sm text-fg-muted">載入中...</p>
   }
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">總覽</h1>
-        <p className="mt-1 text-sm text-gray-500">資金與車輛即時概況</p>
+        <h1 className="text-xl font-semibold text-fg">總覽</h1>
+        <p className="mt-1 text-sm text-fg-muted">資金與車輛即時概況</p>
       </div>
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -72,13 +72,13 @@ export function Dashboard() {
       </section>
 
       <section>
-        <h2 className="text-sm font-medium text-gray-700">快捷操作</h2>
+        <h2 className="text-sm font-medium text-fg-muted">快捷操作</h2>
         <div className="mt-3 flex flex-wrap gap-3">
           {quickActions.map((action) => (
             <Link
               key={action.to}
               to={action.to}
-              className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+              className="rounded-lg border border-border-strong bg-surface px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
             >
               {action.label}
             </Link>

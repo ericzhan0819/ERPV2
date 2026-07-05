@@ -109,32 +109,32 @@ export function MoneyEntryCreate() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">新增收支</h1>
-        <p className="mt-1 text-sm text-gray-500">一般營運收支請勿選擇車輛；單車相關收支請務必綁定車輛</p>
+        <h1 className="text-xl font-semibold text-fg">新增收支</h1>
+        <p className="mt-1 text-sm text-fg-muted">一般營運收支請勿選擇車輛；單車相關收支請務必綁定車輛</p>
       </div>
 
-      <form noValidate onSubmit={handleSubmit} className="max-w-2xl rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+      <form noValidate onSubmit={handleSubmit} className="max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">日期</label>
+            <label className="mb-1 block text-sm font-medium text-fg-muted">日期</label>
             <input
               type="date"
               required
               value={entryDate}
               onChange={(e) => setEntryDate(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">收入 / 支出</label>
+            <label className="mb-1 block text-sm font-medium text-fg-muted">收入 / 支出</label>
             <select
               value={direction}
               onChange={(e) => {
                 setDirection(e.target.value as MoneyDirection)
                 setCategory('')
               }}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
             >
               <option value="income">{directionLabels.income}</option>
               <option value="expense">{directionLabels.expense}</option>
@@ -142,12 +142,12 @@ export function MoneyEntryCreate() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">分類</label>
+            <label className="mb-1 block text-sm font-medium text-fg-muted">分類</label>
             <select
               required
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
             >
               <option value="">請選擇分類</option>
               {categoryOptions.map((c) => (
@@ -159,24 +159,24 @@ export function MoneyEntryCreate() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">金額</label>
+            <label className="mb-1 block text-sm font-medium text-fg-muted">金額</label>
             <input
               type="number"
               required
               min={1}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">資金帳戶</label>
+            <label className="mb-1 block text-sm font-medium text-fg-muted">資金帳戶</label>
             <select
               required
               value={cashAccountId}
               onChange={(e) => setCashAccountId(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
             >
               <option value="">請選擇資金帳戶</option>
               {cashAccounts.map((account) => (
@@ -188,11 +188,11 @@ export function MoneyEntryCreate() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">關聯車輛（可空白）</label>
+            <label className="mb-1 block text-sm font-medium text-fg-muted">關聯車輛（可空白）</label>
             <select
               value={vehicleId}
               onChange={(e) => setVehicleId(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
             >
               <option value="">不綁定車輛</option>
               {vehicles.map((vehicle) => (
@@ -204,40 +204,40 @@ export function MoneyEntryCreate() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">對象</label>
+            <label className="mb-1 block text-sm font-medium text-fg-muted">對象</label>
             <input
               type="text"
               value={counterpartyName}
               onChange={(e) => setCounterpartyName(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
             />
           </div>
         </div>
 
         <div className="mt-4">
-          <label className="mb-1 block text-sm font-medium text-gray-700">備註</label>
+          <label className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+            className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
           />
         </div>
 
-        {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+        {error && <p className="mt-4 text-sm text-error">{error}</p>}
 
         <div className="mt-6 flex gap-3">
           <button
             type="submit"
             disabled={submitting}
-            className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
           >
             {submitting ? '建立中...' : '建立收支'}
           </button>
           <button
             type="button"
             onClick={() => navigate('/money-entries')}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            className="rounded-lg border border-border-strong px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
           >
             取消
           </button>

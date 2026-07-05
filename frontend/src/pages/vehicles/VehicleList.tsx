@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listVehicles } from '../../api/vehicles'
 import type { Vehicle, VehicleListMeta, VehicleStatus } from '../../types/vehicle'
-import { vehicleStatusBadgeClasses, vehicleStatusLabels } from '../../utils/vehicleStatus'
+import { VehicleStatusBadge } from '../../components/VehicleStatusBadge'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
@@ -44,12 +44,12 @@ export function VehicleList() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">車輛管理</h1>
-          <p className="mt-1 text-sm text-gray-500">車輛庫存與銷售狀態總覽</p>
+          <h1 className="text-xl font-semibold text-fg">車輛管理</h1>
+          <p className="mt-1 text-sm text-fg-muted">車輛庫存與銷售狀態總覽</p>
         </div>
         <Link
           to="/vehicles/create"
-          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover"
         >
           新增買入車輛
         </Link>
@@ -64,7 +64,7 @@ export function VehicleList() {
             setPage(1)
             setSearch(e.target.value)
           }}
-          className="w-72 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+          className="w-72 rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
         />
         <select
           value={status}
@@ -72,7 +72,7 @@ export function VehicleList() {
             setPage(1)
             setStatus(e.target.value as VehicleStatus | '')
           }}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+          className="rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
         >
           {statusOptions.map((option) => (
             <option key={option.value} value={option.value}>
@@ -82,57 +82,55 @@ export function VehicleList() {
         </select>
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-error">{error}</p>}
 
-      <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
+      <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
+        <table className="min-w-full divide-y divide-border text-sm">
+          <thead className="bg-surface-2">
             <tr>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">庫存編號</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">狀態</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">廠牌</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">車型</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">年式</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">車牌</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">開價</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">成交價</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">建立日期</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">庫存編號</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">狀態</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">廠牌</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">車型</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">年式</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">車牌</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">開價</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">成交價</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">建立日期</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-border">
             {loading && (
               <tr>
-                <td colSpan={9} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={9} className="px-4 py-6 text-center text-fg-muted">
                   載入中...
                 </td>
               </tr>
             )}
             {!loading && vehicles.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={9} className="px-4 py-6 text-center text-fg-muted">
                   尚無符合條件的車輛
                 </td>
               </tr>
             )}
             {!loading &&
               vehicles.map((vehicle) => (
-                <tr key={vehicle.id} className="hover:bg-gray-50">
+                <tr key={vehicle.id} className="hover:bg-surface-2">
                   <td className="px-4 py-3">
-                    <Link to={`/vehicles/${vehicle.id}`} className="font-medium text-gray-900 hover:underline">
+                    <Link to={`/vehicles/${vehicle.id}`} className="font-medium text-fg hover:underline">
                       {vehicle.stock_no}
                     </Link>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`rounded-full px-2 py-1 text-xs font-medium ${vehicleStatusBadgeClasses[vehicle.status]}`}>
-                      {vehicleStatusLabels[vehicle.status]}
-                    </span>
+                    <VehicleStatusBadge status={vehicle.status} />
                   </td>
                   <td className="px-4 py-3">{vehicle.brand}</td>
                   <td className="px-4 py-3">{vehicle.model}</td>
                   <td className="px-4 py-3">{vehicle.year ?? '-'}</td>
                   <td className="px-4 py-3">{vehicle.license_plate ?? '-'}</td>
-                  <td className="px-4 py-3">{formatCurrency(vehicle.asking_price)}</td>
-                  <td className="px-4 py-3">{formatCurrency(vehicle.sold_price)}</td>
+                  <td className="px-4 py-3 tabular-nums">{formatCurrency(vehicle.asking_price)}</td>
+                  <td className="px-4 py-3 tabular-nums">{formatCurrency(vehicle.sold_price)}</td>
                   <td className="px-4 py-3">{vehicle.created_at ? vehicle.created_at.slice(0, 10) : '-'}</td>
                 </tr>
               ))}
@@ -141,7 +139,7 @@ export function VehicleList() {
       </div>
 
       {meta && meta.last_page > 1 && (
-        <div className="flex items-center justify-between text-sm text-gray-600">
+        <div className="flex items-center justify-between text-sm text-fg-muted">
           <span>
             第 {meta.current_page} / {meta.last_page} 頁，共 {meta.total} 筆
           </span>
@@ -149,14 +147,14 @@ export function VehicleList() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={meta.current_page <= 1}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 disabled:opacity-50"
+              className="rounded-lg border border-border-strong px-3 py-1.5 disabled:opacity-50"
             >
               上一頁
             </button>
             <button
               onClick={() => setPage((p) => Math.min(meta.last_page, p + 1))}
               disabled={meta.current_page >= meta.last_page}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 disabled:opacity-50"
+              className="rounded-lg border border-border-strong px-3 py-1.5 disabled:opacity-50"
             >
               下一頁
             </button>

@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { isAxiosError } from 'axios'
 import { createUser, deleteUser, listUsers, resetUserPassword, setUserActive, setUserAdmin, updateUser } from '../../api/users'
 import { useAuth } from '../../hooks/useAuth'
+import { ActiveStatusBadge } from '../../components/ActiveStatusBadge'
 import type { User, UserPayload, UserUpdatePayload } from '../../types/user'
 
 interface CreateFormState {
@@ -204,8 +205,8 @@ export function UserList() {
     return (
       <div className="flex flex-col gap-6">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">使用者管理</h1>
-          <p className="mt-1 text-sm text-gray-500">僅限管理員操作</p>
+          <h1 className="text-xl font-semibold text-fg">使用者管理</h1>
+          <p className="mt-1 text-sm text-fg-muted">僅限管理員操作</p>
         </div>
       </div>
     )
@@ -215,8 +216,8 @@ export function UserList() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">使用者管理</h1>
-          <p className="mt-1 text-sm text-gray-500">建立與管理系統使用者帳號</p>
+          <h1 className="text-xl font-semibold text-fg">使用者管理</h1>
+          <p className="mt-1 text-sm text-fg-muted">建立與管理系統使用者帳號</p>
         </div>
         <button
           onClick={() => {
@@ -224,48 +225,48 @@ export function UserList() {
             setCreateError(null)
             setCreateForm(emptyCreateForm)
           }}
-          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover"
         >
           {creating ? '取消新增' : '新增使用者'}
         </button>
       </div>
 
       {creating && (
-        <form onSubmit={handleCreateSubmit} className="max-w-2xl rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <form onSubmit={handleCreateSubmit} className="max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">姓名</label>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">姓名</label>
               <input
                 type="text"
                 required
                 value={createForm.name}
                 onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">電子郵件</label>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">電子郵件</label>
               <input
                 type="email"
                 required
                 value={createForm.email}
                 onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">密碼</label>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">密碼</label>
               <input
                 type="password"
                 required
                 minLength={8}
                 value={createForm.password}
                 onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
             </div>
             <div className="flex items-end">
-              <label className="flex items-center gap-2 text-sm text-gray-700">
+              <label className="flex items-center gap-2 text-sm text-fg-muted">
                 <input
                   type="checkbox"
                   checked={createForm.is_admin}
@@ -276,13 +277,13 @@ export function UserList() {
             </div>
           </div>
 
-          {createError && <p className="mt-4 text-sm text-red-600">{createError}</p>}
+          {createError && <p className="mt-4 text-sm text-error">{createError}</p>}
 
           <div className="mt-6 flex gap-3">
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
             >
               {submitting ? '建立中...' : '建立使用者'}
             </button>
@@ -290,30 +291,30 @@ export function UserList() {
         </form>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-error">{error}</p>}
 
-      <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
+      <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
+        <table className="min-w-full divide-y divide-border text-sm">
+          <thead className="bg-surface-2">
             <tr>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">姓名</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">電子郵件</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">角色</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">狀態</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">操作</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">姓名</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">電子郵件</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">角色</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">狀態</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">操作</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-border">
             {loading && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={5} className="px-4 py-6 text-center text-fg-muted">
                   載入中...
                 </td>
               </tr>
             )}
             {!loading && users.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={5} className="px-4 py-6 text-center text-fg-muted">
                   尚無使用者
                 </td>
               </tr>
@@ -324,49 +325,49 @@ export function UserList() {
 
                 if (editingId === user.id) {
                   return (
-                    <tr key={user.id} className="bg-gray-50">
+                    <tr key={user.id} className="bg-surface-2">
                       <td colSpan={5} className="px-4 py-4">
                         <form onSubmit={(e) => handleEditSubmit(e, user.id)} className="flex flex-col gap-4">
                           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
-                              <label className="mb-1 block text-sm font-medium text-gray-700">姓名</label>
+                              <label className="mb-1 block text-sm font-medium text-fg-muted">姓名</label>
                               <input
                                 type="text"
                                 required
                                 value={editForm.name}
                                 onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+                                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                               />
                             </div>
                             <div>
-                              <label className="mb-1 block text-sm font-medium text-gray-700">電子郵件</label>
+                              <label className="mb-1 block text-sm font-medium text-fg-muted">電子郵件</label>
                               <input
                                 type="email"
                                 required
                                 value={editForm.email}
                                 onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
-                                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+                                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                               />
                             </div>
                           </div>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-fg-muted">
                             管理員權限請使用列表中的「設為管理員／解除管理員」按鈕；啟用／停用請使用「停用／啟用」按鈕；密碼請使用「重設密碼」。
                           </p>
 
-                          {editError && <p className="text-sm text-red-600">{editError}</p>}
+                          {editError && <p className="text-sm text-error">{editError}</p>}
 
                           <div className="flex gap-3">
                             <button
                               type="submit"
                               disabled={submitting}
-                              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
                             >
                               {submitting ? '儲存中...' : '儲存'}
                             </button>
                             <button
                               type="button"
                               onClick={() => setEditingId(null)}
-                              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                              className="rounded-lg border border-border-strong px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
                             >
                               取消
                             </button>
@@ -379,35 +380,35 @@ export function UserList() {
 
                 if (resettingId === user.id) {
                   return (
-                    <tr key={user.id} className="bg-gray-50">
+                    <tr key={user.id} className="bg-surface-2">
                       <td colSpan={5} className="px-4 py-4">
                         <form onSubmit={(e) => handleResetSubmit(e, user.id)} className="flex flex-col gap-4">
                           <div className="max-w-sm">
-                            <label className="mb-1 block text-sm font-medium text-gray-700">{user.name} 的新密碼</label>
+                            <label className="mb-1 block text-sm font-medium text-fg-muted">{user.name} 的新密碼</label>
                             <input
                               type="password"
                               required
                               minLength={8}
                               value={resetPassword}
                               onChange={(e) => setResetPassword(e.target.value)}
-                              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+                              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                             />
                           </div>
 
-                          {resetError && <p className="text-sm text-red-600">{resetError}</p>}
+                          {resetError && <p className="text-sm text-error">{resetError}</p>}
 
                           <div className="flex gap-3">
                             <button
                               type="submit"
                               disabled={submitting}
-                              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+                              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
                             >
                               {submitting ? '儲存中...' : '重設密碼'}
                             </button>
                             <button
                               type="button"
                               onClick={() => setResettingId(null)}
-                              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+                              className="rounded-lg border border-border-strong px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
                             >
                               取消
                             </button>
@@ -419,45 +420,39 @@ export function UserList() {
                 }
 
                 return (
-                  <tr key={user.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{user.name}</td>
+                  <tr key={user.id} className="hover:bg-surface-2">
+                    <td className="px-4 py-3 font-medium text-fg">{user.name}</td>
                     <td className="px-4 py-3">{user.email}</td>
                     <td className="px-4 py-3">{user.is_admin ? '管理員' : '一般使用者'}</td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs font-medium ${
-                          user.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-600'
-                        }`}
-                      >
-                        {user.is_active ? '啟用中' : '已停用'}
-                      </span>
+                      <ActiveStatusBadge active={user.is_active} />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-3">
-                        <button onClick={() => startEdit(user)} className="text-sm font-medium text-gray-900 hover:underline">
+                        <button onClick={() => startEdit(user)} className="text-sm font-medium text-fg hover:underline">
                           編輯
                         </button>
-                        <button onClick={() => startReset(user)} className="text-sm font-medium text-gray-600 hover:underline">
+                        <button onClick={() => startReset(user)} className="text-sm font-medium text-fg-muted hover:underline">
                           重設密碼
                         </button>
                         <button
                           onClick={() => toggleAdmin(user)}
                           disabled={isSelf && user.is_admin}
-                          className="text-sm font-medium text-gray-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+                          className="text-sm font-medium text-fg-muted hover:underline disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           {user.is_admin ? '解除管理員' : '設為管理員'}
                         </button>
                         <button
                           onClick={() => toggleActive(user)}
                           disabled={isSelf && user.is_active}
-                          className="text-sm font-medium text-gray-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+                          className="text-sm font-medium text-fg-muted hover:underline disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           {user.is_active ? '停用' : '啟用'}
                         </button>
                         <button
                           onClick={() => handleDelete(user)}
                           disabled={isSelf}
-                          className="text-sm font-medium text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+                          className="text-sm font-medium text-error hover:underline disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           刪除
                         </button>

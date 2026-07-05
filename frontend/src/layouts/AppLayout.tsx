@@ -1,12 +1,14 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { LayoutDashboard, Car, Wallet, Banknote, Users } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import { ThemeToggle } from '../components/ThemeToggle'
 
 const navItems = [
-  { to: '/dashboard', label: '總覽' },
-  { to: '/vehicles', label: '車輛' },
-  { to: '/money-entries', label: '收支' },
-  { to: '/cash-accounts', label: '資金帳戶' },
-  { to: '/users', label: '使用者' },
+  { to: '/dashboard', label: '總覽', icon: LayoutDashboard },
+  { to: '/vehicles', label: '車輛', icon: Car },
+  { to: '/money-entries', label: '收支', icon: Wallet },
+  { to: '/cash-accounts', label: '資金帳戶', icon: Banknote },
+  { to: '/users', label: '使用者', icon: Users },
 ]
 
 export function AppLayout() {
@@ -26,33 +28,40 @@ export function AppLayout() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <aside className="w-56 shrink-0 border-r border-gray-200 bg-white">
-        <div className="p-4 text-lg font-semibold text-gray-900">中古車行系統</div>
+    <div className="flex min-h-screen bg-bg">
+      <aside className="w-56 shrink-0 bg-sidebar">
+        <div className="p-4 text-lg font-semibold tracking-tight text-sidebar-fg">中古車行系統</div>
         <nav className="flex flex-col gap-1 px-2">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                `rounded-lg px-3 py-2 text-sm font-medium ${
-                  isActive ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'
-                }`
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
+          {navItems.map((item) => {
+            const Icon = item.icon
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  `flex items-center gap-2 rounded-lg border-l-3 px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive
+                      ? 'border-primary bg-primary/20 text-sidebar-fg'
+                      : 'border-transparent text-sidebar-fg-muted hover:bg-white/5 hover:text-sidebar-fg'
+                  }`
+                }
+              >
+                <Icon size={16} />
+                {item.label}
+              </NavLink>
+            )
+          })}
         </nav>
       </aside>
       <div className="flex flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
+        <header className="flex items-center justify-between border-b border-border bg-surface px-6 py-3">
           <div />
           <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-600">{user?.name}</span>
+            <span className="text-sm text-fg-muted">{user?.name}</span>
+            <ThemeToggle />
             <button
               onClick={handleLogout}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100"
+              className="rounded-lg border border-border-strong px-3 py-1.5 text-sm font-medium text-fg hover:bg-surface-2"
             >
               登出
             </button>

@@ -7,6 +7,7 @@ import type { CashAccountOption } from '../../types/cashAccount'
 import type { MoneyDirection, MoneyEntry, MoneyEntryListMeta } from '../../types/moneyEntry'
 import type { Vehicle, VehicleListResponse } from '../../types/vehicle'
 import { categoriesForDirection, directionLabels } from '../../utils/moneyEntryCategory'
+import { MoneyDirectionBadge } from '../../components/MoneyDirectionBadge'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
@@ -60,19 +61,19 @@ export function MoneyEntryList() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">收支管理</h1>
-          <p className="mt-1 text-sm text-gray-500">一般營運與單車收支紀錄</p>
+          <h1 className="text-xl font-semibold text-fg">收支管理</h1>
+          <p className="mt-1 text-sm text-fg-muted">一般營運與單車收支紀錄</p>
         </div>
         <div className="flex gap-3">
           <Link
             to="/money-entries/create?direction=income"
-            className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover"
           >
             新增收入
           </Link>
           <Link
             to="/money-entries/create?direction=expense"
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            className="rounded-lg border border-border-strong px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
           >
             新增支出
           </Link>
@@ -88,7 +89,7 @@ export function MoneyEntryList() {
             setPage(1)
             setSearch(e.target.value)
           }}
-          className="w-56 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+          className="w-56 rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
         />
         <select
           value={direction}
@@ -97,7 +98,7 @@ export function MoneyEntryList() {
             setDirection(e.target.value as MoneyDirection | '')
             setCategory('')
           }}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+          className="rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
         >
           <option value="">收入 / 支出</option>
           <option value="income">{directionLabels.income}</option>
@@ -109,7 +110,7 @@ export function MoneyEntryList() {
             setPage(1)
             setCategory(e.target.value)
           }}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+          className="rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
         >
           <option value="">全部分類</option>
           {categoriesForDirection(direction).map((c) => (
@@ -124,7 +125,7 @@ export function MoneyEntryList() {
             setPage(1)
             setCashAccountId(e.target.value)
           }}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+          className="rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
         >
           <option value="">全部資金帳戶</option>
           {cashAccounts.map((account) => (
@@ -139,7 +140,7 @@ export function MoneyEntryList() {
             setPage(1)
             setVehicleId(e.target.value)
           }}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+          className="rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
         >
           <option value="">全部車輛</option>
           {vehicles.map((vehicle) => (
@@ -155,7 +156,7 @@ export function MoneyEntryList() {
             setPage(1)
             setDateFrom(e.target.value)
           }}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+          className="rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
         />
         <input
           type="date"
@@ -164,60 +165,54 @@ export function MoneyEntryList() {
             setPage(1)
             setDateTo(e.target.value)
           }}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+          className="rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
         />
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-error">{error}</p>}
 
-      <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
+      <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
+        <table className="min-w-full divide-y divide-border text-sm">
+          <thead className="bg-surface-2">
             <tr>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">日期</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">收入/支出</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">分類</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">金額</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">資金帳戶</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">關聯車輛</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">對象</th>
-              <th className="px-4 py-3 text-left font-medium text-gray-500">備註</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">日期</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">收入/支出</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">分類</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">金額</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">資金帳戶</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">關聯車輛</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">對象</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">備註</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-border">
             {loading && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={8} className="px-4 py-6 text-center text-fg-muted">
                   載入中...
                 </td>
               </tr>
             )}
             {!loading && entries.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-gray-500">
+                <td colSpan={8} className="px-4 py-6 text-center text-fg-muted">
                   尚無符合條件的收支紀錄
                 </td>
               </tr>
             )}
             {!loading &&
               entries.map((entry) => (
-                <tr key={entry.id} className="hover:bg-gray-50">
+                <tr key={entry.id} className="hover:bg-surface-2">
                   <td className="px-4 py-3">{entry.entry_date}</td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-1 text-xs font-medium ${
-                        entry.direction === 'income' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {directionLabels[entry.direction]}
-                    </span>
+                    <MoneyDirectionBadge direction={entry.direction} />
                   </td>
                   <td className="px-4 py-3">{entry.category}</td>
-                  <td className="px-4 py-3">{currencyFormatter.format(entry.amount)}</td>
+                  <td className="px-4 py-3 tabular-nums">{currencyFormatter.format(entry.amount)}</td>
                   <td className="px-4 py-3">{entry.cash_account?.name ?? '-'}</td>
                   <td className="px-4 py-3">
                     {entry.vehicle ? (
-                      <Link to={`/vehicles/${entry.vehicle.id}`} className="text-gray-900 hover:underline">
+                      <Link to={`/vehicles/${entry.vehicle.id}`} className="text-fg hover:underline">
                         {entry.vehicle.stock_no}
                       </Link>
                     ) : (
@@ -233,7 +228,7 @@ export function MoneyEntryList() {
       </div>
 
       {meta && meta.last_page > 1 && (
-        <div className="flex items-center justify-between text-sm text-gray-600">
+        <div className="flex items-center justify-between text-sm text-fg-muted">
           <span>
             第 {meta.current_page} / {meta.last_page} 頁，共 {meta.total} 筆
           </span>
@@ -241,14 +236,14 @@ export function MoneyEntryList() {
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={meta.current_page <= 1}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 disabled:opacity-50"
+              className="rounded-lg border border-border-strong px-3 py-1.5 disabled:opacity-50"
             >
               上一頁
             </button>
             <button
               onClick={() => setPage((p) => Math.min(meta.last_page, p + 1))}
               disabled={meta.current_page >= meta.last_page}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 disabled:opacity-50"
+              className="rounded-lg border border-border-strong px-3 py-1.5 disabled:opacity-50"
             >
               下一頁
             </button>

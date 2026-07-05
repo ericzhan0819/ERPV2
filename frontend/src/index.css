@@ -1,5 +1,110 @@
 @import "tailwindcss";
 
+@theme {
+  /* ---- 字型 ---- */
+  --font-sans: "Inter", "Noto Sans TC", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+  /* ---- 圓角 ---- */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  /* ---- 陰影 ---- */
+  --shadow-xs: 0 1px 2px rgb(15 23 42 / .06);
+  --shadow-sm: 0 1px 3px rgb(15 23 42 / .08), 0 1px 2px rgb(15 23 42 / .04);
+  --shadow-md: 0 4px 12px rgb(15 23 42 / .08);
+  --shadow-lg: 0 12px 28px rgb(15 23 42 / .12);
+
+  /* ---- 語意色（預設 = Light / Midnight）---- */
+  --color-bg: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-surface-2: #F1F5F9;
+  --color-fg: #0F172A;
+  --color-fg-muted: #475569;
+  --color-fg-subtle: #94A3B8;
+  --color-border: #E2E8F0;
+  --color-border-strong: #CBD5E1;
+  --color-primary: #1E3A8A;
+  --color-primary-hover: #172E6E;
+  --color-primary-fg: #FFFFFF;
+  --color-ring: #1E3A8A;
+
+  /* ---- 側欄（固定深色）---- */
+  --color-sidebar: #14213D;
+  --color-sidebar-fg: #E8EDF5;
+  --color-sidebar-fg-muted: #94A3B8;
+
+  /* ---- 狀態 ---- */
+  --color-success: #16A34A;
+  --color-warning: #F59E0B;
+  --color-error: #DC2626;
+  --color-info: #2563EB;
+
+  /* ---- 車輛狀態（主色，badge 底/文另用 utility）---- */
+  --color-status-preparing: #F59E0B;
+  --color-status-listed: #2563EB;
+  --color-status-reserved: #7C3AED;
+  --color-status-sold: #10B981;
+  --color-status-cancelled: #64748B;
+}
+
+/* ---- Dark 覆寫（切 .dark class）---- */
+.dark {
+  --color-bg: #0B1120;
+  --color-surface: #131A2A;
+  --color-surface-2: #1A2336;
+  --color-fg: #E8EDF5;
+  --color-fg-muted: #94A3B8;
+  --color-fg-subtle: #64748B;
+  --color-border: #25314A;
+  --color-border-strong: #33415C;
+  --color-primary: #3B60C4;
+  --color-primary-hover: #4B72D6;
+  --color-ring: #3B82F6;
+}
+
 body {
   margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--color-bg);
+  color: var(--color-fg);
 }
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Badge 三件組（底 + 文字 + 邊框）---- */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  line-height: 1.33;
+  font-weight: 500;
+  border-width: 1px;
+  border-style: solid;
+  white-space: nowrap;
+}
+
+.badge-amber { background: #FFFBEB; color: #B45309; border-color: #FDE68A; }
+.dark .badge-amber { background: rgba(245, 158, 11, .15); color: #FCD34D; border-color: rgba(245, 158, 11, .3); }
+
+.badge-blue { background: #EFF6FF; color: #1D4ED8; border-color: #BFDBFE; }
+.dark .badge-blue { background: rgba(59, 130, 246, .15); color: #93C5FD; border-color: rgba(59, 130, 246, .3); }
+
+.badge-violet { background: #F5F3FF; color: #6D28D9; border-color: #DDD6FE; }
+.dark .badge-violet { background: rgba(139, 92, 246, .15); color: #C4B5FD; border-color: rgba(139, 92, 246, .3); }
+
+.badge-emerald { background: #ECFDF5; color: #047857; border-color: #A7F3D0; }
+.dark .badge-emerald { background: rgba(16, 185, 129, .15); color: #6EE7B7; border-color: rgba(16, 185, 129, .3); }
+
+.badge-slate { background: #F1F5F9; color: #475569; border-color: #E2E8F0; }
+.dark .badge-slate { background: rgba(148, 163, 184, .15); color: #94A3B8; border-color: rgba(148, 163, 184, .25); }
+
+.badge-red { background: #FEF2F2; color: #B91C1C; border-color: #FECACA; }
+.dark .badge-red { background: rgba(239, 68, 68, .15); color: #FCA5A5; border-color: rgba(239, 68, 68, .3); }

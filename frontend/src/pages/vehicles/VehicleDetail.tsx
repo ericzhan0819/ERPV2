@@ -7,7 +7,8 @@ import { listCashAccounts } from '../../api/cashAccounts'
 import type { VehicleDetailResponse } from '../../types/vehicle'
 import type { CashAccountOption } from '../../types/cashAccount'
 import { generateIdempotencyKey } from '../../utils/idempotency'
-import { vehicleStatusBadgeClasses, vehicleStatusLabels } from '../../utils/vehicleStatus'
+import { vehicleStatusLabels } from '../../utils/vehicleStatus'
+import { VehicleStatusBadge } from '../../components/VehicleStatusBadge'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
@@ -22,17 +23,17 @@ interface InfoRowProps {
 
 function InfoRow({ label, value }: InfoRowProps) {
   return (
-    <div className="flex justify-between border-b border-gray-100 py-2 text-sm last:border-0">
-      <span className="text-gray-500">{label}</span>
-      <span className="font-medium text-gray-900">{value}</span>
+    <div className="flex justify-between border-b border-border py-2 text-sm last:border-0">
+      <span className="text-fg-muted">{label}</span>
+      <span className="font-medium text-fg tabular-nums">{value}</span>
     </div>
   )
 }
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h2 className="mb-2 text-sm font-semibold text-gray-700">{title}</h2>
+    <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      <h2 className="mb-2 text-sm font-semibold text-fg-muted">{title}</h2>
       {children}
     </div>
   )
@@ -41,10 +42,10 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg">
+      <div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-lg">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
-          <button onClick={onClose} className="text-sm text-gray-400 hover:text-gray-600">
+          <h3 className="text-base font-semibold text-fg">{title}</h3>
+          <button onClick={onClose} className="text-sm text-fg-subtle hover:text-fg-muted">
             關閉
           </button>
         </div>
@@ -69,13 +70,13 @@ function Field({
 }) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-gray-700">{label}</label>
+      <label className="mb-1 block text-sm font-medium text-fg-muted">{label}</label>
       <input
         type={type}
         required={required}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+        className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
       />
     </div>
   )
@@ -92,12 +93,12 @@ function CashAccountField({
 }) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-gray-700">收款帳戶</label>
+      <label className="mb-1 block text-sm font-medium text-fg-muted">收款帳戶</label>
       <select
         required
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+        className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
       >
         <option value="">請選擇</option>
         {cashAccounts
@@ -153,11 +154,11 @@ export function VehicleDetail() {
   }, [id])
 
   if (error) {
-    return <p className="text-sm text-red-600">{error}</p>
+    return <p className="text-sm text-error">{error}</p>
   }
 
   if (!detail) {
-    return <p className="text-sm text-gray-500">載入中...</p>
+    return <p className="text-sm text-fg-muted">載入中...</p>
   }
 
   const { vehicle, summary, money_entries: moneyEntries } = detail
@@ -255,12 +256,10 @@ export function VehicleDetail() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-semibold text-gray-900">{vehicle.stock_no}</h1>
-            <span className={`rounded-full px-2 py-1 text-xs font-medium ${vehicleStatusBadgeClasses[vehicle.status]}`}>
-              {vehicleStatusLabels[vehicle.status]}
-            </span>
+            <h1 className="text-xl font-semibold text-fg">{vehicle.stock_no}</h1>
+            <VehicleStatusBadge status={vehicle.status} />
           </div>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-fg-muted">
             {vehicle.brand} {vehicle.model}
           </p>
         </div>
@@ -268,7 +267,7 @@ export function VehicleDetail() {
           <Link
             to={`/vehicles/${vehicleId}/print/intake`}
             target="_blank"
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            className="rounded-lg border border-border-strong px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
           >
             列印建檔資料
           </Link>
@@ -276,14 +275,14 @@ export function VehicleDetail() {
             <Link
               to={`/vehicles/${vehicleId}/print/closing`}
               target="_blank"
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+              className="rounded-lg border border-border-strong px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
             >
               列印成交結案明細
             </Link>
           )}
           <Link
             to="/vehicles"
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            className="rounded-lg border border-border-strong px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
           >
             返回列表
           </Link>
@@ -291,14 +290,14 @@ export function VehicleDetail() {
       </div>
 
       {warning && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">{warning}</div>
+        <div className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-fg">{warning}</div>
       )}
 
       <div className="flex flex-wrap gap-3">
         {vehicle.status === 'preparing' && (
           <button
             onClick={() => setActiveModal('list')}
-            className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover"
           >
             整備完成並上架
           </button>
@@ -306,7 +305,7 @@ export function VehicleDetail() {
         {vehicle.status === 'listed' && (
           <button
             onClick={() => setActiveModal('reserve')}
-            className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover"
           >
             收訂金並保留
           </button>
@@ -315,13 +314,13 @@ export function VehicleDetail() {
           <>
             <button
               onClick={() => setActiveModal('final-payment')}
-              className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover"
             >
               收尾款
             </button>
             <button
               onClick={() => setActiveModal('close-sale')}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+              className="rounded-lg border border-border-strong px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
             >
               成交結案
             </button>
@@ -362,38 +361,38 @@ export function VehicleDetail() {
 
       <Panel title="單車收支摘要">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="rounded-xl bg-gray-50 p-4">
-            <p className="text-xs text-gray-500">單車收入合計</p>
-            <p className="mt-1 text-lg font-semibold text-gray-900">{formatCurrency(summary.income_total)}</p>
+          <div className="rounded-xl bg-surface-2 p-4">
+            <p className="text-xs text-fg-muted">單車收入合計</p>
+            <p className="mt-1 text-lg font-semibold text-fg tabular-nums">{formatCurrency(summary.income_total)}</p>
           </div>
-          <div className="rounded-xl bg-gray-50 p-4">
-            <p className="text-xs text-gray-500">單車支出合計</p>
-            <p className="mt-1 text-lg font-semibold text-gray-900">{formatCurrency(summary.expense_total)}</p>
+          <div className="rounded-xl bg-surface-2 p-4">
+            <p className="text-xs text-fg-muted">單車支出合計</p>
+            <p className="mt-1 text-lg font-semibold text-fg tabular-nums">{formatCurrency(summary.expense_total)}</p>
           </div>
-          <div className="rounded-xl bg-gray-50 p-4">
-            <p className="text-xs text-gray-500">單車毛利</p>
-            <p className="mt-1 text-lg font-semibold text-gray-900">{formatCurrency(summary.gross_profit)}</p>
+          <div className="rounded-xl bg-surface-2 p-4">
+            <p className="text-xs text-fg-muted">單車毛利</p>
+            <p className="mt-1 text-lg font-semibold text-fg tabular-nums">{formatCurrency(summary.gross_profit)}</p>
           </div>
         </div>
       </Panel>
 
       <Panel title="單車收支明細">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
+          <table className="min-w-full divide-y divide-border text-sm">
             <thead>
               <tr>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">日期</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">收支</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">分類</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">金額</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">資金帳戶</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">說明</th>
+                <th className="px-3 py-2 text-left font-medium text-fg-muted">日期</th>
+                <th className="px-3 py-2 text-left font-medium text-fg-muted">收支</th>
+                <th className="px-3 py-2 text-left font-medium text-fg-muted">分類</th>
+                <th className="px-3 py-2 text-left font-medium text-fg-muted">金額</th>
+                <th className="px-3 py-2 text-left font-medium text-fg-muted">資金帳戶</th>
+                <th className="px-3 py-2 text-left font-medium text-fg-muted">說明</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-border">
               {moneyEntries.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-4 text-center text-gray-500">
+                  <td colSpan={6} className="px-3 py-4 text-center text-fg-muted">
                     尚無收支紀錄
                   </td>
                 </tr>
@@ -403,7 +402,7 @@ export function VehicleDetail() {
                   <td className="px-3 py-2">{entry.entry_date}</td>
                   <td className="px-3 py-2">{entry.direction === 'income' ? '收入' : '支出'}</td>
                   <td className="px-3 py-2">{entry.category}</td>
-                  <td className="px-3 py-2">{formatCurrency(entry.amount)}</td>
+                  <td className="px-3 py-2 tabular-nums">{formatCurrency(entry.amount)}</td>
                   <td className="px-3 py-2">{entry.cash_account?.name ?? '-'}</td>
                   <td className="px-3 py-2">{entry.description ?? '-'}</td>
                 </tr>
@@ -469,19 +468,19 @@ function ListModal({
         <Field label="底價" value={floor_price} onChange={setFloorPrice} type="number" />
         <Field label="上架日期" value={listing_date} onChange={setListingDate} type="date" />
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">銷售備註</label>
+          <label className="mb-1 block text-sm font-medium text-fg-muted">銷售備註</label>
           <textarea
             value={sales_note}
             onChange={(e) => setSalesNote(e.target.value)}
             rows={3}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+            className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
           />
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-error">{error}</p>}
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
         >
           {submitting ? '處理中...' : '確認上架'}
         </button>
@@ -538,19 +537,19 @@ function ReserveModal({
         <Field label="訂金金額" value={deposit_amount} onChange={setDepositAmount} type="number" required />
         <CashAccountField cashAccounts={cashAccounts} value={cash_account_id} onChange={setCashAccountId} />
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">備註</label>
+          <label className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+            className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
           />
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-error">{error}</p>}
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
         >
           {submitting ? '處理中...' : '確認保留'}
         </button>
@@ -593,19 +592,19 @@ function FinalPaymentModal({
         <Field label="尾款金額" value={amount} onChange={setAmount} type="number" required />
         <CashAccountField cashAccounts={cashAccounts} value={cash_account_id} onChange={setCashAccountId} />
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">備註</label>
+          <label className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+            className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
           />
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-error">{error}</p>}
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
         >
           {submitting ? '處理中...' : '確認收款'}
         </button>
@@ -636,11 +635,11 @@ function CloseSaleModal({
     <Modal title="成交結案" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field label="成交日期（預設今天）" value={sold_at} onChange={setSoldAt} type="date" />
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-error">{error}</p>}
         <button
           type="submit"
           disabled={submitting}
-          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
         >
           {submitting ? '處理中...' : '確認結案'}
         </button>
