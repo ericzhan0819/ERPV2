@@ -10,6 +10,7 @@ import { VehicleDetail } from './pages/vehicles/VehicleDetail'
 import { MoneyEntryList } from './pages/money-entries/MoneyEntryList'
 import { MoneyEntryCreate } from './pages/money-entries/MoneyEntryCreate'
 import { CashAccountList } from './pages/cash-accounts/CashAccountList'
+import { UserList } from './pages/users/UserList'
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
           <Route path="/money-entries" element={<MoneyEntryList />} />
           <Route path="/money-entries/create" element={<MoneyEntryCreate />} />
           <Route path="/cash-accounts" element={<CashAccountList />} />
+          <Route path="/users" element={<UserList />} />
         </Route>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Routes>

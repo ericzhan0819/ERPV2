@@ -66,8 +66,8 @@
 - [x] 前端資金帳戶頁
 
 ## 11. User Module
-- [ ] User CRUD + reset-password + disable/enable API
-- [ ] 前端使用者管理頁
+- [x] User CRUD + reset-password + disable/enable API
+- [x] 前端使用者管理頁
 
 ## 12. Print Module
 - [ ] GET /print/intake、/print/closing 資料 API
