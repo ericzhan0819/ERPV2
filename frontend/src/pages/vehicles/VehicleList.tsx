@@ -4,6 +4,7 @@ import { listVehicles } from '../../api/vehicles'
 import type { Vehicle, VehicleListMeta, VehicleStatus } from '../../types/vehicle'
 import { VehicleStatusBadge } from '../../components/VehicleStatusBadge'
 import { useAuth } from '../../hooks/useAuth'
+import { canManageVehicles, canViewFinancials } from '../../utils/permissions'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
@@ -22,7 +23,8 @@ const statusOptions: { value: VehicleStatus | ''; label: string }[] = [
 
 export function VehicleList() {
   const { user } = useAuth()
-  const isSales = user?.role === 'sales'
+  const canManage = canManageVehicles(user?.role)
+  const canViewFinance = canViewFinancials(user?.role)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [meta, setMeta] = useState<VehicleListMeta | null>(null)
   const [search, setSearch] = useState('')
@@ -50,7 +52,7 @@ export function VehicleList() {
           <h1 className="text-xl font-semibold text-fg">車輛管理</h1>
           <p className="mt-1 text-sm text-fg-muted">車輛庫存與銷售狀態總覽</p>
         </div>
-        {!isSales && (
+        {canManage && (
           <Link
             to="/vehicles/create"
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover"
@@ -99,22 +101,22 @@ export function VehicleList() {
               <th className="px-4 py-3 text-left font-medium text-fg-muted">車型</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">年式</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">車牌</th>
-              {!isSales && <th className="px-4 py-3 text-left font-medium text-fg-muted">開價</th>}
-              {!isSales && <th className="px-4 py-3 text-left font-medium text-fg-muted">成交價</th>}
+              {canViewFinance && <th className="px-4 py-3 text-left font-medium text-fg-muted">開價</th>}
+              {canViewFinance && <th className="px-4 py-3 text-left font-medium text-fg-muted">成交價</th>}
               <th className="px-4 py-3 text-left font-medium text-fg-muted">建立日期</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {loading && (
               <tr>
-                <td colSpan={isSales ? 7 : 9} className="px-4 py-6 text-center text-fg-muted">
+                <td colSpan={canViewFinance ? 9 : 7} className="px-4 py-6 text-center text-fg-muted">
                   載入中...
                 </td>
               </tr>
             )}
             {!loading && vehicles.length === 0 && (
               <tr>
-                <td colSpan={isSales ? 7 : 9} className="px-4 py-6 text-center text-fg-muted">
+                <td colSpan={canViewFinance ? 9 : 7} className="px-4 py-6 text-center text-fg-muted">
                   尚無符合條件的車輛
                 </td>
               </tr>
@@ -134,8 +136,8 @@ export function VehicleList() {
                   <td className="px-4 py-3">{vehicle.model}</td>
                   <td className="px-4 py-3">{vehicle.year ?? '-'}</td>
                   <td className="px-4 py-3">{vehicle.license_plate ?? '-'}</td>
-                  {!isSales && <td className="px-4 py-3 tabular-nums">{formatCurrency(vehicle.asking_price)}</td>}
-                  {!isSales && <td className="px-4 py-3 tabular-nums">{formatCurrency(vehicle.sold_price)}</td>}
+                  {canViewFinance && <td className="px-4 py-3 tabular-nums">{formatCurrency(vehicle.asking_price)}</td>}
+                  {canViewFinance && <td className="px-4 py-3 tabular-nums">{formatCurrency(vehicle.sold_price)}</td>}
                   <td className="px-4 py-3">{vehicle.created_at ? vehicle.created_at.slice(0, 10) : '-'}</td>
                 </tr>
               ))}

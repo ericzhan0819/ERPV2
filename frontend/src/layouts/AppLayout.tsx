@@ -14,7 +14,7 @@ const navItems = [
 export function AppLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const visibleNavItems = navItems.filter((item) => !user?.role || item.roles.includes(user.role))
+  const visibleNavItems = navItems.filter((item) => !!user?.role && item.roles.includes(user.role))
 
   async function handleLogout() {
     try {

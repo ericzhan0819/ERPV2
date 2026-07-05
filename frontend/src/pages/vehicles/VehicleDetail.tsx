@@ -10,6 +10,7 @@ import { generateIdempotencyKey } from '../../utils/idempotency'
 import { vehicleStatusLabels } from '../../utils/vehicleStatus'
 import { VehicleStatusBadge } from '../../components/VehicleStatusBadge'
 import { useAuth } from '../../hooks/useAuth'
+import { canManageVehicles, canRunSalesFlow, canViewFinancials } from '../../utils/permissions'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
@@ -130,7 +131,9 @@ type ActiveModal = 'list' | 'reserve' | 'final-payment' | 'close-sale' | null
 
 export function VehicleDetail() {
   const { user } = useAuth()
-  const isSales = user?.role === 'sales'
+  const canViewFinance = canViewFinancials(user?.role)
+  const canManage = canManageVehicles(user?.role)
+  const canSell = canRunSalesFlow(user?.role)
   const { id } = useParams<{ id: string }>()
   const vehicleId = Number(id)
   const [detail, setDetail] = useState<VehicleDetailResponse | null>(null)
@@ -267,7 +270,7 @@ export function VehicleDetail() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {!isSales && (
+          {canManage && (
             <Link
               to={`/vehicles/${vehicleId}/print/intake`}
               target="_blank"
@@ -276,7 +279,7 @@ export function VehicleDetail() {
               列印建檔資料
             </Link>
           )}
-          {!isSales && vehicle.status === 'sold' && (
+          {canManage && vehicle.status === 'sold' && (
             <Link
               to={`/vehicles/${vehicleId}/print/closing`}
               target="_blank"
@@ -299,7 +302,7 @@ export function VehicleDetail() {
       )}
 
       <div className="flex flex-wrap gap-3">
-        {!isSales && vehicle.status === 'preparing' && (
+        {canManage && vehicle.status === 'preparing' && (
           <button
             onClick={() => setActiveModal('list')}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover"
@@ -307,7 +310,7 @@ export function VehicleDetail() {
             整備完成並上架
           </button>
         )}
-        {vehicle.status === 'listed' && (
+        {canSell && vehicle.status === 'listed' && (
           <button
             onClick={() => setActiveModal('reserve')}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover"
@@ -315,7 +318,7 @@ export function VehicleDetail() {
             收訂金並保留
           </button>
         )}
-        {vehicle.status === 'reserved' && (
+        {canSell && vehicle.status === 'reserved' && (
           <>
             <button
               onClick={() => setActiveModal('final-payment')}
@@ -351,13 +354,13 @@ export function VehicleDetail() {
           <InfoRow label="買入日期" value={vehicle.purchase_date ?? '-'} />
           <InfoRow label="買入來源" value={vehicle.purchase_source_type ?? '-'} />
           <InfoRow label="原車主 / 供應商" value={vehicle.seller_name ?? '-'} />
-          {!isSales && <InfoRow label="收購價" value={formatCurrency(vehicle.purchase_price)} />}
+          {canViewFinance && <InfoRow label="收購價" value={formatCurrency(vehicle.purchase_price)} />}
         </Panel>
 
         <Panel title="銷售資料">
-          {!isSales && <InfoRow label="開價" value={formatCurrency(vehicle.asking_price)} />}
-          {!isSales && <InfoRow label="底價" value={formatCurrency(vehicle.floor_price)} />}
-          {!isSales && <InfoRow label="成交價" value={formatCurrency(vehicle.sold_price)} />}
+          {canViewFinance && <InfoRow label="開價" value={formatCurrency(vehicle.asking_price)} />}
+          {canViewFinance && <InfoRow label="底價" value={formatCurrency(vehicle.floor_price)} />}
+          {canViewFinance && <InfoRow label="成交價" value={formatCurrency(vehicle.sold_price)} />}
           <InfoRow label="買方姓名" value={vehicle.buyer_name ?? '-'} />
           <InfoRow label="買方電話" value={vehicle.buyer_phone ?? '-'} />
           <InfoRow label="成交日期" value={vehicle.sold_at ? vehicle.sold_at.slice(0, 10) : '-'} />
@@ -391,15 +394,15 @@ export function VehicleDetail() {
                 <th className="px-3 py-2 text-left font-medium text-fg-muted">日期</th>
                 <th className="px-3 py-2 text-left font-medium text-fg-muted">收支</th>
                 <th className="px-3 py-2 text-left font-medium text-fg-muted">分類</th>
-                {!isSales && <th className="px-3 py-2 text-left font-medium text-fg-muted">金額</th>}
-                {!isSales && <th className="px-3 py-2 text-left font-medium text-fg-muted">資金帳戶</th>}
+                {canViewFinance && <th className="px-3 py-2 text-left font-medium text-fg-muted">金額</th>}
+                {canViewFinance && <th className="px-3 py-2 text-left font-medium text-fg-muted">資金帳戶</th>}
                 <th className="px-3 py-2 text-left font-medium text-fg-muted">說明</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {moneyEntries.length === 0 && (
                 <tr>
-                  <td colSpan={isSales ? 4 : 6} className="px-3 py-4 text-center text-fg-muted">
+                  <td colSpan={canViewFinance ? 6 : 4} className="px-3 py-4 text-center text-fg-muted">
                     尚無收支紀錄
                   </td>
                 </tr>
@@ -409,8 +412,8 @@ export function VehicleDetail() {
                   <td className="px-3 py-2">{entry.entry_date}</td>
                   <td className="px-3 py-2">{entry.direction === 'income' ? '收入' : '支出'}</td>
                   <td className="px-3 py-2">{entry.category}</td>
-                  {!isSales && <td className="px-3 py-2 tabular-nums">{formatCurrency(entry.amount)}</td>}
-                  {!isSales && <td className="px-3 py-2">{entry.cash_account?.name ?? '-'}</td>}
+                  {canViewFinance && <td className="px-3 py-2 tabular-nums">{formatCurrency(entry.amount)}</td>}
+                  {canViewFinance && <td className="px-3 py-2">{entry.cash_account?.name ?? '-'}</td>}
                   <td className="px-3 py-2">{entry.description ?? '-'}</td>
                 </tr>
               ))}
