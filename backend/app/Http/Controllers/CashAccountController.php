@@ -24,6 +24,24 @@ class CashAccountController extends Controller
         return CashAccountResource::collection($this->cashAccountService->listAccounts());
     }
 
+    /**
+     * 供表單選單使用的最小欄位清單（不含 opening_balance/current_balance），
+     * 讓 sales 也能在收訂金 / 收尾款 / 支出登記等流程選擇資金帳戶，
+     * 但不會因此取得資金帳戶餘額。
+     */
+    public function options(): JsonResponse
+    {
+        $data = $this->cashAccountService->listAccounts()
+            ->map(fn (CashAccount $account) => [
+                'id' => $account->id,
+                'name' => $account->name,
+                'type' => $account->type,
+                'is_active' => $account->is_active,
+            ]);
+
+        return response()->json(['data' => $data]);
+    }
+
     public function store(StoreCashAccountRequest $request): CashAccountResource
     {
         $account = $this->cashAccountService->createAccount($request->validated());

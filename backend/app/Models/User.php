@@ -64,4 +64,13 @@ class User extends Authenticatable
     {
         return in_array($this->role, $roles, true);
     }
+
+    /**
+     * 允許看到收購價 / 開價 / 底價 / 成交價 / 毛利 / 收支金額等敏感財務欄位的角色。
+     * 刻意採白名單而非「非 sales」的黑名單：未知或未來新增角色預設看不到財務資料。
+     */
+    public function canViewFinancials(): bool
+    {
+        return $this->hasAnyRole([self::ROLE_ADMIN, self::ROLE_MANAGER]);
+    }
 }

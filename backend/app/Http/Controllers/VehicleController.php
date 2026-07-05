@@ -46,7 +46,7 @@ class VehicleController extends Controller
 
     public function show(Vehicle $vehicle, Request $request): JsonResponse
     {
-        $canSeeFinancials = ! ($request->user()?->isSales() ?? false);
+        $canSeeFinancials = $request->user()?->canViewFinancials() ?? false;
 
         $entries = $vehicle->moneyEntries()
             ->with('cashAccount:id,name,type')

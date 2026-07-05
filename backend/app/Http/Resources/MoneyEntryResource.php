@@ -9,7 +9,7 @@ class MoneyEntryResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $canSeeAmount = ! ($request->user()?->isSales() ?? false);
+        $canSeeAmount = $request->user()?->canViewFinancials() ?? false;
 
         return [
             'id' => $this->id,

@@ -159,4 +159,38 @@ class RoleAccessTest extends TestCase
             $response->assertJsonStructure(['cash_balance', 'monthly_income', 'vehicle_counts', 'monthly_sold_count']);
         }
     }
+
+    /**
+     * `role` is a plain string column (no DB-level enum constraint). An unrecognized
+     * value can reach the database via a legacy row, a future role not yet handled by
+     * the frontend, or manual data repair. Financial visibility must fail closed for
+     * such a row instead of leaking purchase price / gross profit / dashboard amounts.
+     */
+    public function test_unknown_role_cannot_see_financial_fields_or_dashboard_amounts(): void
+    {
+        $unknownRoleUser = User::factory()->create(['is_active' => true, 'role' => 'future_role']);
+        $vehicle = Vehicle::factory()->create(['purchase_price' => 500000]);
+
+        $vehicleResponse = $this->actingAs($unknownRoleUser, 'web')->getJson("/api/vehicles/{$vehicle->id}");
+        $vehicleResponse->assertOk();
+        $vehicleResponse->assertJsonMissingPath('vehicle.purchase_price');
+        $vehicleResponse->assertJsonMissingPath('summary');
+
+        $dashboardResponse = $this->actingAs($unknownRoleUser, 'web')->getJson('/api/dashboard/summary');
+        $dashboardResponse->assertOk();
+        $dashboardResponse->assertJsonMissingPath('cash_balance');
+        $dashboardResponse->assertJsonMissingPath('monthly_income');
+    }
+
+    public function test_sales_can_fetch_cash_account_options_without_balances(): void
+    {
+        $sales = User::factory()->sales()->create(['is_active' => true]);
+        CashAccount::factory()->create(['name' => '現金', 'opening_balance' => 99999]);
+
+        $response = $this->actingAs($sales, 'web')->getJson('/api/cash-accounts/options');
+
+        $response->assertOk();
+        $response->assertJsonMissingPath('data.0.opening_balance');
+        $response->assertJsonStructure(['data' => [['id', 'name', 'type', 'is_active']]]);
+    }
 }

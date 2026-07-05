@@ -62,6 +62,11 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     // 一般收支 CRUD：sales 尚無法操作（第 3 階段審核流程完成前一律 403）
     Route::apiResource('money-entries', MoneyEntryController::class)->middleware('role:admin,manager');
 
+    // 資金帳戶選單（不含餘額欄位）：admin、manager、sales 皆可用於收訂金 / 收尾款 / 支出登記等表單選擇帳戶
+    Route::middleware('role:admin,manager,sales')->group(function () {
+        Route::get('cash-accounts/options', [CashAccountController::class, 'options']);
+    });
+
     Route::middleware('role:admin,manager')->group(function () {
         Route::get('cash-accounts/balances', [CashAccountController::class, 'balances']);
         Route::apiResource('cash-accounts', CashAccountController::class)->only(['index', 'show']);

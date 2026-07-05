@@ -14,7 +14,7 @@ class DashboardController extends Controller
     {
         $summary = $this->dashboardService->summary();
 
-        if ($request->user()?->isSales()) {
+        if (! ($request->user()?->canViewFinancials() ?? false)) {
             $summary = [
                 'vehicle_counts' => $summary['vehicle_counts'],
                 'monthly_sold_count' => $summary['monthly_sold_count'],

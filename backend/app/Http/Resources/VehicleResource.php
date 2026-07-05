@@ -9,7 +9,7 @@ class VehicleResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $canSeeFinancials = ! ($request->user()?->isSales() ?? false);
+        $canSeeFinancials = $request->user()?->canViewFinancials() ?? false;
 
         return [
             'id' => $this->id,

@@ -3,7 +3,7 @@ import type { FormEvent, ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { isAxiosError } from 'axios'
 import { closeSaleVehicle, getVehicle, listVehicleForSale, recordFinalPayment, reserveVehicle } from '../../api/vehicles'
-import { listCashAccounts } from '../../api/cashAccounts'
+import { listCashAccountOptions } from '../../api/cashAccounts'
 import type { VehicleDetailResponse } from '../../types/vehicle'
 import type { CashAccountOption } from '../../types/cashAccount'
 import { generateIdempotencyKey } from '../../utils/idempotency'
@@ -150,7 +150,7 @@ export function VehicleDetail() {
   useEffect(() => {
     if (!id) return
     loadDetail()
-    listCashAccounts()
+    listCashAccountOptions()
       .then(setCashAccounts)
       .catch(() => undefined)
     // eslint-disable-next-line react-hooks/exhaustive-deps
