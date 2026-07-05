@@ -36,12 +36,19 @@ class UserService
      */
     public function createUser(array $data): User
     {
+        $role = $data['role'];
+
         $user = new User([
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
-            'is_admin' => $data['is_admin'] ?? false,
+            'role' => $role,
+            'is_admin' => $role === User::ROLE_ADMIN,
             'is_active' => $data['is_active'] ?? true,
+            'phone' => $data['phone'] ?? null,
+            'job_title' => $data['job_title'] ?? null,
+            'hire_date' => $data['hire_date'] ?? null,
+            'notes' => $data['notes'] ?? null,
         ]);
         $user->save();
 
@@ -56,6 +63,10 @@ class UserService
         $user->fill([
             'name' => $data['name'],
             'email' => $data['email'],
+            'phone' => $data['phone'] ?? null,
+            'job_title' => $data['job_title'] ?? null,
+            'hire_date' => $data['hire_date'] ?? null,
+            'notes' => $data['notes'] ?? null,
         ]);
         $user->save();
 
@@ -76,7 +87,7 @@ class UserService
         return DB::transaction(function () use ($user, $isActive) {
             [$target, $locked] = $this->lockTargetAndActiveAdmins($user);
 
-            if (! $isActive && $target->is_active && $target->is_admin) {
+            if (! $isActive && $target->is_active && $target->isAdmin()) {
                 $this->assertAnotherActiveAdminRemains($locked, $target);
             }
 
@@ -90,25 +101,29 @@ class UserService
     }
 
     /**
-     * 冪等地將使用者設為指定的管理員權限；重複呼叫相同目標狀態不會有額外副作用。
+     * 冪等地將使用者設為指定角色；重複呼叫相同目標角色不會有額外副作用。
+     *
+     * `is_admin` 於過渡期間持續與 `role` 同步（role=admin ⟷ is_admin=true），
+     * 但「是否仍有啟用中的管理員」一律以 role='admin' AND is_active=true 判斷。
      */
-    public function setAdmin(User $actingUser, User $user, bool $isAdmin): User
+    public function setRole(User $actingUser, User $user, string $role): User
     {
-        if ($actingUser->is($user) && ! $isAdmin) {
+        if ($actingUser->is($user) && $role !== User::ROLE_ADMIN) {
             throw ValidationException::withMessages([
-                'is_admin' => ['不可解除自己的管理員權限'],
+                'role' => ['不可解除自己的管理員角色'],
             ]);
         }
 
-        return DB::transaction(function () use ($user, $isAdmin) {
+        return DB::transaction(function () use ($user, $role) {
             [$target, $locked] = $this->lockTargetAndActiveAdmins($user);
 
-            if (! $isAdmin && $target->is_admin && $target->is_active) {
+            if ($role !== User::ROLE_ADMIN && $target->isAdmin() && $target->is_active) {
                 $this->assertAnotherActiveAdminRemains($locked, $target);
             }
 
-            if ($target->is_admin !== $isAdmin) {
-                $target->is_admin = $isAdmin;
+            if ($target->role !== $role) {
+                $target->role = $role;
+                $target->is_admin = $role === User::ROLE_ADMIN;
                 $target->save();
             }
 
@@ -160,7 +175,7 @@ class UserService
 
             [$target, $locked] = $this->lockTargetAndActiveAdmins($user);
 
-            if ($target->is_admin && $target->is_active) {
+            if ($target->isAdmin() && $target->is_active) {
                 $this->assertAnotherActiveAdminRemains($locked, $target);
             }
 
@@ -204,7 +219,7 @@ class UserService
         $candidateIds = User::query()
             ->where('id', $user->id)
             ->orWhere(function ($query) {
-                $query->where('is_admin', true)->where('is_active', true);
+                $query->where('role', User::ROLE_ADMIN)->where('is_active', true);
             })
             ->pluck('id')
             ->push($user->id)
@@ -242,7 +257,7 @@ class UserService
     {
         $remaining = $locked
             ->where('id', '!=', $target->id)
-            ->where('is_admin', true)
+            ->where('role', User::ROLE_ADMIN)
             ->where('is_active', true)
             ->count();
 

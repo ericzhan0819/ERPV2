@@ -8,7 +8,7 @@ const navItems = [
   { to: '/vehicles', label: '車輛', icon: Car },
   { to: '/money-entries', label: '收支', icon: Wallet },
   { to: '/cash-accounts', label: '資金帳戶', icon: Banknote },
-  { to: '/users', label: '使用者', icon: Users },
+  { to: '/users', label: '員工/帳號管理', icon: Users },
 ]
 
 export function AppLayout() {

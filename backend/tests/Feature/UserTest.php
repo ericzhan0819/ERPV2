@@ -17,19 +17,20 @@ class UserTest extends TestCase
 
     public function test_non_admin_cannot_list_users(): void
     {
-        $user = User::factory()->create(['is_active' => true, 'is_admin' => false]);
+        $user = User::factory()->manager()->create(['is_active' => true]);
 
         $this->actingAs($user, 'web')->getJson('/api/users')->assertStatus(403);
     }
 
     public function test_non_admin_cannot_create_user(): void
     {
-        $user = User::factory()->create(['is_active' => true, 'is_admin' => false]);
+        $user = User::factory()->manager()->create(['is_active' => true]);
 
         $this->actingAs($user, 'web')->postJson('/api/users', [
             'name' => '新使用者',
             'email' => 'new-user@example.com',
             'password' => 'password123',
+            'role' => 'manager',
         ])->assertStatus(403);
 
         $this->assertDatabaseMissing('users', ['email' => 'new-user@example.com']);
@@ -37,25 +38,37 @@ class UserTest extends TestCase
 
     public function test_admin_can_create_update_reset_password_change_status_and_role(): void
     {
-        $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
+        $admin = User::factory()->admin()->create(['is_active' => true]);
 
         $createResponse = $this->actingAs($admin, 'web')->postJson('/api/users', [
             'name' => '新使用者',
             'email' => 'new-user@example.com',
             'password' => 'password123',
-            'is_admin' => false,
+            'role' => 'sales',
+            'phone' => '0912345678',
+            'job_title' => '業務專員',
+            'hire_date' => '2026-01-15',
+            'notes' => '備註',
         ])->assertCreated();
 
         $userId = $createResponse->json('data.id');
-        $this->assertDatabaseHas('users', ['id' => $userId, 'email' => 'new-user@example.com', 'is_admin' => false]);
+        $this->assertDatabaseHas('users', [
+            'id' => $userId,
+            'email' => 'new-user@example.com',
+            'role' => 'sales',
+            'is_admin' => false,
+            'phone' => '0912345678',
+            'job_title' => '業務專員',
+        ]);
 
         $this->actingAs($admin, 'web')->putJson("/api/users/{$userId}", [
             'name' => '更新後名稱',
             'email' => 'new-user@example.com',
-        ])->assertOk()->assertJsonPath('data.name', '更新後名稱');
+            'phone' => '0987654321',
+        ])->assertOk()->assertJsonPath('data.name', '更新後名稱')->assertJsonPath('data.phone', '0987654321');
 
-        $this->actingAs($admin, 'web')->patchJson("/api/users/{$userId}/role", ['is_admin' => true])
-            ->assertOk()->assertJsonPath('data.is_admin', true);
+        $this->actingAs($admin, 'web')->patchJson("/api/users/{$userId}/role", ['role' => 'admin'])
+            ->assertOk()->assertJsonPath('data.role', 'admin')->assertJsonPath('data.is_admin', true);
 
         $this->actingAs($admin, 'web')->patchJson("/api/users/{$userId}/status", ['is_active' => false])
             ->assertOk()->assertJsonPath('data.is_active', false);
@@ -67,19 +80,45 @@ class UserTest extends TestCase
         $this->assertTrue(Hash::check('newpassword456', $updatedUser->password));
     }
 
+    public function test_role_created_user_has_synced_is_admin(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+
+        $this->actingAs($admin, 'web')->postJson('/api/users', [
+            'name' => '經理',
+            'email' => 'manager-user@example.com',
+            'password' => 'password123',
+            'role' => 'manager',
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('users', ['email' => 'manager-user@example.com', 'role' => 'manager', 'is_admin' => false]);
+    }
+
+    public function test_create_user_rejects_invalid_role(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+
+        $this->actingAs($admin, 'web')->postJson('/api/users', [
+            'name' => '新使用者',
+            'email' => 'invalid-role@example.com',
+            'password' => 'password123',
+            'role' => 'owner',
+        ])->assertStatus(422)->assertJsonValidationErrors('role');
+    }
+
     public function test_admin_cannot_demote_own_account(): void
     {
-        $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
+        $admin = User::factory()->admin()->create(['is_active' => true]);
 
-        $this->actingAs($admin, 'web')->patchJson("/api/users/{$admin->id}/role", ['is_admin' => false])
-            ->assertStatus(422)->assertJsonValidationErrors('is_admin');
+        $this->actingAs($admin, 'web')->patchJson("/api/users/{$admin->id}/role", ['role' => 'manager'])
+            ->assertStatus(422)->assertJsonValidationErrors('role');
 
-        $this->assertDatabaseHas('users', ['id' => $admin->id, 'is_admin' => true]);
+        $this->assertDatabaseHas('users', ['id' => $admin->id, 'role' => 'admin', 'is_admin' => true]);
     }
 
     public function test_admin_cannot_disable_own_account(): void
     {
-        $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
+        $admin = User::factory()->admin()->create(['is_active' => true]);
 
         $this->actingAs($admin, 'web')->patchJson("/api/users/{$admin->id}/status", ['is_active' => false])
             ->assertStatus(422);
@@ -89,7 +128,7 @@ class UserTest extends TestCase
 
     public function test_admin_cannot_delete_own_account(): void
     {
-        $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
+        $admin = User::factory()->admin()->create(['is_active' => true]);
 
         $this->actingAs($admin, 'web')->deleteJson("/api/users/{$admin->id}")
             ->assertStatus(422);
@@ -99,8 +138,8 @@ class UserTest extends TestCase
 
     public function test_admin_can_delete_user_without_related_records(): void
     {
-        $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
-        $other = User::factory()->create(['is_active' => true, 'is_admin' => false]);
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $other = User::factory()->manager()->create(['is_active' => true]);
 
         $this->actingAs($admin, 'web')->deleteJson("/api/users/{$other->id}")->assertOk();
         $this->assertDatabaseMissing('users', ['id' => $other->id]);
@@ -108,8 +147,8 @@ class UserTest extends TestCase
 
     public function test_admin_cannot_delete_user_with_related_vehicle_records(): void
     {
-        $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
-        $other = User::factory()->create(['is_active' => true, 'is_admin' => false]);
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $other = User::factory()->manager()->create(['is_active' => true]);
         Vehicle::factory()->create(['created_by' => $other->id]);
 
         $this->actingAs($admin, 'web')->deleteJson("/api/users/{$other->id}")
@@ -128,18 +167,18 @@ class UserTest extends TestCase
     // instead, as defense-in-depth independent of the caller's identity.
     public function test_service_prevents_demoting_the_last_active_admin(): void
     {
-        $onlyAdmin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
-        $actor = User::factory()->create(['is_active' => true, 'is_admin' => false]);
+        $onlyAdmin = User::factory()->admin()->create(['is_active' => true]);
+        $actor = User::factory()->manager()->create(['is_active' => true]);
 
         $this->expectException(ValidationException::class);
 
-        app(UserService::class)->setAdmin($actor, $onlyAdmin, false);
+        app(UserService::class)->setRole($actor, $onlyAdmin, 'manager');
     }
 
     public function test_service_prevents_disabling_the_last_active_admin(): void
     {
-        $onlyAdmin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
-        $actor = User::factory()->create(['is_active' => true, 'is_admin' => false]);
+        $onlyAdmin = User::factory()->admin()->create(['is_active' => true]);
+        $actor = User::factory()->manager()->create(['is_active' => true]);
 
         $this->expectException(ValidationException::class);
 
@@ -148,8 +187,8 @@ class UserTest extends TestCase
 
     public function test_service_prevents_deleting_the_last_active_admin(): void
     {
-        $onlyAdmin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
-        $actor = User::factory()->create(['is_active' => true, 'is_admin' => false]);
+        $onlyAdmin = User::factory()->admin()->create(['is_active' => true]);
+        $actor = User::factory()->manager()->create(['is_active' => true]);
 
         $this->expectException(ValidationException::class);
 
@@ -158,20 +197,32 @@ class UserTest extends TestCase
 
     public function test_service_allows_demoting_an_admin_when_another_active_admin_remains(): void
     {
-        $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
-        $other = User::factory()->create(['is_active' => true, 'is_admin' => true]);
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $other = User::factory()->admin()->create(['is_active' => true]);
 
-        app(UserService::class)->setAdmin($admin, $other, false);
+        app(UserService::class)->setRole($admin, $other, 'manager');
 
         $other->refresh();
+        $this->assertSame('manager', $other->role);
         $this->assertFalse($other->is_admin);
+    }
+
+    public function test_setrole_is_idempotent_for_same_target_role(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $manager = User::factory()->manager()->create(['is_active' => true]);
+
+        $result = app(UserService::class)->setRole($admin, $manager, 'manager');
+
+        $this->assertSame('manager', $result->role);
+        $this->assertFalse($result->is_admin);
     }
 
     #[DataProvider('presentIsActiveValueProvider')]
     public function test_generic_update_rejects_any_present_is_active_value(mixed $isActiveValue): void
     {
-        $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
-        $other = User::factory()->create(['is_active' => true, 'is_admin' => false, 'name' => '原始名稱']);
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $other = User::factory()->manager()->create(['is_active' => true, 'name' => '原始名稱']);
 
         $this->actingAs($admin, 'web')->putJson("/api/users/{$other->id}", [
             'name' => '被忽略的名稱',
@@ -196,8 +247,8 @@ class UserTest extends TestCase
     #[DataProvider('presentIsAdminValueProvider')]
     public function test_generic_update_rejects_any_present_is_admin_value(mixed $isAdminValue): void
     {
-        $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
-        $other = User::factory()->create(['is_active' => true, 'is_admin' => false, 'name' => '原始名稱']);
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $other = User::factory()->manager()->create(['is_active' => true, 'name' => '原始名稱']);
 
         $this->actingAs($admin, 'web')->putJson("/api/users/{$other->id}", [
             'name' => '被忽略的名稱',
@@ -213,6 +264,31 @@ class UserTest extends TestCase
         return [
             'boolean false' => [false],
             'boolean true' => [true],
+            'null' => [null],
+            'empty string' => [''],
+            'empty array' => [[]],
+        ];
+    }
+
+    #[DataProvider('presentRoleValueProvider')]
+    public function test_generic_update_rejects_any_present_role_value(mixed $roleValue): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $other = User::factory()->manager()->create(['is_active' => true, 'name' => '原始名稱']);
+
+        $this->actingAs($admin, 'web')->putJson("/api/users/{$other->id}", [
+            'name' => '被忽略的名稱',
+            'email' => $other->email,
+            'role' => $roleValue,
+        ])->assertStatus(422)->assertJsonValidationErrors('role');
+
+        $this->assertDatabaseHas('users', ['id' => $other->id, 'name' => '原始名稱', 'role' => 'manager']);
+    }
+
+    public static function presentRoleValueProvider(): array
+    {
+        return [
+            'string' => ['admin'],
             'null' => [null],
             'empty string' => [''],
             'empty array' => [[]],

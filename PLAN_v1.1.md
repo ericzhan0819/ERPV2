@@ -5,9 +5,9 @@
 ---
 
 ## 0. 前置準備
-- [ ] 閱讀 `企劃書_v1.1.md` 全文並對齊範圍
-- [ ] 確認角色矩陣（§3.4）與審核流程規則（§8）無疑義
-- [ ] 確認實作順序（§14）與本清單對應
+- [x] 閱讀 `企劃書_v1.1.md` 全文並對齊範圍
+- [x] 確認角色矩陣（§3.4）與審核流程規則（§8）無疑義
+- [x] 確認實作順序（§14）與本清單對應
 
 ---
 
@@ -19,29 +19,29 @@
 - 最後一位 active admin 改用「`role='admin' AND is_active=true`」判斷，防止無 active admin 狀態
 
 ### Schema
-- [ ] Migration：users 新增 `role`（string, NOT NULL, in:'admin','manager','sales'）
-- [ ] Migration：回填既有 users：`is_admin=true` → `role='admin'`，`is_admin=false` → `role='manager'`
-- [ ] Migration：users 新增 `phone`/`job_title`/`hire_date`/`notes`（nullable）
+- [x] Migration：users 新增 `role`（string, NOT NULL, in:'admin','manager','sales'）
+- [x] Migration：回填既有 users：`is_admin=true` → `role='admin'`，`is_admin=false` → `role='manager'`
+- [x] Migration：users 新增 `phone`/`job_title`/`hire_date`/`notes`（nullable）
 
 ### Model / Service / API
-- [ ] User Model：fillable + casts + `isAdmin()`/`isManager()`/`isSales()`/`hasAnyRole()`
-- [ ] UserService：`setRole($user, $role)` 改變 role **同時更新 is_admin**；防止自己降級造成無 active admin
-- [ ] StoreUserRequest/UpdateUserRequest/UpdateUserRoleRequest：驗證 role
-- [ ] UserResource：輸出新欄位
-- [ ] UserController：`updateRole()` 呼叫 `setRole()`
+- [x] User Model：fillable + casts + `isAdmin()`/`isManager()`/`isSales()`/`hasAnyRole()`
+- [x] UserService：`setRole($user, $role)` 改變 role **同時更新 is_admin**；防止自己降級造成無 active admin
+- [x] StoreUserRequest/UpdateUserRequest/UpdateUserRoleRequest：驗證 role
+- [x] UserResource：輸出新欄位
+- [x] UserController：`updateRole()` 呼叫 `setRole()`
 
 ### 前端
-- [ ] 頁面改名為「員工/帳號管理」
-- [ ] 新增 phone/job_title/hire_date/notes 欄位
-- [ ] 角色為固定 dropdown（admin/manager/sales）
-- [ ] 非 admin 無法進入用戶管理頁
+- [x] 頁面改名為「員工/帳號管理」
+- [x] 新增 phone/job_title/hire_date/notes 欄位
+- [x] 角色為固定 dropdown（admin/manager/sales）
+- [x] 非 admin 無法進入用戶管理頁
 
 ### 測試
-- [ ] role 建立後 is_admin 正確同步（`='admin'` → `true`，其他 → `false`）
-- [ ] 既有 is_admin 回填正確
-- [ ] 最後一位 active admin 不可被降級或停用
-- [ ] admin 無法把自己降級
-- [ ] manager/sales 呼叫 `/api/users` 回 403
+- [x] role 建立後 is_admin 正確同步（`='admin'` → `true`，其他 → `false`）
+- [x] 既有 is_admin 回填正確
+- [x] 最後一位 active admin 不可被降級或停用
+- [x] admin 無法把自己降級
+- [x] manager/sales 呼叫 `/api/users` 回 403
 
 ---
 

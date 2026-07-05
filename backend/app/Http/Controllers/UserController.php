@@ -53,7 +53,7 @@ class UserController extends Controller
 
     public function updateRole(UpdateUserRoleRequest $request, User $user): UserResource
     {
-        $user = $this->userService->setAdmin($request->user(), $user, $request->boolean('is_admin'));
+        $user = $this->userService->setRole($request->user(), $user, $request->validated('role'));
 
         return new UserResource($user);
     }

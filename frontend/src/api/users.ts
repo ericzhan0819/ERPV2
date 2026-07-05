@@ -1,5 +1,5 @@
 import { apiClient } from './client'
-import type { User, UserPayload, UserUpdatePayload } from '../types/user'
+import type { User, UserPayload, UserRole, UserUpdatePayload } from '../types/user'
 
 export async function listUsers(): Promise<User[]> {
   const { data } = await apiClient.get<{ data: User[] }>('/api/users')
@@ -25,8 +25,8 @@ export async function setUserActive(id: number, isActive: boolean): Promise<User
   return data.data
 }
 
-export async function setUserAdmin(id: number, isAdmin: boolean): Promise<User> {
-  const { data } = await apiClient.patch<{ data: User }>(`/api/users/${id}/role`, { is_admin: isAdmin })
+export async function setUserRole(id: number, role: UserRole): Promise<User> {
+  const { data } = await apiClient.patch<{ data: User }>(`/api/users/${id}/role`, { role })
   return data.data
 }
 

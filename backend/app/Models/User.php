@@ -11,12 +11,20 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password', 'is_admin', 'is_active'])]
+#[Fillable(['name', 'email', 'password', 'is_admin', 'is_active', 'role', 'phone', 'job_title', 'hire_date', 'notes'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
+
+    public const ROLE_ADMIN = 'admin';
+
+    public const ROLE_MANAGER = 'manager';
+
+    public const ROLE_SALES = 'sales';
+
+    public const ROLES = [self::ROLE_ADMIN, self::ROLE_MANAGER, self::ROLE_SALES];
 
     /**
      * Get the attributes that should be cast.
@@ -30,6 +38,30 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_admin' => 'boolean',
             'is_active' => 'boolean',
+            'hire_date' => 'date',
         ];
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === self::ROLE_ADMIN;
+    }
+
+    public function isManager(): bool
+    {
+        return $this->role === self::ROLE_MANAGER;
+    }
+
+    public function isSales(): bool
+    {
+        return $this->role === self::ROLE_SALES;
+    }
+
+    /**
+     * @param  string[]  $roles
+     */
+    public function hasAnyRole(array $roles): bool
+    {
+        return in_array($this->role, $roles, true);
     }
 }

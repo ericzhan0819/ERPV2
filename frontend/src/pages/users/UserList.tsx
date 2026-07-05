@@ -1,29 +1,56 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { isAxiosError } from 'axios'
-import { createUser, deleteUser, listUsers, resetUserPassword, setUserActive, setUserAdmin, updateUser } from '../../api/users'
+import { createUser, deleteUser, listUsers, resetUserPassword, setUserActive, setUserRole, updateUser } from '../../api/users'
 import { useAuth } from '../../hooks/useAuth'
 import { ActiveStatusBadge } from '../../components/ActiveStatusBadge'
-import type { User, UserPayload, UserUpdatePayload } from '../../types/user'
+import type { User, UserPayload, UserRole, UserUpdatePayload } from '../../types/user'
+
+const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
+  { value: 'admin', label: '管理員' },
+  { value: 'manager', label: '經理' },
+  { value: 'sales', label: '業務' },
+]
+
+function roleLabel(role: UserRole): string {
+  return ROLE_OPTIONS.find((option) => option.value === role)?.label ?? role
+}
 
 interface CreateFormState {
   name: string
   email: string
   password: string
-  is_admin: boolean
+  role: UserRole
+  phone: string
+  job_title: string
+  hire_date: string
+  notes: string
 }
 
 interface EditFormState {
   name: string
   email: string
+  phone: string
+  job_title: string
+  hire_date: string
+  notes: string
 }
 
-const emptyCreateForm: CreateFormState = { name: '', email: '', password: '', is_admin: false }
-const emptyEditForm: EditFormState = { name: '', email: '' }
+const emptyCreateForm: CreateFormState = {
+  name: '',
+  email: '',
+  password: '',
+  role: 'sales',
+  phone: '',
+  job_title: '',
+  hire_date: '',
+  notes: '',
+}
+const emptyEditForm: EditFormState = { name: '', email: '', phone: '', job_title: '', hire_date: '', notes: '' }
 
 export function UserList() {
   const { user: currentUser } = useAuth()
-  const isAdmin = currentUser?.is_admin ?? false
+  const isAdmin = currentUser?.role === 'admin'
 
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
@@ -89,7 +116,11 @@ export function UserList() {
       name: createForm.name.trim(),
       email: createForm.email.trim(),
       password: createForm.password,
-      is_admin: createForm.is_admin,
+      role: createForm.role,
+      phone: createForm.phone.trim() || null,
+      job_title: createForm.job_title.trim() || null,
+      hire_date: createForm.hire_date || null,
+      notes: createForm.notes.trim() || null,
     }
 
     setSubmitting(true)
@@ -108,7 +139,14 @@ export function UserList() {
   function startEdit(user: User) {
     setEditingId(user.id)
     setEditError(null)
-    setEditForm({ name: user.name, email: user.email })
+    setEditForm({
+      name: user.name,
+      email: user.email,
+      phone: user.phone ?? '',
+      job_title: user.job_title ?? '',
+      hire_date: user.hire_date ?? '',
+      notes: user.notes ?? '',
+    })
   }
 
   async function handleEditSubmit(event: FormEvent, id: number) {
@@ -127,6 +165,10 @@ export function UserList() {
     const payload: UserUpdatePayload = {
       name: editForm.name.trim(),
       email: editForm.email.trim(),
+      phone: editForm.phone.trim() || null,
+      job_title: editForm.job_title.trim() || null,
+      hire_date: editForm.hire_date || null,
+      notes: editForm.notes.trim() || null,
     }
 
     setSubmitting(true)
@@ -164,13 +206,16 @@ export function UserList() {
     }
   }
 
-  async function toggleAdmin(user: User) {
+  async function handleRoleChange(user: User, role: UserRole) {
+    if (role === user.role) {
+      return
+    }
     setError(null)
     try {
-      await setUserAdmin(user.id, !user.is_admin)
+      await setUserRole(user.id, role)
       loadUsers()
     } catch (err) {
-      setError(extractErrorMessage(err, '更新管理員權限失敗'))
+      setError(extractErrorMessage(err, '更新角色失敗'))
     }
   }
 
@@ -205,7 +250,7 @@ export function UserList() {
     return (
       <div className="flex flex-col gap-6">
         <div>
-          <h1 className="text-xl font-semibold text-fg">使用者管理</h1>
+          <h1 className="text-xl font-semibold text-fg">員工/帳號管理</h1>
           <p className="mt-1 text-sm text-fg-muted">僅限管理員操作</p>
         </div>
       </div>
@@ -216,8 +261,8 @@ export function UserList() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-fg">使用者管理</h1>
-          <p className="mt-1 text-sm text-fg-muted">建立與管理系統使用者帳號</p>
+          <h1 className="text-xl font-semibold text-fg">員工/帳號管理</h1>
+          <p className="mt-1 text-sm text-fg-muted">建立與管理員工帳號、角色與基本資料</p>
         </div>
         <button
           onClick={() => {
@@ -227,7 +272,7 @@ export function UserList() {
           }}
           className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover"
         >
-          {creating ? '取消新增' : '新增使用者'}
+          {creating ? '取消新增' : '新增員工'}
         </button>
       </div>
 
@@ -235,7 +280,7 @@ export function UserList() {
         <form onSubmit={handleCreateSubmit} className="max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">姓名</label>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">姓名 *</label>
               <input
                 type="text"
                 required
@@ -245,7 +290,7 @@ export function UserList() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">電子郵件</label>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">電子郵件 *</label>
               <input
                 type="email"
                 required
@@ -255,7 +300,7 @@ export function UserList() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">密碼</label>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">密碼 *</label>
               <input
                 type="password"
                 required
@@ -265,15 +310,55 @@ export function UserList() {
                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
             </div>
-            <div className="flex items-end">
-              <label className="flex items-center gap-2 text-sm text-fg-muted">
-                <input
-                  type="checkbox"
-                  checked={createForm.is_admin}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, is_admin: e.target.checked }))}
-                />
-                管理員
-              </label>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">角色 *</label>
+              <select
+                value={createForm.role}
+                onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value as UserRole }))}
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+              >
+                {ROLE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">電話</label>
+              <input
+                type="text"
+                value={createForm.phone}
+                onChange={(e) => setCreateForm((f) => ({ ...f, phone: e.target.value }))}
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">職稱</label>
+              <input
+                type="text"
+                value={createForm.job_title}
+                onChange={(e) => setCreateForm((f) => ({ ...f, job_title: e.target.value }))}
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">到職日</label>
+              <input
+                type="date"
+                value={createForm.hire_date}
+                onChange={(e) => setCreateForm((f) => ({ ...f, hire_date: e.target.value }))}
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
+              <textarea
+                value={createForm.notes}
+                onChange={(e) => setCreateForm((f) => ({ ...f, notes: e.target.value }))}
+                rows={2}
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+              />
             </div>
           </div>
 
@@ -285,7 +370,7 @@ export function UserList() {
               disabled={submitting}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
             >
-              {submitting ? '建立中...' : '建立使用者'}
+              {submitting ? '建立中...' : '建立員工'}
             </button>
           </div>
         </form>
@@ -299,6 +384,7 @@ export function UserList() {
             <tr>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">姓名</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">電子郵件</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">職稱</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">角色</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">狀態</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">操作</th>
@@ -307,14 +393,14 @@ export function UserList() {
           <tbody className="divide-y divide-border">
             {loading && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-fg-muted">
+                <td colSpan={6} className="px-4 py-6 text-center text-fg-muted">
                   載入中...
                 </td>
               </tr>
             )}
             {!loading && users.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-fg-muted">
+                <td colSpan={6} className="px-4 py-6 text-center text-fg-muted">
                   尚無使用者
                 </td>
               </tr>
@@ -326,11 +412,11 @@ export function UserList() {
                 if (editingId === user.id) {
                   return (
                     <tr key={user.id} className="bg-surface-2">
-                      <td colSpan={5} className="px-4 py-4">
+                      <td colSpan={6} className="px-4 py-4">
                         <form onSubmit={(e) => handleEditSubmit(e, user.id)} className="flex flex-col gap-4">
                           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
-                              <label className="mb-1 block text-sm font-medium text-fg-muted">姓名</label>
+                              <label className="mb-1 block text-sm font-medium text-fg-muted">姓名 *</label>
                               <input
                                 type="text"
                                 required
@@ -340,7 +426,7 @@ export function UserList() {
                               />
                             </div>
                             <div>
-                              <label className="mb-1 block text-sm font-medium text-fg-muted">電子郵件</label>
+                              <label className="mb-1 block text-sm font-medium text-fg-muted">電子郵件 *</label>
                               <input
                                 type="email"
                                 required
@@ -349,9 +435,45 @@ export function UserList() {
                                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                               />
                             </div>
+                            <div>
+                              <label className="mb-1 block text-sm font-medium text-fg-muted">電話</label>
+                              <input
+                                type="text"
+                                value={editForm.phone}
+                                onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
+                                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-sm font-medium text-fg-muted">職稱</label>
+                              <input
+                                type="text"
+                                value={editForm.job_title}
+                                onChange={(e) => setEditForm((f) => ({ ...f, job_title: e.target.value }))}
+                                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-sm font-medium text-fg-muted">到職日</label>
+                              <input
+                                type="date"
+                                value={editForm.hire_date}
+                                onChange={(e) => setEditForm((f) => ({ ...f, hire_date: e.target.value }))}
+                                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+                              />
+                            </div>
+                            <div className="sm:col-span-2">
+                              <label className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
+                              <textarea
+                                value={editForm.notes}
+                                onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
+                                rows={2}
+                                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+                              />
+                            </div>
                           </div>
                           <p className="text-xs text-fg-muted">
-                            管理員權限請使用列表中的「設為管理員／解除管理員」按鈕；啟用／停用請使用「停用／啟用」按鈕；密碼請使用「重設密碼」。
+                            角色請使用列表中的角色下拉選單；啟用／停用請使用「停用／啟用」按鈕；密碼請使用「重設密碼」。
                           </p>
 
                           {editError && <p className="text-sm text-error">{editError}</p>}
@@ -381,7 +503,7 @@ export function UserList() {
                 if (resettingId === user.id) {
                   return (
                     <tr key={user.id} className="bg-surface-2">
-                      <td colSpan={5} className="px-4 py-4">
+                      <td colSpan={6} className="px-4 py-4">
                         <form onSubmit={(e) => handleResetSubmit(e, user.id)} className="flex flex-col gap-4">
                           <div className="max-w-sm">
                             <label className="mb-1 block text-sm font-medium text-fg-muted">{user.name} 的新密碼</label>
@@ -423,7 +545,22 @@ export function UserList() {
                   <tr key={user.id} className="hover:bg-surface-2">
                     <td className="px-4 py-3 font-medium text-fg">{user.name}</td>
                     <td className="px-4 py-3">{user.email}</td>
-                    <td className="px-4 py-3">{user.is_admin ? '管理員' : '一般使用者'}</td>
+                    <td className="px-4 py-3">{user.job_title || '-'}</td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={user.role}
+                        disabled={isSelf}
+                        onChange={(e) => handleRoleChange(user, e.target.value as UserRole)}
+                        title={isSelf ? '無法變更自己的角色' : roleLabel(user.role)}
+                        className="rounded-lg border border-border-strong px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {ROLE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
                     <td className="px-4 py-3">
                       <ActiveStatusBadge active={user.is_active} />
                     </td>
@@ -434,13 +571,6 @@ export function UserList() {
                         </button>
                         <button onClick={() => startReset(user)} className="text-sm font-medium text-fg-muted hover:underline">
                           重設密碼
-                        </button>
-                        <button
-                          onClick={() => toggleAdmin(user)}
-                          disabled={isSelf && user.is_admin}
-                          className="text-sm font-medium text-fg-muted hover:underline disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          {user.is_admin ? '解除管理員' : '設為管理員'}
                         </button>
                         <button
                           onClick={() => toggleActive(user)}

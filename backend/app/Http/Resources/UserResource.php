@@ -13,8 +13,13 @@ class UserResource extends JsonResource
             'id' => $this->id,
             'name' => $this->name,
             'email' => $this->email,
+            'role' => $this->role,
             'is_admin' => $this->is_admin,
             'is_active' => $this->is_active,
+            'phone' => $this->phone,
+            'job_title' => $this->job_title,
+            'hire_date' => $this->hire_date?->toDateString(),
+            'notes' => $this->notes,
         ];
     }
 }

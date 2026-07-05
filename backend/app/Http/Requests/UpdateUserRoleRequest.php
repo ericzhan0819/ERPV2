@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateUserRoleRequest extends FormRequest
 {
@@ -14,7 +16,7 @@ class UpdateUserRoleRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'is_admin' => ['required', 'boolean'],
+            'role' => ['required', Rule::in(User::ROLES)],
         ];
     }
 }
