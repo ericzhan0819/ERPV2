@@ -123,7 +123,7 @@ php artisan test
 ```
 APP_URL=http://localhost:8000
 FRONTEND_URL=http://localhost:5173
-SANCTUM_STATEFUL_DOMAINS=localhost:5173,127.0.0.1:5173
+SANCTUM_STATEFUL_DOMAINS=localhost,localhost:5173,127.0.0.1,127.0.0.1:5173
 SESSION_DOMAIN=null
 ```
 
@@ -132,3 +132,29 @@ SESSION_DOMAIN=null
 LAN 與 tunnel 兩種網址），可在 `.env` 的 `FRONTEND_URL` 用逗號分隔多個網址即可，
 不需要修改 `config/cors.php` 邏輯。因為 `supports_credentials=true`，
 `allowed_origins` 不可設為 `*`。
+
+### 正式上線環境變數：前後端分 subdomain
+
+正式部署採前後端分 subdomain 架構（例如前端 `https://erp.example.com`、
+後端 API `https://api.erp.example.com`）時，`local` / `LAN` / `Tailscale` /
+`production` 四種情境的設定不可混用同一組，請依實際環境分別建立 `.env`。
+
+後端 `.env` 必填：
+
+- `APP_URL`：後端自身網址，例如 `https://api.erp.example.com`
+- `FRONTEND_URL`：前端網址，例如 `https://erp.example.com`
+- `SANCTUM_STATEFUL_DOMAINS`：前端網域（不含協定），例如 `erp.example.com`
+- `SESSION_DOMAIN`：cookie 共用網域，例如 `.erp.example.com`
+- `SESSION_SECURE_COOKIE`：正式環境需為 `true`（僅限 HTTPS 傳送 cookie）
+- `SESSION_SAME_SITE`：例如 `lax`
+
+前端 `.env` 必填：
+
+- `VITE_API_BASE_URL`：後端 API 網址，例如 `https://api.erp.example.com`
+
+完整範例請參考 `backend/.env.example`、`frontend/.env.example` 內的正式上線註解區塊。
+修改 `.env` 後需執行：
+
+```bash
+php artisan config:clear
+```
