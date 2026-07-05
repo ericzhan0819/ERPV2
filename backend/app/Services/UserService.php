@@ -121,9 +121,17 @@ class UserService
                 $this->assertAnotherActiveAdminRemains($locked, $target);
             }
 
-            if ($target->role !== $role) {
+            $expectedIsAdmin = $role === User::ROLE_ADMIN;
+
+            // Always reconcile is_admin against the target role, even when role
+            // itself is unchanged: a row written by older code (or otherwise left
+            // desynced) could have role='manager' with a stale is_admin=true, and
+            // EnsureUserIsAdmin middleware still authorizes on is_admin. Gating the
+            // write on "role changed" alone would silently leave that stale grant
+            // in place forever on a no-op role reassignment.
+            if ($target->role !== $role || $target->is_admin !== $expectedIsAdmin) {
                 $target->role = $role;
-                $target->is_admin = $role === User::ROLE_ADMIN;
+                $target->is_admin = $expectedIsAdmin;
                 $target->save();
             }
 

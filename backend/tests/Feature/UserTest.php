@@ -218,6 +218,25 @@ class UserTest extends TestCase
         $this->assertFalse($result->is_admin);
     }
 
+    // Regression test for a Codex adversarial-review finding: a row can have
+    // role='manager' with a stale is_admin=true (e.g. written by older code,
+    // or otherwise desynced), which would still pass EnsureUserIsAdmin. Since
+    // the requested role here already equals the current role, a naive
+    // "only write when role changes" guard would treat this as a no-op and
+    // leave the stale admin grant in place. setRole() must reconcile is_admin
+    // whenever it doesn't match the target role, even without a role change.
+    public function test_setrole_reconciles_stale_is_admin_even_without_role_change(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $desynced = User::factory()->manager()->create(['is_active' => true, 'is_admin' => true]);
+
+        $result = app(UserService::class)->setRole($admin, $desynced, 'manager');
+
+        $this->assertSame('manager', $result->role);
+        $this->assertFalse($result->is_admin);
+        $this->assertDatabaseHas('users', ['id' => $desynced->id, 'role' => 'manager', 'is_admin' => false]);
+    }
+
     #[DataProvider('presentIsActiveValueProvider')]
     public function test_generic_update_rejects_any_present_is_active_value(mixed $isActiveValue): void
     {
