@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Services\UserService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -32,7 +34,7 @@ class UserTest extends TestCase
         $this->assertDatabaseMissing('users', ['email' => 'new-user@example.com']);
     }
 
-    public function test_admin_can_create_update_reset_password_and_change_status(): void
+    public function test_admin_can_create_update_reset_password_change_status_and_role(): void
     {
         $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
 
@@ -49,8 +51,10 @@ class UserTest extends TestCase
         $this->actingAs($admin, 'web')->putJson("/api/users/{$userId}", [
             'name' => '更新後名稱',
             'email' => 'new-user@example.com',
-            'is_admin' => true,
-        ])->assertOk()->assertJsonPath('data.name', '更新後名稱')->assertJsonPath('data.is_admin', true);
+        ])->assertOk()->assertJsonPath('data.name', '更新後名稱');
+
+        $this->actingAs($admin, 'web')->patchJson("/api/users/{$userId}/role", ['is_admin' => true])
+            ->assertOk()->assertJsonPath('data.is_admin', true);
 
         $this->actingAs($admin, 'web')->patchJson("/api/users/{$userId}/status", ['is_active' => false])
             ->assertOk()->assertJsonPath('data.is_active', false);
@@ -66,11 +70,8 @@ class UserTest extends TestCase
     {
         $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
 
-        $this->actingAs($admin, 'web')->putJson("/api/users/{$admin->id}", [
-            'name' => $admin->name,
-            'email' => $admin->email,
-            'is_admin' => false,
-        ])->assertStatus(422)->assertJsonValidationErrors('is_admin');
+        $this->actingAs($admin, 'web')->patchJson("/api/users/{$admin->id}/role", ['is_admin' => false])
+            ->assertStatus(422)->assertJsonValidationErrors('is_admin');
 
         $this->assertDatabaseHas('users', ['id' => $admin->id, 'is_admin' => true]);
     }
@@ -104,6 +105,55 @@ class UserTest extends TestCase
         $this->assertDatabaseMissing('users', ['id' => $other->id]);
     }
 
+    // The HTTP layer can never manufacture "actingUser demotes someone else
+    // and it's the last admin" sequentially, since a non-self actingUser who
+    // passes the `admin` middleware is themselves an active admin and is
+    // always counted as the one remaining. This invariant only matters when
+    // two concurrent requests race each other (e.g. two admins demoting one
+    // another at the same time), which SQLite's in-memory test connection
+    // cannot simulate. So it's exercised directly at the service layer
+    // instead, as defense-in-depth independent of the caller's identity.
+    public function test_service_prevents_demoting_the_last_active_admin(): void
+    {
+        $onlyAdmin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
+        $actor = User::factory()->create(['is_active' => true, 'is_admin' => false]);
+
+        $this->expectException(ValidationException::class);
+
+        app(UserService::class)->setAdmin($actor, $onlyAdmin, false);
+    }
+
+    public function test_service_prevents_disabling_the_last_active_admin(): void
+    {
+        $onlyAdmin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
+        $actor = User::factory()->create(['is_active' => true, 'is_admin' => false]);
+
+        $this->expectException(ValidationException::class);
+
+        app(UserService::class)->setActive($actor, $onlyAdmin, false);
+    }
+
+    public function test_service_prevents_deleting_the_last_active_admin(): void
+    {
+        $onlyAdmin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
+        $actor = User::factory()->create(['is_active' => true, 'is_admin' => false]);
+
+        $this->expectException(ValidationException::class);
+
+        app(UserService::class)->deleteUser($actor, $onlyAdmin);
+    }
+
+    public function test_service_allows_demoting_an_admin_when_another_active_admin_remains(): void
+    {
+        $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
+        $other = User::factory()->create(['is_active' => true, 'is_admin' => true]);
+
+        app(UserService::class)->setAdmin($admin, $other, false);
+
+        $other->refresh();
+        $this->assertFalse($other->is_admin);
+    }
+
     #[DataProvider('presentIsActiveValueProvider')]
     public function test_generic_update_rejects_any_present_is_active_value(mixed $isActiveValue): void
     {
@@ -113,7 +163,6 @@ class UserTest extends TestCase
         $this->actingAs($admin, 'web')->putJson("/api/users/{$other->id}", [
             'name' => '被忽略的名稱',
             'email' => $other->email,
-            'is_admin' => false,
             'is_active' => $isActiveValue,
         ])->assertStatus(422)->assertJsonValidationErrors('is_active');
 
@@ -121,6 +170,32 @@ class UserTest extends TestCase
     }
 
     public static function presentIsActiveValueProvider(): array
+    {
+        return [
+            'boolean false' => [false],
+            'boolean true' => [true],
+            'null' => [null],
+            'empty string' => [''],
+            'empty array' => [[]],
+        ];
+    }
+
+    #[DataProvider('presentIsAdminValueProvider')]
+    public function test_generic_update_rejects_any_present_is_admin_value(mixed $isAdminValue): void
+    {
+        $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
+        $other = User::factory()->create(['is_active' => true, 'is_admin' => false, 'name' => '原始名稱']);
+
+        $this->actingAs($admin, 'web')->putJson("/api/users/{$other->id}", [
+            'name' => '被忽略的名稱',
+            'email' => $other->email,
+            'is_admin' => $isAdminValue,
+        ])->assertStatus(422)->assertJsonValidationErrors('is_admin');
+
+        $this->assertDatabaseHas('users', ['id' => $other->id, 'name' => '原始名稱', 'is_admin' => false]);
+    }
+
+    public static function presentIsAdminValueProvider(): array
     {
         return [
             'boolean false' => [false],

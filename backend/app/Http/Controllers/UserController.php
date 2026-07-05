@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ResetUserPasswordRequest;
 use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
+use App\Http\Requests\UpdateUserRoleRequest;
 use App\Http\Requests\UpdateUserStatusRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
@@ -38,7 +39,7 @@ class UserController extends Controller
 
     public function update(UpdateUserRequest $request, User $user): UserResource
     {
-        $user = $this->userService->updateUser($request->user(), $user, $request->validated());
+        $user = $this->userService->updateUser($user, $request->validated());
 
         return new UserResource($user);
     }
@@ -46,6 +47,13 @@ class UserController extends Controller
     public function updateStatus(UpdateUserStatusRequest $request, User $user): UserResource
     {
         $user = $this->userService->setActive($request->user(), $user, $request->boolean('is_active'));
+
+        return new UserResource($user);
+    }
+
+    public function updateRole(UpdateUserRoleRequest $request, User $user): UserResource
+    {
+        $user = $this->userService->setAdmin($request->user(), $user, $request->boolean('is_admin'));
 
         return new UserResource($user);
     }

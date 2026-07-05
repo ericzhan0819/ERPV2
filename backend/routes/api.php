@@ -43,6 +43,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
 
         Route::apiResource('users', UserController::class);
         Route::patch('users/{user}/status', [UserController::class, 'updateStatus']);
+        Route::patch('users/{user}/role', [UserController::class, 'updateRole']);
         Route::post('users/{user}/reset-password', [UserController::class, 'resetPassword']);
     });
 });

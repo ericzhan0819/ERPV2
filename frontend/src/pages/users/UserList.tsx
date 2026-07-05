@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { isAxiosError } from 'axios'
-import { createUser, deleteUser, listUsers, resetUserPassword, setUserActive, updateUser } from '../../api/users'
+import { createUser, deleteUser, listUsers, resetUserPassword, setUserActive, setUserAdmin, updateUser } from '../../api/users'
 import { useAuth } from '../../hooks/useAuth'
 import type { User, UserPayload, UserUpdatePayload } from '../../types/user'
 
@@ -15,11 +15,10 @@ interface CreateFormState {
 interface EditFormState {
   name: string
   email: string
-  is_admin: boolean
 }
 
 const emptyCreateForm: CreateFormState = { name: '', email: '', password: '', is_admin: false }
-const emptyEditForm: EditFormState = { name: '', email: '', is_admin: false }
+const emptyEditForm: EditFormState = { name: '', email: '' }
 
 export function UserList() {
   const { user: currentUser } = useAuth()
@@ -108,7 +107,7 @@ export function UserList() {
   function startEdit(user: User) {
     setEditingId(user.id)
     setEditError(null)
-    setEditForm({ name: user.name, email: user.email, is_admin: user.is_admin })
+    setEditForm({ name: user.name, email: user.email })
   }
 
   async function handleEditSubmit(event: FormEvent, id: number) {
@@ -127,7 +126,6 @@ export function UserList() {
     const payload: UserUpdatePayload = {
       name: editForm.name.trim(),
       email: editForm.email.trim(),
-      is_admin: editForm.is_admin,
     }
 
     setSubmitting(true)
@@ -162,6 +160,16 @@ export function UserList() {
       loadUsers()
     } catch (err) {
       setError(extractErrorMessage(err, '更新使用者狀態失敗'))
+    }
+  }
+
+  async function toggleAdmin(user: User) {
+    setError(null)
+    try {
+      await setUserAdmin(user.id, !user.is_admin)
+      loadUsers()
+    } catch (err) {
+      setError(extractErrorMessage(err, '更新管理員權限失敗'))
     }
   }
 
@@ -319,7 +327,7 @@ export function UserList() {
                     <tr key={user.id} className="bg-gray-50">
                       <td colSpan={5} className="px-4 py-4">
                         <form onSubmit={(e) => handleEditSubmit(e, user.id)} className="flex flex-col gap-4">
-                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
                               <label className="mb-1 block text-sm font-medium text-gray-700">姓名</label>
                               <input
@@ -340,18 +348,10 @@ export function UserList() {
                                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
                               />
                             </div>
-                            <div className="flex items-end">
-                              <label className="flex items-center gap-2 text-sm text-gray-700">
-                                <input
-                                  type="checkbox"
-                                  checked={editForm.is_admin}
-                                  onChange={(e) => setEditForm((f) => ({ ...f, is_admin: e.target.checked }))}
-                                />
-                                管理員
-                              </label>
-                            </div>
                           </div>
-                          <p className="text-xs text-gray-500">啟用／停用請使用列表中的「停用／啟用」按鈕；密碼請使用「重設密碼」。</p>
+                          <p className="text-xs text-gray-500">
+                            管理員權限請使用列表中的「設為管理員／解除管理員」按鈕；啟用／停用請使用「停用／啟用」按鈕；密碼請使用「重設密碼」。
+                          </p>
 
                           {editError && <p className="text-sm text-red-600">{editError}</p>}
 
@@ -439,6 +439,13 @@ export function UserList() {
                         </button>
                         <button onClick={() => startReset(user)} className="text-sm font-medium text-gray-600 hover:underline">
                           重設密碼
+                        </button>
+                        <button
+                          onClick={() => toggleAdmin(user)}
+                          disabled={isSelf && user.is_admin}
+                          className="text-sm font-medium text-gray-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          {user.is_admin ? '解除管理員' : '設為管理員'}
                         </button>
                         <button
                           onClick={() => toggleActive(user)}

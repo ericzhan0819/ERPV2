@@ -25,6 +25,11 @@ export async function setUserActive(id: number, isActive: boolean): Promise<User
   return data.data
 }
 
+export async function setUserAdmin(id: number, isAdmin: boolean): Promise<User> {
+  const { data } = await apiClient.patch<{ data: User }>(`/api/users/${id}/role`, { is_admin: isAdmin })
+  return data.data
+}
+
 export async function resetUserPassword(id: number, password: string): Promise<void> {
   await apiClient.post(`/api/users/${id}/reset-password`, { password })
 }
