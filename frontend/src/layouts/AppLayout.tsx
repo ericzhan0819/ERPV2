@@ -4,16 +4,17 @@ import { useAuth } from '../hooks/useAuth'
 import { ThemeToggle } from '../components/ThemeToggle'
 
 const navItems = [
-  { to: '/dashboard', label: '總覽', icon: LayoutDashboard },
-  { to: '/vehicles', label: '車輛', icon: Car },
-  { to: '/money-entries', label: '收支', icon: Wallet },
-  { to: '/cash-accounts', label: '資金帳戶', icon: Banknote },
-  { to: '/users', label: '員工/帳號管理', icon: Users },
+  { to: '/dashboard', label: '總覽', icon: LayoutDashboard, roles: ['admin', 'manager', 'sales'] },
+  { to: '/vehicles', label: '車輛', icon: Car, roles: ['admin', 'manager', 'sales'] },
+  { to: '/money-entries', label: '收支', icon: Wallet, roles: ['admin', 'manager'] },
+  { to: '/cash-accounts', label: '資金帳戶', icon: Banknote, roles: ['admin', 'manager'] },
+  { to: '/users', label: '員工/帳號管理', icon: Users, roles: ['admin'] },
 ]
 
 export function AppLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const visibleNavItems = navItems.filter((item) => !user?.role || item.roles.includes(user.role))
 
   async function handleLogout() {
     try {
@@ -32,7 +33,7 @@ export function AppLayout() {
       <aside className="w-56 shrink-0 bg-sidebar">
         <div className="p-4 text-lg font-semibold tracking-tight text-sidebar-fg">中古車行系統</div>
         <nav className="flex flex-col gap-1 px-2">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon
             return (
               <NavLink

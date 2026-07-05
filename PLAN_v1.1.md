@@ -54,32 +54,32 @@
 - Dashboard 給 sales：只有 `vehicle_counts` 與 `monthly_sold_count`，無金額欄位
 
 ### Policy / Middleware
-- [ ] 新增 VehiclePolicy / MoneyEntryPolicy / CashAccountPolicy / CustomerPolicy / UserPolicy
-- [ ] 新增 EnsureUserHasRole middleware（取代 EnsureUserIsAdmin）
-- [ ] routes/api.php 依角色分組：
+- [x] 新增 VehiclePolicy / MoneyEntryPolicy / CashAccountPolicy / UserPolicy（CustomerPolicy 待第 4 階段 Customer Module 建立後補上）
+- [x] 新增 EnsureUserHasRole middleware（取代 EnsureUserIsAdmin）
+- [x] routes/api.php 依角色分組：
   - 使用者/現金帳戶寫入：`role:admin` only
-  - Customer delete：`role:admin` only
-  - Vehicle 新增/編輯/上架：`role:admin,manager` only
-  - Vehicle 銷售流程（保留/收尾款/成交）：`role:admin,manager,sales`
+  - Customer delete：`role:admin` only（待第 4 階段 Customer Module 建立）
+  - Vehicle 新增/編輯/上架：`can:` middleware 綁定 VehiclePolicy（admin,manager）
+  - Vehicle 銷售流程（保留/收尾款/成交）：`can:` middleware 綁定 VehiclePolicy（admin,manager,sales）
   - Money Entry CRUD：`role:admin,manager` only（sales 無法操作一般收支，見第 3 階段）
   - Cash Account balances：`role:admin,manager` only
 
 ### Resource 遮蔽
-- [ ] VehicleResource：purchase_price, asking_price, floor_price, sold_price 依角色 `when()`
-- [ ] MoneyEntryResource：amount, cash_account_id 依角色 `when()`
-- [ ] DashboardController：sales 得到淨化版本（無金額欄位）
+- [x] VehicleResource：purchase_price, asking_price, floor_price, sold_price 依角色 `when()`
+- [x] MoneyEntryResource：amount, cash_account_id 依角色 `when()`
+- [x] DashboardController：sales 得到淨化版本（無金額欄位）
 
 ### 前端
-- [ ] Sidebar 依 role 顯示：admin 全部、manager 隱藏員工管理、sales 隱藏資金帳戶與員工管理和新增車輛
-- [ ] ProtectedRoute 可選加入 `allowedRoles` 參數
-- [ ] VehicleDetail/Dashboard 依 role 條件隱藏欄位（後端已不輸出）
+- [x] Sidebar 依 role 顯示：admin 全部、manager 隱藏員工管理、sales 隱藏資金帳戶與員工管理和新增車輛
+- [x] ProtectedRoute 可選加入 `allowedRoles` 參數
+- [x] VehicleDetail/Dashboard 依 role 條件隱藏欄位（後端已不輸出）
 
 ### 測試
-- [ ] sales 呼叫 `/api/vehicles/{id}` 使用 `assertJsonMissingPath('purchase_price')` 驗證欄位不存在
-- [ ] sales 呼叫 `/api/dashboard/summary` 驗證無金額欄位但有 vehicle_counts/monthly_sold_count
-- [ ] sales 呼叫 `/api/cash-accounts/balances` → 403
-- [ ] sales 呼叫 `/api/users` → 403
-- [ ] manager 呼叫 `/api/users` 與 cash account 寫入 → 403，但可見 purchase_price
+- [x] sales 呼叫 `/api/vehicles/{id}` 使用 `assertJsonMissingPath('purchase_price')` 驗證欄位不存在
+- [x] sales 呼叫 `/api/dashboard/summary` 驗證無金額欄位但有 vehicle_counts/monthly_sold_count
+- [x] sales 呼叫 `/api/cash-accounts/balances` → 403
+- [x] sales 呼叫 `/api/users` → 403（既有 UserTest.php 已覆蓋）
+- [x] manager 呼叫 `/api/users` 與 cash account 寫入 → 403，但可見 purchase_price
 
 ---
 

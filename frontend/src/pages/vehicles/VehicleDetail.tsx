@@ -9,11 +9,12 @@ import type { CashAccountOption } from '../../types/cashAccount'
 import { generateIdempotencyKey } from '../../utils/idempotency'
 import { vehicleStatusLabels } from '../../utils/vehicleStatus'
 import { VehicleStatusBadge } from '../../components/VehicleStatusBadge'
+import { useAuth } from '../../hooks/useAuth'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
-function formatCurrency(amount: number | null): string {
-  return amount === null ? '-' : currencyFormatter.format(amount)
+function formatCurrency(amount: number | null | undefined): string {
+  return amount === null || amount === undefined ? '-' : currencyFormatter.format(amount)
 }
 
 interface InfoRowProps {
@@ -128,6 +129,8 @@ function extractErrorMessage(err: unknown, fallback: string): string {
 type ActiveModal = 'list' | 'reserve' | 'final-payment' | 'close-sale' | null
 
 export function VehicleDetail() {
+  const { user } = useAuth()
+  const isSales = user?.role === 'sales'
   const { id } = useParams<{ id: string }>()
   const vehicleId = Number(id)
   const [detail, setDetail] = useState<VehicleDetailResponse | null>(null)
@@ -264,14 +267,16 @@ export function VehicleDetail() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Link
-            to={`/vehicles/${vehicleId}/print/intake`}
-            target="_blank"
-            className="rounded-lg border border-border-strong px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
-          >
-            列印建檔資料
-          </Link>
-          {vehicle.status === 'sold' && (
+          {!isSales && (
+            <Link
+              to={`/vehicles/${vehicleId}/print/intake`}
+              target="_blank"
+              className="rounded-lg border border-border-strong px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
+            >
+              列印建檔資料
+            </Link>
+          )}
+          {!isSales && vehicle.status === 'sold' && (
             <Link
               to={`/vehicles/${vehicleId}/print/closing`}
               target="_blank"
@@ -294,7 +299,7 @@ export function VehicleDetail() {
       )}
 
       <div className="flex flex-wrap gap-3">
-        {vehicle.status === 'preparing' && (
+        {!isSales && vehicle.status === 'preparing' && (
           <button
             onClick={() => setActiveModal('list')}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover"
@@ -346,35 +351,37 @@ export function VehicleDetail() {
           <InfoRow label="買入日期" value={vehicle.purchase_date ?? '-'} />
           <InfoRow label="買入來源" value={vehicle.purchase_source_type ?? '-'} />
           <InfoRow label="原車主 / 供應商" value={vehicle.seller_name ?? '-'} />
-          <InfoRow label="收購價" value={formatCurrency(vehicle.purchase_price)} />
+          {!isSales && <InfoRow label="收購價" value={formatCurrency(vehicle.purchase_price)} />}
         </Panel>
 
         <Panel title="銷售資料">
-          <InfoRow label="開價" value={formatCurrency(vehicle.asking_price)} />
-          <InfoRow label="底價" value={formatCurrency(vehicle.floor_price)} />
-          <InfoRow label="成交價" value={formatCurrency(vehicle.sold_price)} />
+          {!isSales && <InfoRow label="開價" value={formatCurrency(vehicle.asking_price)} />}
+          {!isSales && <InfoRow label="底價" value={formatCurrency(vehicle.floor_price)} />}
+          {!isSales && <InfoRow label="成交價" value={formatCurrency(vehicle.sold_price)} />}
           <InfoRow label="買方姓名" value={vehicle.buyer_name ?? '-'} />
           <InfoRow label="買方電話" value={vehicle.buyer_phone ?? '-'} />
           <InfoRow label="成交日期" value={vehicle.sold_at ? vehicle.sold_at.slice(0, 10) : '-'} />
         </Panel>
       </div>
 
-      <Panel title="單車收支摘要">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="rounded-xl bg-surface-2 p-4">
-            <p className="text-xs text-fg-muted">單車收入合計</p>
-            <p className="mt-1 text-lg font-semibold text-fg tabular-nums">{formatCurrency(summary.income_total)}</p>
+      {summary && (
+        <Panel title="單車收支摘要">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="rounded-xl bg-surface-2 p-4">
+              <p className="text-xs text-fg-muted">單車收入合計</p>
+              <p className="mt-1 text-lg font-semibold text-fg tabular-nums">{formatCurrency(summary.income_total)}</p>
+            </div>
+            <div className="rounded-xl bg-surface-2 p-4">
+              <p className="text-xs text-fg-muted">單車支出合計</p>
+              <p className="mt-1 text-lg font-semibold text-fg tabular-nums">{formatCurrency(summary.expense_total)}</p>
+            </div>
+            <div className="rounded-xl bg-surface-2 p-4">
+              <p className="text-xs text-fg-muted">單車毛利</p>
+              <p className="mt-1 text-lg font-semibold text-fg tabular-nums">{formatCurrency(summary.gross_profit)}</p>
+            </div>
           </div>
-          <div className="rounded-xl bg-surface-2 p-4">
-            <p className="text-xs text-fg-muted">單車支出合計</p>
-            <p className="mt-1 text-lg font-semibold text-fg tabular-nums">{formatCurrency(summary.expense_total)}</p>
-          </div>
-          <div className="rounded-xl bg-surface-2 p-4">
-            <p className="text-xs text-fg-muted">單車毛利</p>
-            <p className="mt-1 text-lg font-semibold text-fg tabular-nums">{formatCurrency(summary.gross_profit)}</p>
-          </div>
-        </div>
-      </Panel>
+        </Panel>
+      )}
 
       <Panel title="單車收支明細">
         <div className="overflow-x-auto">
@@ -384,15 +391,15 @@ export function VehicleDetail() {
                 <th className="px-3 py-2 text-left font-medium text-fg-muted">日期</th>
                 <th className="px-3 py-2 text-left font-medium text-fg-muted">收支</th>
                 <th className="px-3 py-2 text-left font-medium text-fg-muted">分類</th>
-                <th className="px-3 py-2 text-left font-medium text-fg-muted">金額</th>
-                <th className="px-3 py-2 text-left font-medium text-fg-muted">資金帳戶</th>
+                {!isSales && <th className="px-3 py-2 text-left font-medium text-fg-muted">金額</th>}
+                {!isSales && <th className="px-3 py-2 text-left font-medium text-fg-muted">資金帳戶</th>}
                 <th className="px-3 py-2 text-left font-medium text-fg-muted">說明</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {moneyEntries.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-4 text-center text-fg-muted">
+                  <td colSpan={isSales ? 4 : 6} className="px-3 py-4 text-center text-fg-muted">
                     尚無收支紀錄
                   </td>
                 </tr>
@@ -402,8 +409,8 @@ export function VehicleDetail() {
                   <td className="px-3 py-2">{entry.entry_date}</td>
                   <td className="px-3 py-2">{entry.direction === 'income' ? '收入' : '支出'}</td>
                   <td className="px-3 py-2">{entry.category}</td>
-                  <td className="px-3 py-2 tabular-nums">{formatCurrency(entry.amount)}</td>
-                  <td className="px-3 py-2">{entry.cash_account?.name ?? '-'}</td>
+                  {!isSales && <td className="px-3 py-2 tabular-nums">{formatCurrency(entry.amount)}</td>}
+                  {!isSales && <td className="px-3 py-2">{entry.cash_account?.name ?? '-'}</td>}
                   <td className="px-3 py-2">{entry.description ?? '-'}</td>
                 </tr>
               ))}

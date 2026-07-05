@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getDashboardSummary } from '../api/dashboard'
 import type { DashboardSummary } from '../types/dashboard'
+import { useAuth } from '../hooks/useAuth'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
@@ -32,6 +33,8 @@ const quickActions = [
 ]
 
 export function Dashboard() {
+  const { user } = useAuth()
+  const isSales = user?.role === 'sales'
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -57,13 +60,27 @@ export function Dashboard() {
       </div>
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card label="現金餘額" value={formatCurrency(summary.cash_balance)} />
-        <Card label="主要銀行餘額" value={formatCurrency(summary.bank_balance)} />
-        <Card label="其他帳戶餘額" value={formatCurrency(summary.other_balance)} />
-        <Card label="資金合計" value={formatCurrency(summary.total_funds)} />
-        <Card label="本月收入" value={formatCurrency(summary.monthly_income)} />
-        <Card label="本月支出" value={formatCurrency(summary.monthly_expense)} />
-        <Card label="本月淨流入" value={formatCurrency(summary.monthly_net_flow)} />
+        {!isSales && summary.cash_balance !== undefined && (
+          <Card label="現金餘額" value={formatCurrency(summary.cash_balance)} />
+        )}
+        {!isSales && summary.bank_balance !== undefined && (
+          <Card label="主要銀行餘額" value={formatCurrency(summary.bank_balance)} />
+        )}
+        {!isSales && summary.other_balance !== undefined && (
+          <Card label="其他帳戶餘額" value={formatCurrency(summary.other_balance)} />
+        )}
+        {!isSales && summary.total_funds !== undefined && (
+          <Card label="資金合計" value={formatCurrency(summary.total_funds)} />
+        )}
+        {!isSales && summary.monthly_income !== undefined && (
+          <Card label="本月收入" value={formatCurrency(summary.monthly_income)} />
+        )}
+        {!isSales && summary.monthly_expense !== undefined && (
+          <Card label="本月支出" value={formatCurrency(summary.monthly_expense)} />
+        )}
+        {!isSales && summary.monthly_net_flow !== undefined && (
+          <Card label="本月淨流入" value={formatCurrency(summary.monthly_net_flow)} />
+        )}
         <Card label="本月成交台數" value={`${summary.monthly_sold_count} 台`} />
         <Card label="整備中車輛" value={`${summary.vehicle_counts.preparing} 台`} />
         <Card label="上架中車輛" value={`${summary.vehicle_counts.listed} 台`} />
@@ -74,15 +91,17 @@ export function Dashboard() {
       <section>
         <h2 className="text-sm font-medium text-fg-muted">快捷操作</h2>
         <div className="mt-3 flex flex-wrap gap-3">
-          {quickActions.map((action) => (
-            <Link
-              key={action.to}
-              to={action.to}
-              className="rounded-lg border border-border-strong bg-surface px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
-            >
-              {action.label}
-            </Link>
-          ))}
+          {quickActions
+            .filter((action) => !isSales || (action.to !== '/vehicles/create' && !action.to.startsWith('/money-entries')))
+            .map((action) => (
+              <Link
+                key={action.to}
+                to={action.to}
+                className="rounded-lg border border-border-strong bg-surface px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
+              >
+                {action.label}
+              </Link>
+            ))}
         </div>
       </section>
     </div>

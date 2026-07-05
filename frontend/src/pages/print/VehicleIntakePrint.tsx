@@ -7,8 +7,8 @@ import './print.css'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
-function formatCurrency(amount: number | null): string {
-  return amount === null ? '-' : currencyFormatter.format(amount)
+function formatCurrency(amount: number | null | undefined): string {
+  return amount === null || amount === undefined ? '-' : currencyFormatter.format(amount)
 }
 
 export function VehicleIntakePrint() {

@@ -22,7 +22,7 @@ function App() {
         <Route
           path="/vehicles/:id/print/intake"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['admin', 'manager']}>
               <VehicleIntakePrint />
             </ProtectedRoute>
           }
@@ -30,7 +30,7 @@ function App() {
         <Route
           path="/vehicles/:id/print/closing"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['admin', 'manager']}>
               <VehicleClosingPrint />
             </ProtectedRoute>
           }
@@ -44,12 +44,47 @@ function App() {
         >
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/vehicles" element={<VehicleList />} />
-          <Route path="/vehicles/create" element={<VehicleCreate />} />
+          <Route
+            path="/vehicles/create"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'manager']}>
+                <VehicleCreate />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/vehicles/:id" element={<VehicleDetail />} />
-          <Route path="/money-entries" element={<MoneyEntryList />} />
-          <Route path="/money-entries/create" element={<MoneyEntryCreate />} />
-          <Route path="/cash-accounts" element={<CashAccountList />} />
-          <Route path="/users" element={<UserList />} />
+          <Route
+            path="/money-entries"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'manager']}>
+                <MoneyEntryList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/money-entries/create"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'manager']}>
+                <MoneyEntryCreate />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/cash-accounts"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'manager']}>
+                <CashAccountList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/users"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <UserList />
+              </ProtectedRoute>
+            }
+          />
         </Route>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Routes>

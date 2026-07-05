@@ -76,7 +76,7 @@ class CashAccountTest extends TestCase
 
     public function test_admin_can_create_update_change_status_and_delete_cash_account(): void
     {
-        $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
+        $admin = User::factory()->admin()->create(['is_active' => true]);
 
         $createResponse = $this->actingAs($admin, 'web')->postJson('/api/cash-accounts', [
             'name' => '管理員新增帳戶',
@@ -103,7 +103,7 @@ class CashAccountTest extends TestCase
     #[DataProvider('presentIsActiveValueProvider')]
     public function test_generic_update_rejects_any_present_is_active_value(mixed $isActiveValue): void
     {
-        $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
+        $admin = User::factory()->admin()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create(['name' => '原始名稱', 'is_active' => true]);
 
         // A legacy/cached client that still sends is_active on the generic
@@ -139,7 +139,7 @@ class CashAccountTest extends TestCase
 
     public function test_stale_metadata_update_does_not_undo_concurrent_deactivation(): void
     {
-        $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
+        $admin = User::factory()->admin()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create([
             'name' => '原始名稱',
             'type' => 'bank',
@@ -174,7 +174,7 @@ class CashAccountTest extends TestCase
 
     public function test_status_update_does_not_change_other_fields(): void
     {
-        $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
+        $admin = User::factory()->admin()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create([
             'name' => '保留名稱',
             'type' => 'bank',
@@ -196,7 +196,7 @@ class CashAccountTest extends TestCase
 
     public function test_status_update_is_idempotent_when_repeated(): void
     {
-        $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
+        $admin = User::factory()->admin()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
 
         $this->actingAs($admin, 'web')->patchJson("/api/cash-accounts/{$cashAccount->id}/status", ['is_active' => false])
@@ -212,7 +212,7 @@ class CashAccountTest extends TestCase
 
     public function test_admin_cannot_delete_cash_account_with_money_entries(): void
     {
-        $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
+        $admin = User::factory()->admin()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create();
         MoneyEntry::factory()->create([
             'cash_account_id' => $cashAccount->id,

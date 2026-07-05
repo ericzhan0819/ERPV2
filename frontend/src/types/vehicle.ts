@@ -15,14 +15,14 @@ export interface Vehicle {
   purchase_source_type: string | null
   seller_name: string | null
   seller_phone: string | null
-  purchase_price: number | null
-  asking_price: number | null
-  floor_price: number | null
+  purchase_price?: number | null
+  asking_price?: number | null
+  floor_price?: number | null
   listing_date: string | null
   sales_note: string | null
   reserved_at: string | null
   sold_at: string | null
-  sold_price: number | null
+  sold_price?: number | null
   buyer_name: string | null
   buyer_phone: string | null
   notes: string | null
@@ -59,15 +59,15 @@ export interface VehicleMoneyEntry {
   entry_date: string
   direction: 'income' | 'expense'
   category: string
-  amount: number
+  amount?: number
   counterparty_name: string | null
   description: string | null
-  cash_account: { id: number; name: string; type: string } | null
+  cash_account?: { id: number; name: string; type: string } | null
 }
 
 export interface VehicleDetailResponse {
   vehicle: Vehicle
-  summary: VehicleFinancialSummary
+  summary?: VehicleFinancialSummary
   money_entries: VehicleMoneyEntry[]
 }
 

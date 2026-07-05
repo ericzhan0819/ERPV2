@@ -9,14 +9,16 @@ class MoneyEntryResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $canSeeAmount = ! ($request->user()?->isSales() ?? false);
+
         return [
             'id' => $this->id,
             'entry_date' => $this->entry_date?->toDateString(),
             'direction' => $this->direction,
             'category' => $this->category,
-            'amount' => $this->amount,
+            'amount' => $this->when($canSeeAmount, $this->amount),
             'vehicle_id' => $this->vehicle_id,
-            'cash_account_id' => $this->cash_account_id,
+            'cash_account_id' => $this->when($canSeeAmount, $this->cash_account_id),
             'counterparty_name' => $this->counterparty_name,
             'description' => $this->description,
             'vehicle' => $this->whenLoaded('vehicle', fn () => $this->vehicle ? [
@@ -25,11 +27,11 @@ class MoneyEntryResource extends JsonResource
                 'brand' => $this->vehicle->brand,
                 'model' => $this->vehicle->model,
             ] : null),
-            'cash_account' => $this->whenLoaded('cashAccount', fn () => $this->cashAccount ? [
+            'cash_account' => $this->when($canSeeAmount, fn () => $this->whenLoaded('cashAccount', fn () => $this->cashAccount ? [
                 'id' => $this->cashAccount->id,
                 'name' => $this->cashAccount->name,
                 'type' => $this->cashAccount->type,
-            ] : null),
+            ] : null)),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

@@ -1,0 +1,162 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\CashAccount;
+use App\Models\MoneyEntry;
+use App\Models\User;
+use App\Models\Vehicle;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
+use Tests\TestCase;
+
+class RoleAccessTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_sales_cannot_see_vehicle_financial_fields_in_json(): void
+    {
+        $sales = User::factory()->sales()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create([
+            'purchase_price' => 500000,
+            'asking_price' => 600000,
+            'floor_price' => 550000,
+            'sold_price' => 580000,
+        ]);
+
+        $response = $this->actingAs($sales, 'web')->getJson("/api/vehicles/{$vehicle->id}");
+
+        $response->assertOk();
+        $response->assertJsonMissingPath('vehicle.purchase_price');
+        $response->assertJsonMissingPath('vehicle.asking_price');
+        $response->assertJsonMissingPath('vehicle.floor_price');
+        $response->assertJsonMissingPath('vehicle.sold_price');
+        $response->assertJsonMissingPath('summary');
+    }
+
+    public function test_manager_can_see_vehicle_financial_fields_in_json(): void
+    {
+        $manager = User::factory()->manager()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['purchase_price' => 500000]);
+
+        $response = $this->actingAs($manager, 'web')->getJson("/api/vehicles/{$vehicle->id}");
+
+        $response->assertOk();
+        $response->assertJsonPath('vehicle.purchase_price', 500000);
+        $response->assertJsonPath('summary.gross_profit', 0 - 0);
+    }
+
+    public function test_sales_cannot_create_or_update_or_list_vehicle(): void
+    {
+        $sales = User::factory()->sales()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'preparing']);
+
+        $this->actingAs($sales, 'web')->postJson('/api/vehicles', [
+            'brand' => 'Toyota',
+            'model' => 'Camry',
+            'license_plate' => 'SLS-0001',
+        ])->assertStatus(403);
+
+        $this->actingAs($sales, 'web')->putJson("/api/vehicles/{$vehicle->id}", [
+            'brand' => 'Toyota',
+            'model' => 'Camry',
+            'license_plate' => $vehicle->license_plate,
+        ])->assertStatus(403);
+
+        $this->actingAs($sales, 'web')->postJson("/api/vehicles/{$vehicle->id}/list", [
+            'asking_price' => 600000,
+        ])->assertStatus(403);
+
+        $this->actingAs($sales, 'web')->postJson("/api/vehicles/{$vehicle->id}/purchase-payment", [
+            'amount' => 1000,
+            'cash_account_id' => CashAccount::factory()->create()->id,
+        ])->assertStatus(403);
+    }
+
+    public function test_sales_can_run_sales_flow_actions_but_amount_is_masked(): void
+    {
+        $sales = User::factory()->sales()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create();
+        $vehicle = Vehicle::factory()->create(['status' => 'listed']);
+
+        $response = $this->actingAs($sales, 'web')->postJson("/api/vehicles/{$vehicle->id}/deposit", [
+            'amount' => 20000,
+            'cash_account_id' => $cashAccount->id,
+            'idempotency_key' => (string) Str::uuid(),
+        ]);
+
+        $response->assertCreated();
+        $response->assertJsonMissingPath('data.amount');
+        $response->assertJsonMissingPath('data.cash_account_id');
+        $response->assertJsonMissingPath('data.cash_account');
+
+        $this->assertDatabaseHas('money_entries', [
+            'vehicle_id' => $vehicle->id,
+            'amount' => 20000,
+        ]);
+    }
+
+    public function test_sales_cannot_print_vehicle_documents(): void
+    {
+        $sales = User::factory()->sales()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create();
+
+        $this->actingAs($sales, 'web')->getJson("/api/vehicles/{$vehicle->id}/print/intake")->assertStatus(403);
+        $this->actingAs($sales, 'web')->getJson("/api/vehicles/{$vehicle->id}/print/closing")->assertStatus(403);
+    }
+
+    public function test_sales_cannot_access_money_entries_or_cash_account_balances(): void
+    {
+        $sales = User::factory()->sales()->create(['is_active' => true]);
+
+        $this->actingAs($sales, 'web')->getJson('/api/money-entries')->assertStatus(403);
+        $this->actingAs($sales, 'web')->postJson('/api/money-entries', [
+            'entry_date' => now()->toDateString(),
+            'direction' => 'income',
+            'category' => '一般收入',
+            'amount' => 1000,
+            'cash_account_id' => CashAccount::factory()->create()->id,
+        ])->assertStatus(403);
+
+        $this->actingAs($sales, 'web')->getJson('/api/cash-accounts')->assertStatus(403);
+        $this->actingAs($sales, 'web')->getJson('/api/cash-accounts/balances')->assertStatus(403);
+    }
+
+    public function test_manager_can_access_money_entries_and_cash_account_balances_but_not_users(): void
+    {
+        $manager = User::factory()->manager()->create(['is_active' => true]);
+
+        $this->actingAs($manager, 'web')->getJson('/api/money-entries')->assertOk();
+        $this->actingAs($manager, 'web')->getJson('/api/cash-accounts/balances')->assertOk();
+        $this->actingAs($manager, 'web')->getJson('/api/users')->assertStatus(403);
+    }
+
+    public function test_sales_gets_masked_dashboard_summary(): void
+    {
+        $sales = User::factory()->sales()->create(['is_active' => true]);
+        MoneyEntry::factory()->create([
+            'direction' => 'income',
+            'amount' => 5000,
+            'idempotency_key' => (string) Str::uuid(),
+        ]);
+
+        $response = $this->actingAs($sales, 'web')->getJson('/api/dashboard/summary');
+
+        $response->assertOk();
+        $response->assertJsonMissingPath('cash_balance');
+        $response->assertJsonMissingPath('monthly_income');
+        $response->assertJsonStructure(['vehicle_counts', 'monthly_sold_count']);
+    }
+
+    public function test_admin_and_manager_get_full_dashboard_summary(): void
+    {
+        foreach (['admin', 'manager'] as $role) {
+            $user = User::factory()->{$role}()->create(['is_active' => true]);
+
+            $response = $this->actingAs($user, 'web')->getJson('/api/dashboard/summary');
+
+            $response->assertOk();
+            $response->assertJsonStructure(['cash_balance', 'monthly_income', 'vehicle_counts', 'monthly_sold_count']);
+        }
+    }
+}

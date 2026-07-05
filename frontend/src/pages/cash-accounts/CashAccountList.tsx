@@ -38,7 +38,7 @@ const emptyEditForm: EditFormState = { name: '', type: 'cash', opening_balance: 
 
 export function CashAccountList() {
   const { user } = useAuth()
-  const isAdmin = user?.is_admin ?? false
+  const isAdmin = user?.role === 'admin'
 
   const [accounts, setAccounts] = useState<CashAccountBalance[]>([])
   const [loading, setLoading] = useState(true)

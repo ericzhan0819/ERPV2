@@ -20,6 +20,7 @@ use App\Models\Vehicle;
 use App\Services\MoneyEntryService;
 use App\Services\VehicleService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class VehicleController extends Controller
@@ -43,33 +44,47 @@ class VehicleController extends Controller
         return new VehicleResource($vehicle);
     }
 
-    public function show(Vehicle $vehicle): JsonResponse
+    public function show(Vehicle $vehicle, Request $request): JsonResponse
     {
+        $canSeeFinancials = ! ($request->user()?->isSales() ?? false);
+
         $entries = $vehicle->moneyEntries()
             ->with('cashAccount:id,name,type')
             ->orderByDesc('entry_date')
             ->orderByDesc('id')
             ->get()
-            ->map(fn ($entry) => [
-                'id' => $entry->id,
-                'entry_date' => $entry->entry_date?->toDateString(),
-                'direction' => $entry->direction,
-                'category' => $entry->category,
-                'amount' => $entry->amount,
-                'counterparty_name' => $entry->counterparty_name,
-                'description' => $entry->description,
-                'cash_account' => $entry->cashAccount ? [
-                    'id' => $entry->cashAccount->id,
-                    'name' => $entry->cashAccount->name,
-                    'type' => $entry->cashAccount->type,
-                ] : null,
-            ]);
+            ->map(function ($entry) use ($canSeeFinancials) {
+                $row = [
+                    'id' => $entry->id,
+                    'entry_date' => $entry->entry_date?->toDateString(),
+                    'direction' => $entry->direction,
+                    'category' => $entry->category,
+                    'counterparty_name' => $entry->counterparty_name,
+                    'description' => $entry->description,
+                ];
 
-        return response()->json([
+                if ($canSeeFinancials) {
+                    $row['amount'] = $entry->amount;
+                    $row['cash_account'] = $entry->cashAccount ? [
+                        'id' => $entry->cashAccount->id,
+                        'name' => $entry->cashAccount->name,
+                        'type' => $entry->cashAccount->type,
+                    ] : null;
+                }
+
+                return $row;
+            });
+
+        $payload = [
             'vehicle' => new VehicleResource($vehicle),
-            'summary' => $this->vehicleService->financialSummary($vehicle),
             'money_entries' => $entries,
-        ]);
+        ];
+
+        if ($canSeeFinancials) {
+            $payload['summary'] = $this->vehicleService->financialSummary($vehicle);
+        }
+
+        return response()->json($payload);
     }
 
     public function update(UpdateVehicleRequest $request, Vehicle $vehicle): VehicleResource
