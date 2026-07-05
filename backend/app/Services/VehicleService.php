@@ -589,6 +589,38 @@ class VehicleService
         return null;
     }
 
+    /**
+     * @return array{printed_at: string, vehicle: Vehicle}
+     */
+    public function printIntakeData(Vehicle $vehicle): array
+    {
+        return [
+            'printed_at' => now()->toISOString(),
+            'vehicle' => $vehicle,
+        ];
+    }
+
+    /**
+     * @return array{printed_at: string, vehicle: Vehicle, summary: array{income_total: int, expense_total: int, gross_profit: int}, money_entries: \Illuminate\Support\Collection<int, MoneyEntry>}
+     */
+    public function printClosingData(Vehicle $vehicle): array
+    {
+        $this->assertStatus($vehicle, 'sold', '只有已售出的車輛可以列印成交結案收支明細');
+
+        $entries = MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->orderBy('entry_date')
+            ->orderBy('id')
+            ->get();
+
+        return [
+            'printed_at' => now()->toISOString(),
+            'vehicle' => $vehicle,
+            'summary' => $this->financialSummary($vehicle),
+            'money_entries' => $entries,
+        ];
+    }
+
     private function generateStockNo(): string
     {
         $prefix = 'V'.now()->format('Ymd');

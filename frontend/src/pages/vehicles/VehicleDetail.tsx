@@ -263,12 +263,30 @@ export function VehicleDetail() {
             {vehicle.brand} {vehicle.model}
           </p>
         </div>
-        <Link
-          to="/vehicles"
-          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
-        >
-          返回列表
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            to={`/vehicles/${vehicleId}/print/intake`}
+            target="_blank"
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+          >
+            列印建檔資料
+          </Link>
+          {vehicle.status === 'sold' && (
+            <Link
+              to={`/vehicles/${vehicleId}/print/closing`}
+              target="_blank"
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+            >
+              列印成交結案明細
+            </Link>
+          )}
+          <Link
+            to="/vehicles"
+            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+          >
+            返回列表
+          </Link>
+        </div>
       </div>
 
       {warning && (

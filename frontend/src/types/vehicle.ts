@@ -106,6 +106,18 @@ export interface FinalPaymentResponse {
   warning: string | null
 }
 
+export interface VehiclePrintIntakeResponse {
+  printed_at: string
+  vehicle: Vehicle
+}
+
+export interface VehiclePrintClosingResponse {
+  printed_at: string
+  vehicle: Vehicle
+  summary: VehicleFinancialSummary
+  money_entries: VehicleMoneyEntry[]
+}
+
 export interface CreateVehiclePayload {
   brand: string
   model: string

@@ -31,6 +31,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('vehicles/{vehicle}/deposit', [VehicleController::class, 'deposit']);
     Route::post('vehicles/{vehicle}/refund', [VehicleController::class, 'refund']);
     Route::get('vehicles/{vehicle}/money-entries', [VehicleController::class, 'moneyEntries']);
+    Route::get('vehicles/{vehicle}/print/intake', [VehicleController::class, 'printIntake']);
+    Route::get('vehicles/{vehicle}/print/closing', [VehicleController::class, 'printClosing']);
 
     Route::apiResource('money-entries', MoneyEntryController::class);
 

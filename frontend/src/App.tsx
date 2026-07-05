@@ -11,12 +11,30 @@ import { MoneyEntryList } from './pages/money-entries/MoneyEntryList'
 import { MoneyEntryCreate } from './pages/money-entries/MoneyEntryCreate'
 import { CashAccountList } from './pages/cash-accounts/CashAccountList'
 import { UserList } from './pages/users/UserList'
+import { VehicleIntakePrint } from './pages/print/VehicleIntakePrint'
+import { VehicleClosingPrint } from './pages/print/VehicleClosingPrint'
 
 function App() {
   return (
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route
+          path="/vehicles/:id/print/intake"
+          element={
+            <ProtectedRoute>
+              <VehicleIntakePrint />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vehicles/:id/print/closing"
+          element={
+            <ProtectedRoute>
+              <VehicleClosingPrint />
+            </ProtectedRoute>
+          }
+        />
         <Route
           element={
             <ProtectedRoute>

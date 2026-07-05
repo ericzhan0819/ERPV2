@@ -177,4 +177,26 @@ class VehicleController extends Controller
 
         return MoneyEntryResource::collection($this->moneyEntryService->listEntries($filters));
     }
+
+    public function printIntake(Vehicle $vehicle): JsonResponse
+    {
+        $data = $this->vehicleService->printIntakeData($vehicle);
+
+        return response()->json([
+            'printed_at' => $data['printed_at'],
+            'vehicle' => new VehicleResource($data['vehicle']),
+        ]);
+    }
+
+    public function printClosing(Vehicle $vehicle): JsonResponse
+    {
+        $data = $this->vehicleService->printClosingData($vehicle);
+
+        return response()->json([
+            'printed_at' => $data['printed_at'],
+            'vehicle' => new VehicleResource($data['vehicle']),
+            'summary' => $data['summary'],
+            'money_entries' => MoneyEntryResource::collection($data['money_entries']),
+        ]);
+    }
 }

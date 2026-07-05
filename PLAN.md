@@ -70,8 +70,8 @@
 - [x] 前端使用者管理頁
 
 ## 12. Print Module
-- [ ] GET /print/intake、/print/closing 資料 API
-- [ ] 前端列印頁（intake / closing），含 print.css
+- [x] GET /print/intake、/print/closing 資料 API
+- [x] 前端列印頁（intake / closing），含 print.css
 
 ## 13. 文件與收尾
 - [ ] backend/API.md（所有 endpoint 說明）
