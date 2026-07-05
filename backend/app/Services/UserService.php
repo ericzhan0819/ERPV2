@@ -7,12 +7,25 @@ use App\Models\User;
 use App\Models\Vehicle;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
 class UserService
 {
+    // MySQL error 1451: "Cannot delete or update a parent row: a foreign key constraint fails".
+    private const MYSQL_ERROR_FOREIGN_KEY_CONSTRAINT_FAILS = 1451;
+
+    // Retried automatically by DB::transaction() on deadlock / lock wait timeout (see
+    // Illuminate\Database\Concerns\ManagesTransactions::handleTransactionException()).
+    // This module's writes deliberately take multiple row locks in a fixed order to
+    // avoid deadlocks by construction (see lockTargetAndActiveAdmins()), but proving
+    // that no ordering conflict exists against every other lock path in the app is
+    // not practical to guarantee by hand-reasoning alone - this retry is the standard,
+    // supported fallback for the rare deadlock that construction doesn't rule out.
+    private const TRANSACTION_ATTEMPTS = 3;
+
     public function listUsers(): Collection
     {
         return User::query()->orderBy('id')->get();
@@ -73,7 +86,7 @@ class UserService
             }
 
             return $target;
-        });
+        }, self::TRANSACTION_ATTEMPTS);
     }
 
     /**
@@ -100,7 +113,7 @@ class UserService
             }
 
             return $target;
-        });
+        }, self::TRANSACTION_ATTEMPTS);
     }
 
     public function resetPassword(User $user, string $password): User
@@ -120,21 +133,24 @@ class UserService
         }
 
         DB::transaction(function () use ($user) {
-            [$target, $locked] = $this->lockTargetAndActiveAdmins($user);
-
-            if ($target->is_admin && $target->is_active) {
-                $this->assertAnotherActiveAdminRemains($locked, $target);
-            }
-
-            // lockForUpdate() forces a current (non-snapshot) read: under MySQL's default
-            // REPEATABLE READ, a plain read here would still see the REPEATABLE READ
-            // snapshot established by the very first plain read in this transaction
-            // (inside lockTargetAndActiveAdmins()), silently missing a vehicle/money
-            // entry that referenced this user and committed afterward - and the delete
-            // below would then fail on the FK constraint with an unhandled 500 instead
-            // of this graceful 422.
-            $hasRelatedRecords = Vehicle::query()->where('created_by', $target->id)->orWhere('updated_by', $target->id)->lockForUpdate()->exists()
-                || MoneyEntry::query()->where('created_by', $target->id)->orWhere('updated_by', $target->id)->lockForUpdate()->exists();
+            // Lock any vehicles/money entries referencing this user BEFORE locking the
+            // user row itself (see lockTargetAndActiveAdmins() below). Elsewhere in the
+            // app, saving a vehicle/money entry update locks that child row first and
+            // only then needs an implicit shared FK lock on the referenced user row
+            // (to save updated_by). Locking the user row first here, as before, inverted
+            // that order and could deadlock against a concurrent vehicle/money-entry
+            // update: this transaction holding the user row while waiting on the child
+            // row, and that one holding the child row while waiting on the user row.
+            // Matching the child-then-parent order everywhere removes that cycle.
+            //
+            // lockForUpdate() also forces a current (non-snapshot) read here: under
+            // MySQL's default REPEATABLE READ, a plain read would still see the snapshot
+            // established by the first plain read in this transaction, silently missing
+            // a vehicle/money entry that referenced this user and committed afterward -
+            // and the delete below would then fail on the FK constraint with an
+            // unhandled 500 instead of this graceful 422.
+            $hasRelatedRecords = Vehicle::query()->where('created_by', $user->id)->orWhere('updated_by', $user->id)->lockForUpdate()->exists()
+                || MoneyEntry::query()->where('created_by', $user->id)->orWhere('updated_by', $user->id)->lockForUpdate()->exists();
 
             if ($hasRelatedRecords) {
                 throw ValidationException::withMessages([
@@ -142,8 +158,28 @@ class UserService
                 ]);
             }
 
-            $target->delete();
-        });
+            [$target, $locked] = $this->lockTargetAndActiveAdmins($user);
+
+            if ($target->is_admin && $target->is_active) {
+                $this->assertAnotherActiveAdminRemains($locked, $target);
+            }
+
+            // Safety net on top of the hasRelatedRecords check above: if some
+            // reference we didn't (or couldn't) account for still exists at
+            // delete time, surface it as the same graceful 422 instead of
+            // letting MySQL's raw FK error escape as an unhandled 500.
+            try {
+                $target->delete();
+            } catch (QueryException $e) {
+                if ((int) ($e->errorInfo[1] ?? 0) === self::MYSQL_ERROR_FOREIGN_KEY_CONSTRAINT_FAILS) {
+                    throw ValidationException::withMessages([
+                        'user' => ['此使用者已有相關紀錄，不得刪除，請改為停用'],
+                    ]);
+                }
+
+                throw $e;
+            }
+        }, self::TRANSACTION_ATTEMPTS);
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Models\Vehicle;
 use App\Services\UserService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -103,6 +104,18 @@ class UserTest extends TestCase
 
         $this->actingAs($admin, 'web')->deleteJson("/api/users/{$other->id}")->assertOk();
         $this->assertDatabaseMissing('users', ['id' => $other->id]);
+    }
+
+    public function test_admin_cannot_delete_user_with_related_vehicle_records(): void
+    {
+        $admin = User::factory()->create(['is_active' => true, 'is_admin' => true]);
+        $other = User::factory()->create(['is_active' => true, 'is_admin' => false]);
+        Vehicle::factory()->create(['created_by' => $other->id]);
+
+        $this->actingAs($admin, 'web')->deleteJson("/api/users/{$other->id}")
+            ->assertStatus(422)->assertJsonValidationErrors('user');
+
+        $this->assertDatabaseHas('users', ['id' => $other->id]);
     }
 
     // The HTTP layer can never manufacture "actingUser demotes someone else
