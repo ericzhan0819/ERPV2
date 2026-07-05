@@ -74,6 +74,6 @@
 - [x] 前端列印頁（intake / closing），含 print.css
 
 ## 13. 文件與收尾
-- [ ] backend/API.md（所有 endpoint 說明）
-- [ ] README.md 完整補齊（環境需求/安裝/啟動/migrate seed/預設帳號/測試方式/常見問題）
-- [ ] 系統自我檢查（對照企劃書第 19 章逐項確認）
+- [x] backend/API.md（所有 endpoint 說明）
+- [x] README.md 完整補齊（環境需求/安裝/啟動/migrate seed/預設帳號/測試方式/常見問題）
+- [x] 系統自我檢查（對照企劃書第 19 章逐項確認）
