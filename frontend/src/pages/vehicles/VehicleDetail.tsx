@@ -6,6 +6,7 @@ import { closeSaleVehicle, getVehicle, listVehicleForSale, recordFinalPayment, r
 import { listCashAccounts } from '../../api/cashAccounts'
 import type { VehicleDetailResponse } from '../../types/vehicle'
 import type { CashAccountOption } from '../../types/cashAccount'
+import { generateIdempotencyKey } from '../../utils/idempotency'
 import { vehicleStatusBadgeClasses, vehicleStatusLabels } from '../../utils/vehicleStatus'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
@@ -522,7 +523,7 @@ function ReserveModal({
     event.preventDefault()
     let idempotencyKey = idempotencyKeyRef.current
     if (!idempotencyKey) {
-      idempotencyKey = crypto.randomUUID()
+      idempotencyKey = generateIdempotencyKey()
       idempotencyKeyRef.current = idempotencyKey
     }
     onSubmit({ buyer_name, buyer_phone, sold_price, deposit_amount, cash_account_id, description, idempotency_key: idempotencyKey })
@@ -580,7 +581,7 @@ function FinalPaymentModal({
     event.preventDefault()
     let idempotencyKey = idempotencyKeyRef.current
     if (!idempotencyKey) {
-      idempotencyKey = crypto.randomUUID()
+      idempotencyKey = generateIdempotencyKey()
       idempotencyKeyRef.current = idempotencyKey
     }
     onSubmit({ amount, cash_account_id, description, idempotency_key: idempotencyKey })

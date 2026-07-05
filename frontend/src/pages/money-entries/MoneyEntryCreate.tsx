@@ -8,10 +8,23 @@ import { createMoneyEntry } from '../../api/moneyEntries'
 import type { CashAccountOption } from '../../types/cashAccount'
 import type { CreateMoneyEntryPayload, MoneyDirection } from '../../types/moneyEntry'
 import type { Vehicle, VehicleListResponse } from '../../types/vehicle'
+import { generateIdempotencyKey } from '../../utils/idempotency'
 import { categoriesForDirection, directionLabels } from '../../utils/moneyEntryCategory'
 
 function today(): string {
   return new Date().toISOString().slice(0, 10)
+}
+
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (isAxiosError(err)) {
+    const data = err.response?.data
+    if (data?.errors) {
+      const firstError = Object.values(data.errors)[0]
+      if (Array.isArray(firstError) && firstError.length > 0) return firstError[0]
+    }
+    if (data?.message) return data.message
+  }
+  return fallback
 }
 
 export function MoneyEntryCreate() {
@@ -49,6 +62,10 @@ export function MoneyEntryCreate() {
     event.preventDefault()
     setError(null)
 
+    if (!entryDate) {
+      setError('請選擇日期')
+      return
+    }
     if (!category) {
       setError('請選擇分類')
       return
@@ -63,7 +80,7 @@ export function MoneyEntryCreate() {
     }
 
     if (!idempotencyKeyRef.current) {
-      idempotencyKeyRef.current = crypto.randomUUID()
+      idempotencyKeyRef.current = generateIdempotencyKey()
     }
 
     const payload: CreateMoneyEntryPayload = {
@@ -83,11 +100,7 @@ export function MoneyEntryCreate() {
       await createMoneyEntry(payload)
       navigate('/money-entries')
     } catch (err) {
-      if (isAxiosError(err) && err.response?.data?.message) {
-        setError(err.response.data.message)
-      } else {
-        setError('新增收支失敗，請稍後再試')
-      }
+      setError(extractErrorMessage(err, '新增收支失敗，請稍後再試'))
     } finally {
       setSubmitting(false)
     }
@@ -100,7 +113,7 @@ export function MoneyEntryCreate() {
         <p className="mt-1 text-sm text-gray-500">一般營運收支請勿選擇車輛；單車相關收支請務必綁定車輛</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="max-w-2xl rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+      <form noValidate onSubmit={handleSubmit} className="max-w-2xl rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">日期</label>
