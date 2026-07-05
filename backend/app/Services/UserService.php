@@ -126,8 +126,15 @@ class UserService
                 $this->assertAnotherActiveAdminRemains($locked, $target);
             }
 
-            $hasRelatedRecords = Vehicle::query()->where('created_by', $target->id)->orWhere('updated_by', $target->id)->exists()
-                || MoneyEntry::query()->where('created_by', $target->id)->orWhere('updated_by', $target->id)->exists();
+            // lockForUpdate() forces a current (non-snapshot) read: under MySQL's default
+            // REPEATABLE READ, a plain read here would still see the REPEATABLE READ
+            // snapshot established by the very first plain read in this transaction
+            // (inside lockTargetAndActiveAdmins()), silently missing a vehicle/money
+            // entry that referenced this user and committed afterward - and the delete
+            // below would then fail on the FK constraint with an unhandled 500 instead
+            // of this graceful 422.
+            $hasRelatedRecords = Vehicle::query()->where('created_by', $target->id)->orWhere('updated_by', $target->id)->lockForUpdate()->exists()
+                || MoneyEntry::query()->where('created_by', $target->id)->orWhere('updated_by', $target->id)->lockForUpdate()->exists();
 
             if ($hasRelatedRecords) {
                 throw ValidationException::withMessages([
