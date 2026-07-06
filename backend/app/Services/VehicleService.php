@@ -68,28 +68,50 @@ class VehicleService
         $data = $this->applySellerCustomerSnapshot($data);
         $data = $this->normalizeIntakeCheckFields($data);
 
-        // seller_customer_id may simply be absent from this request (as opposed to
-        // explicitly cleared to null) while the vehicle already has a link. That
-        // link is not being touched, so the snapshot must not move either way:
-        // - it must NOT be re-derived from the customer's *current* data, since
-        //   seller_name/phone are a historical snapshot captured at link time —
-        //   letting a later, unrelated vehicle edit (e.g. just updating mileage)
-        //   silently pull in whatever the customer has been renamed to since would
-        //   retroactively rewrite history.
-        // - it must NOT take whatever free-text seller_name/phone happened to be
-        //   in this request either, since that could silently diverge from the
-        //   customer the vehicle is still linked to.
-        // Either way the existing stored values win, so any submitted values for
-        // these two fields are dropped before fill() when the link is untouched.
-        if (! array_key_exists('seller_customer_id', $data) && $vehicle->seller_customer_id) {
-            unset($data['seller_name'], $data['seller_phone']);
-        }
+        return DB::transaction(function () use ($vehicle, $data, $userId) {
+            // 重新鎖定並讀取目前 DB 狀態，而不是沿用 route-bound 的 $vehicle：
+            // 若另一個請求（例如 listVehicle()）在這個請求載入 $vehicle 之後、
+            // 送出更新之前完成了 preparing → listed 並把 is_preparation_completed
+            // 設為 true，這裡若仍檢查記憶體中舊的 status/欄位值，就會誤判成
+            // 「還在 preparing」而放行 false，重新造出 listed + 整備未完成的矛盾狀態。
+            $lockedVehicle = Vehicle::query()
+                ->whereKey($vehicle->id)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        $vehicle->fill($data);
-        $vehicle->updated_by = $userId;
-        $vehicle->save();
+            // seller_customer_id may simply be absent from this request (as opposed to
+            // explicitly cleared to null) while the vehicle already has a link. That
+            // link is not being touched, so the snapshot must not move either way:
+            // - it must NOT be re-derived from the customer's *current* data, since
+            //   seller_name/phone are a historical snapshot captured at link time —
+            //   letting a later, unrelated vehicle edit (e.g. just updating mileage)
+            //   silently pull in whatever the customer has been renamed to since would
+            //   retroactively rewrite history.
+            // - it must NOT take whatever free-text seller_name/phone happened to be
+            //   in this request either, since that could silently diverge from the
+            //   customer the vehicle is still linked to.
+            // Either way the existing stored values win, so any submitted values for
+            // these two fields are dropped before fill() when the link is untouched.
+            if (! array_key_exists('seller_customer_id', $data) && $lockedVehicle->seller_customer_id) {
+                unset($data['seller_name'], $data['seller_phone']);
+            }
 
-        return $vehicle;
+            // listVehicle()（整備完成並上架）會把 is_preparation_completed 設為 true，
+            // 代表「已上架」本身即宣告整備完成。一般更新 API 不應該讓這個已宣告的事實
+            // 被回改成 false／null，否則車輛在上架中/保留中/已售出狀態下又會重新出現
+            // 「整備未完成」，與上架動作的語意矛盾。未觸及此欄位或欲設為 true 則不受影響。
+            if (array_key_exists('is_preparation_completed', $data)
+                && ! $data['is_preparation_completed']
+                && in_array($lockedVehicle->status, ['listed', 'reserved', 'sold'], true)) {
+                unset($data['is_preparation_completed']);
+            }
+
+            $lockedVehicle->fill($data);
+            $lockedVehicle->updated_by = $userId;
+            $lockedVehicle->save();
+
+            return $lockedVehicle;
+        });
     }
 
     /**

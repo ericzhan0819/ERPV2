@@ -324,6 +324,97 @@ class VehicleTest extends TestCase
         ]);
     }
 
+    public function test_updating_a_listed_vehicle_cannot_revert_preparation_completed_to_false(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'listed', 'is_preparation_completed' => true]);
+
+        $response = $this->actingAs($user, 'web')->patchJson("/api/vehicles/{$vehicle->id}", [
+            'brand' => $vehicle->brand,
+            'model' => $vehicle->model,
+            'license_plate' => $vehicle->license_plate,
+            'is_preparation_completed' => false,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('data.is_preparation_completed', true);
+
+        $this->assertDatabaseHas('vehicles', [
+            'id' => $vehicle->id,
+            'is_preparation_completed' => true,
+        ]);
+    }
+
+    public function test_updating_a_reserved_or_sold_vehicle_cannot_revert_preparation_completed_to_null(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+
+        foreach (['reserved', 'sold'] as $status) {
+            $vehicle = Vehicle::factory()->create(['status' => $status, 'is_preparation_completed' => true]);
+
+            $response = $this->actingAs($user, 'web')->patchJson("/api/vehicles/{$vehicle->id}", [
+                'brand' => $vehicle->brand,
+                'model' => $vehicle->model,
+                'license_plate' => $vehicle->license_plate,
+                'is_preparation_completed' => null,
+            ]);
+
+            $response->assertOk();
+            $response->assertJsonPath('data.is_preparation_completed', true);
+
+            $this->assertDatabaseHas('vehicles', [
+                'id' => $vehicle->id,
+                'is_preparation_completed' => true,
+            ]);
+        }
+    }
+
+    public function test_updating_a_preparing_vehicle_can_still_toggle_preparation_completed_to_false(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'preparing', 'is_preparation_completed' => true]);
+
+        $response = $this->actingAs($user, 'web')->patchJson("/api/vehicles/{$vehicle->id}", [
+            'brand' => $vehicle->brand,
+            'model' => $vehicle->model,
+            'license_plate' => $vehicle->license_plate,
+            'is_preparation_completed' => false,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('data.is_preparation_completed', false);
+    }
+
+    public function test_updating_a_vehicle_rechecks_database_state_before_reverting_preparation_completed(): void
+    {
+        // 模擬競態：呼叫端在請求開始時載入的 $vehicle 仍是 preparing（記憶體中的
+        // 舊狀態），但另一個請求（listVehicle()）已在資料庫把狀態改成 listed 且
+        // is_preparation_completed 設為 true。updateVehicle() 必須以交易內重新
+        // lockForUpdate 讀到的最新狀態判斷，而不是沿用呼叫端傳入的舊 $vehicle，
+        // 否則會誤判成仍在 preparing 而放行 false，重新造出矛盾狀態。
+        $vehicle = Vehicle::factory()->create(['status' => 'preparing', 'is_preparation_completed' => false]);
+        $staleVehicle = Vehicle::query()->whereKey($vehicle->id)->firstOrFail();
+        $user = User::factory()->create(['is_active' => true]);
+
+        Vehicle::query()->whereKey($vehicle->id)->update([
+            'status' => 'listed',
+            'is_preparation_completed' => true,
+        ]);
+
+        $updated = app(VehicleService::class)->updateVehicle($staleVehicle, [
+            'brand' => $staleVehicle->brand,
+            'model' => $staleVehicle->model,
+            'license_plate' => $staleVehicle->license_plate,
+            'is_preparation_completed' => false,
+        ], $user->id);
+
+        $this->assertTrue($updated->is_preparation_completed);
+        $this->assertDatabaseHas('vehicles', [
+            'id' => $vehicle->id,
+            'is_preparation_completed' => true,
+        ]);
+    }
+
     public function test_index_supports_search_and_status_filter(): void
     {
         $user = User::factory()->create(['is_active' => true]);
