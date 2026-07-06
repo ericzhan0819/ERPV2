@@ -223,20 +223,20 @@
 ## 7. UI/UX 收斂與完整 Smoke（對應 `企劃書_v1.1.md` §10, §12）
 
 ### UI 檢查
-- [ ] 新增頁面依 UI.md 語意色彩 token、light/dark mode
-- [ ] 表單遵守「visible labels + required * + per-field error + on-blur validation」
-- [ ] 依 UI.md badge/button/card/sidebar 規範
+- [x] 新增頁面依 UI.md 語意色彩 token、light/dark mode（審查 Customers/Users/MoneyEntries 審核 UI/Vehicle 入庫表單/Badge 元件，未發現寫死 hex，皆使用語意 token）
+- [ ] 表單遵守「visible labels + required * + per-field error + on-blur validation」— label 可見與必填 `*` 已補齊（VehicleCreate/VehicleDetail 原本漏標，已修正），但 per-field 錯誤訊息 + on-blur 驗證屬全站既有模式（含 1.0 頁面），目前仍是單一錯誤橫幅、submit 時才驗證。此為跨頁面架構調整，未在本次一併重構，避免大範圍改動，列為後續項目
+- [x] 依 UI.md badge/button/card/sidebar 規範（ApprovalStatusBadge/ActiveStatusBadge/VehicleStatusBadge/MoneyDirectionBadge 皆 icon+文字、三件組色彩；Sidebar 依角色以 `.filter()` 真實移除節點，非 CSS 隱藏；各頁單一 primary 按鈕、刪除等破壞性操作以 `text-error` 區隔）
 
 ### Smoke 驗收（22 項，對應 `企劃書_v1.1.md` §12）
-- [ ] 1–13：admin 完整入庫流程到成交結案列印
-- [ ] 14–17：sales 帳號權限驗證（無 purchase_price/毛利/資金、可銷售流程、無車輛新增/上架/定價、可一般支出但 pending）
-- [ ] 18–19：manager 帳號權限驗證（可車輛建檔/上架/客戶、一般支出需核准）
-- [ ] 20–22：admin 核准/駁回流程、approved 後正式計入、rejected 不計入
+- [ ] 1–13：admin 完整入庫流程到成交結案列印 — 未執行，原因見任務回覆（無瀏覽器自動化工具可實際點選 UI）
+- [ ] 14–17：sales 帳號權限驗證 — 同上，UI 點選未執行；後端 JSON 遮蔽與權限已由既有自動化測試覆蓋並全數通過
+- [ ] 18–19：manager 帳號權限驗證 — 同上
+- [ ] 20–22：admin 核准/駁回流程 — 同上，approval_status 對彙總的影響已由自動化測試覆蓋並通過
 
 ### 回歸測試
-- [ ] v1.0 flow（admin）行為一致
-- [ ] 既有資料相容
-- [ ] 既有列印頁可用
+- [x] v1.0 flow（admin）行為一致（`php artisan test` 238 passed / 3 skipped，涵蓋車輛流程、收支、列印資料組裝等既有 Feature 測試全數通過）
+- [x] 既有資料相容（既有回填 migration 測試通過）
+- [ ] 既有列印頁可用 — 僅確認 frontend/backend 可正常啟動且路由存在，未實際開啟列印頁面以肉眼檢查排版
 
 ---
 

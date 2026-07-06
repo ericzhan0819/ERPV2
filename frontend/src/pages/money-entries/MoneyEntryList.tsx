@@ -247,7 +247,35 @@ export function MoneyEntryList() {
             {!loading && entries.length === 0 && (
               <tr>
                 <td colSpan={isAdmin ? 10 : 9} className="px-4 py-6 text-center text-fg-muted">
-                  尚無符合條件的收支紀錄
+                  {search || direction || category || cashAccountId || vehicleId || dateFrom || dateTo || approvalStatus ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <span>尚無符合條件的收支紀錄</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearch('')
+                          setDirection('')
+                          setCategory('')
+                          setCashAccountId('')
+                          setVehicleId('')
+                          setDateFrom('')
+                          setDateTo('')
+                          setApprovalStatus('')
+                          setPage(1)
+                        }}
+                        className="text-sm font-medium text-primary hover:underline"
+                      >
+                        清除篩選條件
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <span>尚無收支紀錄</span>
+                      <Link to="/money-entries/create" className="text-sm font-medium text-primary hover:underline">
+                        新增第一筆收支
+                      </Link>
+                    </div>
+                  )}
                 </td>
               </tr>
             )}

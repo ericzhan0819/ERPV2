@@ -401,7 +401,16 @@ export function UserList() {
             {!loading && users.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-center text-fg-muted">
-                  尚無使用者
+                  <div className="flex flex-col items-center gap-2">
+                    <span>尚無使用者</span>
+                    <button
+                      type="button"
+                      onClick={() => setCreating(true)}
+                      className="text-sm font-medium text-primary hover:underline"
+                    >
+                      新增第一位員工
+                    </button>
+                  </div>
                 </td>
               </tr>
             )}

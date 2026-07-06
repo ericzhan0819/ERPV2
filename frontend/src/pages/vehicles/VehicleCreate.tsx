@@ -127,7 +127,10 @@ interface FieldProps {
 function Field({ label, value, onChange, type = 'text', required, readOnly }: FieldProps) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-fg-muted">{label}</label>
+      <label className="mb-1 block text-sm font-medium text-fg-muted">
+        {label}
+        {required && <span className="text-error"> *</span>}
+      </label>
       <input
         type={type}
         required={required}
@@ -278,7 +281,10 @@ export function VehicleCreate() {
               required
             />
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">付款帳戶</label>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">
+                付款帳戶
+                <span className="text-error"> *</span>
+              </label>
               <select
                 required
                 value={form.payment_cash_account_id}

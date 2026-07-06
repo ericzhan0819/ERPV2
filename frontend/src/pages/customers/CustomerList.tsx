@@ -105,7 +105,28 @@ export function CustomerList() {
             {!loading && customers.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-6 text-center text-fg-muted">
-                  尚無符合條件的客戶
+                  {search || customerType ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <span>尚無符合條件的客戶</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearch('')
+                          setCustomerType('')
+                        }}
+                        className="text-sm font-medium text-primary hover:underline"
+                      >
+                        清除篩選條件
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <span>尚無客戶資料</span>
+                      <Link to="/customers/create" className="text-sm font-medium text-primary hover:underline">
+                        新增第一筆客戶
+                      </Link>
+                    </div>
+                  )}
                 </td>
               </tr>
             )}

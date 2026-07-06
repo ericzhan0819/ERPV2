@@ -75,7 +75,10 @@ function Field({
 }) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-fg-muted">{label}</label>
+      <label className="mb-1 block text-sm font-medium text-fg-muted">
+        {label}
+        {required && <span className="text-error"> *</span>}
+      </label>
       <input
         type={type}
         required={required}
@@ -99,7 +102,10 @@ function CashAccountField({
 }) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-fg-muted">收款帳戶</label>
+      <label className="mb-1 block text-sm font-medium text-fg-muted">
+        收款帳戶
+        <span className="text-error"> *</span>
+      </label>
       <select
         required
         value={value}

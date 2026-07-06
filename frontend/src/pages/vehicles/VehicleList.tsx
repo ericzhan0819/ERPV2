@@ -117,7 +117,30 @@ export function VehicleList() {
             {!loading && vehicles.length === 0 && (
               <tr>
                 <td colSpan={canViewFinance ? 9 : 7} className="px-4 py-6 text-center text-fg-muted">
-                  尚無符合條件的車輛
+                  {search || status ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <span>尚無符合條件的車輛</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearch('')
+                          setStatus('')
+                        }}
+                        className="text-sm font-medium text-primary hover:underline"
+                      >
+                        清除篩選條件
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-2">
+                      <span>尚無車輛資料</span>
+                      {canManage && (
+                        <Link to="/vehicles/create" className="text-sm font-medium text-primary hover:underline">
+                          新增第一輛車
+                        </Link>
+                      )}
+                    </div>
+                  )}
                 </td>
               </tr>
             )}
