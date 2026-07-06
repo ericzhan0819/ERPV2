@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\Vehicle;
 use App\Services\VehicleService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -24,6 +25,7 @@ class VehicleTest extends TestCase
             'brand' => 'Toyota',
             'model' => 'Camry',
             'license_plate' => 'ABC-1234',
+            'idempotency_key' => (string) Str::uuid(),
         ]);
 
         $response->assertCreated();
@@ -64,6 +66,7 @@ class VehicleTest extends TestCase
             // displaying a different name/phone for the seller.
             'seller_name' => '不一致的名字',
             'seller_phone' => '0999999999',
+            'idempotency_key' => (string) Str::uuid(),
         ]);
 
         $response->assertCreated();
@@ -218,6 +221,7 @@ class VehicleTest extends TestCase
             'is_preparation_completed' => false,
             'lien_note' => '尚有貸款未結清',
             'condition_note' => '外觀良好，右前保桿有小刮痕',
+            'idempotency_key' => (string) Str::uuid(),
         ]);
 
         $response->assertCreated();
@@ -249,6 +253,7 @@ class VehicleTest extends TestCase
             'brand' => 'Toyota',
             'model' => 'Camry',
             'license_plate' => 'ABC-1234',
+            'idempotency_key' => (string) Str::uuid(),
         ]);
 
         $response->assertCreated();
@@ -274,6 +279,7 @@ class VehicleTest extends TestCase
             'is_transfer_completed' => null,
             'is_inspection_completed' => null,
             'is_preparation_completed' => null,
+            'idempotency_key' => (string) Str::uuid(),
         ]);
 
         $response->assertCreated();

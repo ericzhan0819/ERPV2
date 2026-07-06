@@ -132,6 +132,13 @@ export interface VehiclePrintClosingResponse {
   money_entries: VehicleMoneyEntry[]
 }
 
+export interface InitialPurchasePaymentPayload {
+  amount: number
+  cash_account_id: number
+  entry_date?: string
+  description?: string
+}
+
 export interface CreateVehiclePayload {
   brand: string
   model: string
@@ -161,4 +168,6 @@ export interface CreateVehiclePayload {
   floor_price?: number
   sales_note?: string
   notes?: string
+  idempotency_key: string
+  initial_purchase_payment?: InitialPurchasePaymentPayload
 }

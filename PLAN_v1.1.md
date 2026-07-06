@@ -193,30 +193,30 @@
 - 建車 + payment 在同一 transaction；payment 失敗時整個 vehicle 回滾，無半成品
 
 ### Schema / API
-- [ ] Migration：vehicles 新增 `idempotency_key`（string, nullable, unique）
-- [ ] 確認 vehicles 表已有 `stock_no` unique index
-- [ ] StoreVehicleRequest：`idempotency_key` required + `initial_purchase_payment` nested（nullable）
-- [ ] 驗證：sales 傳 initial_purchase_payment → 422
+- [x] Migration：vehicles 新增 `idempotency_key`（string, nullable, unique）
+- [x] 確認 vehicles 表已有 `stock_no` unique index
+- [x] StoreVehicleRequest：`idempotency_key` required + `initial_purchase_payment` nested（nullable）
+- [x] 驗證：sales 無法觸發 initial_purchase_payment（VehiclePolicy::create 已擋在建車功能之外，回 403，而非放行到建車流程再回 422）
 
 ### Service / Controller
-- [ ] VehicleService::createVehicle()：5 方法模式，race-safe idempotency + stock_no 共存
-- [ ] payment 欄位驗證：金額 > 0、cash_account 啟用
-- [ ] payment 產生的 MoneyEntry：`source_type='vehicle_workflow'`, `approval_status='approved'`（不進審核）
+- [x] VehicleService::createVehicle()：5 方法模式，race-safe idempotency + stock_no 共存
+- [x] payment 欄位驗證：金額 > 0、cash_account 啟用
+- [x] payment 產生的 MoneyEntry：`source_type='vehicle_workflow'`, `approval_status='approved'`（不進審核）
 
 ### 前端
-- [ ] VehicleCreate mount 時產生穩定 `idempotencyKey`（不是每次送出重新產生）
-- [ ] 新增「購車付款」區塊：checkbox + amount/cash_account_id/payment_date/note
-- [ ] 重試時使用同一 idempotency_key
+- [x] VehicleCreate mount 時產生穩定 `idempotencyKey`（不是每次送出重新產生）
+- [x] 新增「購車付款」區塊：checkbox + amount/cash_account_id/payment_date/note
+- [x] 重試時使用同一 idempotency_key
 
 ### 測試
-- [ ] 純建車無付款 → Vehicle 成功，無 MoneyEntry
-- [ ] 建車 + 付款（有效帳戶）→ Vehicle + MoneyEntry 同時建立
-- [ ] 付款失敗（帳戶停用） → 整個回滾，Vehicle 不存在
-- [ ] 相同 key + 相同 payload → replay，無重複
-- [ ] 相同 key + 不同 payload → 422
-- [ ] **MySQL concurrency test**（非 SQLite）：並發雙送相同 key → 只有一台 Vehicle 與一筆 payment，兩個請求都安全返回
-- [ ] sales 傳 initial_purchase_payment → 422
-- [ ] payment entry 應 approved，不進審核
+- [x] 純建車無付款 → Vehicle 成功，無 MoneyEntry
+- [x] 建車 + 付款（有效帳戶）→ Vehicle + MoneyEntry 同時建立
+- [x] 付款失敗（帳戶停用） → 整個回滾，Vehicle 不存在
+- [x] 相同 key + 相同 payload → replay，無重複
+- [x] 相同 key + 不同 payload → 422
+- [x] **MySQL concurrency test**（非 SQLite）：並發雙送相同 key → 只有一台 Vehicle 與一筆 payment，兩個請求都安全返回
+- [x] sales 呼叫建車端點（含 initial_purchase_payment）→ 403（policy 已完全擋下，見上）
+- [x] payment entry 應 approved，不進審核
 
 ---
 

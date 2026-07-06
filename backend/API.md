@@ -133,6 +133,21 @@ Request body（`StoreVehicleRequest`）：
 | floor_price | int | 否 | ≥0 |
 | sales_note | string | 否 | |
 | notes | string | 否 | |
+| idempotency_key | string | 是（max:100） | 防止重複送出造成重複建車 |
+| initial_purchase_payment | object | 否 | 勾選同步建立購車付款時才帶入，見下表 |
+
+`initial_purchase_payment`（勾選同步購車付款時）：
+
+| 欄位 | 型別 | 必填 | 說明 |
+|---|---|---|---|
+| amount | int | 是（≥1） | 付款金額 |
+| cash_account_id | int | 是 | 付款帳戶，須存在且啟用 |
+| entry_date | date | 否 | |
+| description | string | 否 | |
+
+填寫 `initial_purchase_payment` 時，Vehicle 與這筆購車付款 `MoneyEntry`（`direction=expense`、`category=購車付款`、`source_type=vehicle_workflow`、`approval_status=approved`）會在同一個 DB transaction 建立；付款帳戶停用或金額不合法時整個交易回滾，不會留下車輛。此 MoneyEntry 的 `idempotency_key` 由 `{idempotency_key}:initial-payment` 衍生，重試沿用同一把 `idempotency_key` 會 replay 既有車輛，不會重複建立。`sales` 角色無法呼叫本端點（見 VehiclePolicy::create），因此也不可能觸發建車同步購車付款。
+
+重試比對的是「建車當下正規化後的欄位快照」（`vehicles.idempotency_payload`），而不是車輛目前的即時狀態：車輛建立後可能已透過一般編輯、上架等流程被合法修改過，若拿目前狀態比對，同一把 key 的完全相同重試會被誤判成「不同建車內容」而 422。
 
 回傳：`VehicleResource`。
 

@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { isAxiosError } from 'axios'
 import { createVehicle } from '../../api/vehicles'
+import { listCashAccountOptions } from '../../api/cashAccounts'
 import { CustomerSelect } from '../../components/CustomerSelect'
 import type { CreateVehiclePayload } from '../../types/vehicle'
+import type { CashAccountOption } from '../../types/cashAccount'
+import { generateIdempotencyKey } from '../../utils/idempotency'
 
 interface FormState {
   brand: string
@@ -32,6 +35,11 @@ interface FormState {
   lien_note: string
   condition_note: string
   notes: string
+  create_purchase_payment: boolean
+  payment_amount: string
+  payment_cash_account_id: string
+  payment_entry_date: string
+  payment_description: string
 }
 
 const initialState: FormState = {
@@ -60,12 +68,18 @@ const initialState: FormState = {
   lien_note: '',
   condition_note: '',
   notes: '',
+  create_purchase_payment: false,
+  payment_amount: '',
+  payment_cash_account_id: '',
+  payment_entry_date: '',
+  payment_description: '',
 }
 
-function buildPayload(form: FormState): CreateVehiclePayload {
+function buildPayload(form: FormState, idempotencyKey: string): CreateVehiclePayload {
   const payload: CreateVehiclePayload = {
     brand: form.brand,
     model: form.model,
+    idempotency_key: idempotencyKey,
   }
   if (form.year) payload.year = Number(form.year)
   if (form.license_plate) payload.license_plate = form.license_plate
@@ -90,6 +104,14 @@ function buildPayload(form: FormState): CreateVehiclePayload {
   if (form.lien_note) payload.lien_note = form.lien_note
   if (form.condition_note) payload.condition_note = form.condition_note
   if (form.notes) payload.notes = form.notes
+  if (form.create_purchase_payment) {
+    payload.initial_purchase_payment = {
+      amount: Number(form.payment_amount),
+      cash_account_id: Number(form.payment_cash_account_id),
+      ...(form.payment_entry_date ? { entry_date: form.payment_entry_date } : {}),
+      ...(form.payment_description ? { description: form.payment_description } : {}),
+    }
+  }
   return payload
 }
 
@@ -135,8 +157,16 @@ export function VehicleCreate() {
   const navigate = useNavigate()
   const [form, setForm] = useState<FormState>(initialState)
   const [sellerCustomerLabel, setSellerCustomerLabel] = useState('')
+  const [cashAccounts, setCashAccounts] = useState<CashAccountOption[]>([])
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // 冪等鍵在表單掛載時就固定下來，重試送出必須沿用同一把鍵，
+  // 而不是每次送出都重新產生，否則重試會被視為全新請求。
+  const idempotencyKeyRef = useRef(generateIdempotencyKey())
+
+  useEffect(() => {
+    listCashAccountOptions().then(setCashAccounts).catch(() => setCashAccounts([]))
+  }, [])
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -151,9 +181,14 @@ export function VehicleCreate() {
       return
     }
 
+    if (form.create_purchase_payment && (!form.payment_amount || !form.payment_cash_account_id)) {
+      setError('已勾選同步購車付款，請填寫付款金額與付款帳戶')
+      return
+    }
+
     setSubmitting(true)
     try {
-      const vehicle = await createVehicle(buildPayload(form))
+      const vehicle = await createVehicle(buildPayload(form, idempotencyKeyRef.current))
       navigate(`/vehicles/${vehicle.id}`)
     } catch (err) {
       if (isAxiosError(err) && err.response?.data?.message) {
@@ -224,6 +259,59 @@ export function VehicleCreate() {
           />
           <Field label="收購價" value={form.purchase_price} onChange={(v) => set('purchase_price', v)} type="number" />
         </div>
+
+        <div className="my-6 border-t border-border" />
+
+        <SectionTitle>購車付款</SectionTitle>
+        <Checkbox
+          label="是否建立時同步記錄購車付款"
+          checked={form.create_purchase_payment}
+          onChange={(v) => set('create_purchase_payment', v)}
+        />
+        {form.create_purchase_payment && (
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field
+              label="付款金額"
+              value={form.payment_amount}
+              onChange={(v) => set('payment_amount', v)}
+              type="number"
+              required
+            />
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">付款帳戶</label>
+              <select
+                required
+                value={form.payment_cash_account_id}
+                onChange={(e) => set('payment_cash_account_id', e.target.value)}
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+              >
+                <option value="">請選擇</option>
+                {cashAccounts
+                  .filter((account) => account.is_active)
+                  .map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name}
+                    </option>
+                  ))}
+              </select>
+            </div>
+            <Field
+              label="付款日期"
+              value={form.payment_entry_date}
+              onChange={(v) => set('payment_entry_date', v)}
+              type="date"
+            />
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">付款備註</label>
+              <textarea
+                value={form.payment_description}
+                onChange={(e) => set('payment_description', e.target.value)}
+                rows={2}
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+              />
+            </div>
+          </div>
+        )}
 
         <div className="my-6 border-t border-border" />
 

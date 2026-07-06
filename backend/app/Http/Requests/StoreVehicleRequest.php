@@ -42,6 +42,12 @@ class StoreVehicleRequest extends FormRequest
             'floor_price' => ['nullable', 'integer', 'min:0'],
             'sales_note' => ['nullable', 'string'],
             'notes' => ['nullable', 'string'],
+            'idempotency_key' => ['required', 'string', 'max:100'],
+            'initial_purchase_payment' => ['nullable', 'array'],
+            'initial_purchase_payment.amount' => ['required_with:initial_purchase_payment', 'integer', 'min:1'],
+            'initial_purchase_payment.cash_account_id' => ['required_with:initial_purchase_payment', 'integer', 'exists:cash_accounts,id'],
+            'initial_purchase_payment.entry_date' => ['nullable', 'date'],
+            'initial_purchase_payment.description' => ['nullable', 'string'],
         ];
     }
 }

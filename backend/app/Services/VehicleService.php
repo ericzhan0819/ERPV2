@@ -14,6 +14,30 @@ use Illuminate\Validation\ValidationException;
 class VehicleService
 {
     /**
+     * 建車冪等 payload 比對必須涵蓋的完整欄位集合。使用固定清單而非「這次請求帶了
+     * 哪些欄位就比對哪些」，是因為重試若省略了某個 optional 欄位（無論是刻意送出
+     * 精簡過的 payload，或單純的 client bug），只依賴「有帶的欄位」比對會直接跳過
+     * 該欄位的檢查，讓內容其實不同的請求被誤判成「相同 payload」而靜默 replay 成功。
+     */
+    private const COMPARABLE_VEHICLE_FIELDS = [
+        'brand', 'model', 'year', 'license_plate', 'vin', 'mileage_km', 'color',
+        'displacement', 'transmission', 'fuel_type', 'parking_location',
+        'has_registration_document', 'has_spare_key', 'is_transfer_completed',
+        'is_inspection_completed', 'is_preparation_completed',
+        'lien_note', 'condition_note', 'purchase_date', 'purchase_source_type',
+        'seller_name', 'seller_phone', 'seller_customer_id',
+        'purchase_price', 'asking_price', 'floor_price', 'sales_note', 'notes',
+    ];
+
+    private const BOOLEAN_VEHICLE_FIELDS = [
+        'has_registration_document',
+        'has_spare_key',
+        'is_transfer_completed',
+        'is_inspection_completed',
+        'is_preparation_completed',
+    ];
+
+    /**
      * @param  array<string, mixed>  $filters
      */
     public function listVehicles(array $filters): LengthAwarePaginator
@@ -45,19 +69,272 @@ class VehicleService
      */
     public function createVehicle(array $data, int $userId): Vehicle
     {
-        return DB::transaction(function () use ($data, $userId) {
-            $data = $this->applySellerCustomerSnapshot($data);
-            $data = $this->normalizeIntakeCheckFields($data);
+        $idempotencyKey = (string) $data['idempotency_key'];
+        $effectiveData = $this->normalizeCreateVehicleData($data);
 
-            $vehicle = new Vehicle($data);
-            $vehicle->stock_no = $this->generateStockNo();
-            $vehicle->status = 'preparing';
-            $vehicle->created_by = $userId;
-            $vehicle->updated_by = $userId;
-            $vehicle->save();
+        try {
+            return DB::transaction(fn () => $this->createVehicleInsideTransaction(
+                $idempotencyKey,
+                $effectiveData,
+                $userId
+            ));
+        } catch (QueryException $e) {
+            if (! $this->isIdempotencyKeyUniqueViolation($e)) {
+                throw $e;
+            }
 
-            return $vehicle;
+            return $this->replayRacedVehicleCreationAfterRollback($e, $idempotencyKey, $effectiveData);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{vehicle: array<string, mixed>, comparable: array<string, mixed>, payment: array{amount: int, cash_account_id: int, entry_date: string, description: string|null, entry_date_was_supplied: bool}|null}
+     */
+    private function normalizeCreateVehicleData(array $data): array
+    {
+        $vehicleData = $data;
+        unset($vehicleData['idempotency_key'], $vehicleData['initial_purchase_payment']);
+
+        $vehicleData = $this->applySellerCustomerSnapshot($vehicleData);
+        $vehicleData = $this->normalizeIntakeCheckFields($vehicleData);
+        $vehicleData = $this->castVehicleFieldsForComparison($vehicleData);
+
+        return [
+            'vehicle' => $vehicleData,
+            'comparable' => $this->buildComparableVehicleFields($vehicleData),
+            'payment' => $this->normalizeInitialPurchasePaymentData($data['initial_purchase_payment'] ?? null),
+        ];
+    }
+
+    /**
+     * 把「這次請求帶了哪些欄位」正規化成完整、固定欄位集合的規範化表示：布林欄位缺席
+     * 時比照 Vehicle model 的 mass-assignment 預設值視為 false，其餘欄位缺席時視為
+     * null。這樣不論兩次請求各自省略了哪些 optional 欄位，只要「實際會落地的值」
+     * 相同就能正確比對，而不是「兩次都剛好帶了同一組欄位」才能比對。
+     *
+     * @param  array<string, mixed>  $vehicleData
+     * @return array<string, mixed>
+     */
+    private function buildComparableVehicleFields(array $vehicleData): array
+    {
+        $comparable = [];
+        // 一旦指定 seller_customer_id，seller_name/seller_phone 就是每次都會被該客戶
+        // 「當下」資料覆寫的衍生快照（見 applySellerCustomerSnapshot），不是這次請求
+        // 穩定的身份特徵——客戶事後改名/改電話會讓這兩個值隨時間變動。若把它們納入
+        // 冪等比對，同一把 idempotency_key、同樣指定同一位客戶的完全相同重試，會因為
+        // 客戶資料在兩次請求之間被改過而被誤判成「不同建車內容」。冪等比對只需認定
+        // seller_customer_id 本身（已在下方迴圈中一併比對），略過這兩個衍生欄位。
+        $hasSellerCustomerLink = ! empty($vehicleData['seller_customer_id']);
+
+        foreach (self::COMPARABLE_VEHICLE_FIELDS as $field) {
+            if ($hasSellerCustomerLink && in_array($field, ['seller_name', 'seller_phone'], true)) {
+                continue;
+            }
+
+            if (in_array($field, self::BOOLEAN_VEHICLE_FIELDS, true)) {
+                $comparable[$field] = array_key_exists($field, $vehicleData) ? (bool) $vehicleData[$field] : false;
+                continue;
+            }
+
+            $comparable[$field] = $vehicleData[$field] ?? null;
+        }
+
+        return $comparable;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function castVehicleFieldsForComparison(array $data): array
+    {
+        foreach (['year', 'mileage_km', 'purchase_price', 'asking_price', 'floor_price', 'seller_customer_id'] as $field) {
+            if (array_key_exists($field, $data) && $data[$field] !== null) {
+                $data[$field] = (int) $data[$field];
+            }
+        }
+
+        foreach ([
+            'has_registration_document',
+            'has_spare_key',
+            'is_transfer_completed',
+            'is_inspection_completed',
+            'is_preparation_completed',
+        ] as $field) {
+            if (array_key_exists($field, $data)) {
+                $data[$field] = (bool) $data[$field];
+            }
+        }
+
+        foreach (['purchase_date', 'listing_date'] as $field) {
+            if (array_key_exists($field, $data) && $data[$field] !== null) {
+                $data[$field] = \Illuminate\Support\Carbon::parse($data[$field])->toDateString();
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $paymentInput
+     * @return array{amount: int, cash_account_id: int, entry_date: string, description: string|null, entry_date_was_supplied: bool}|null
+     */
+    private function normalizeInitialPurchasePaymentData(?array $paymentInput): ?array
+    {
+        if (empty($paymentInput)) {
+            return null;
+        }
+
+        $entryDateWasSupplied = ! empty($paymentInput['entry_date']);
+
+        return [
+            'amount' => (int) $paymentInput['amount'],
+            'cash_account_id' => (int) $paymentInput['cash_account_id'],
+            'entry_date' => $entryDateWasSupplied ? $paymentInput['entry_date'] : now()->toDateString(),
+            'description' => $paymentInput['description'] ?? null,
+            'entry_date_was_supplied' => $entryDateWasSupplied,
+        ];
+    }
+
+    /**
+     * @param  array{vehicle: array<string, mixed>, comparable: array<string, mixed>, payment: array{amount: int, cash_account_id: int, entry_date: string, description: string|null, entry_date_was_supplied: bool}|null}  $effectiveData
+     */
+    private function createVehicleInsideTransaction(string $idempotencyKey, array $effectiveData, int $userId): Vehicle
+    {
+        $existingVehicle = Vehicle::query()
+            ->where('idempotency_key', $idempotencyKey)
+            ->first();
+
+        if ($existingVehicle) {
+            return $this->replayOrRejectVehicleCreation($existingVehicle, $effectiveData);
+        }
+
+        $vehicle = new Vehicle($effectiveData['vehicle']);
+        $vehicle->stock_no = $this->generateStockNo();
+        $vehicle->status = 'preparing';
+        $vehicle->idempotency_key = $idempotencyKey;
+        $vehicle->idempotency_payload = json_encode($effectiveData['comparable'], JSON_THROW_ON_ERROR);
+        $vehicle->created_by = $userId;
+        $vehicle->updated_by = $userId;
+        $vehicle->save();
+
+        if ($effectiveData['payment'] !== null) {
+            $this->assertCashAccountActive($effectiveData['payment']['cash_account_id']);
+
+            $entry = new MoneyEntry([
+                'vehicle_id' => $vehicle->id,
+                'cash_account_id' => $effectiveData['payment']['cash_account_id'],
+                'entry_date' => $effectiveData['payment']['entry_date'],
+                'direction' => 'expense',
+                'category' => '購車付款',
+                'amount' => $effectiveData['payment']['amount'],
+                'counterparty_name' => $vehicle->seller_name,
+                'description' => $effectiveData['payment']['description'],
+                'idempotency_key' => $idempotencyKey.':initial-payment',
+                'source_type' => MoneyEntry::SOURCE_VEHICLE_WORKFLOW,
+            ]);
+            $entry->created_by = $userId;
+            $entry->updated_by = $userId;
+            // 車輛流程收支不進審核佇列，避免建車流程被卡住。
+            $entry->approval_status = MoneyEntry::APPROVAL_APPROVED;
+
+            // Let a duplicate-key QueryException escape so DB::transaction rolls back
+            // the vehicle insert too; it is caught and retried by the caller.
+            $entry->save();
+        }
+
+        return $vehicle;
+    }
+
+    /**
+     * @param  array{vehicle: array<string, mixed>, comparable: array<string, mixed>, payment: array{amount: int, cash_account_id: int, entry_date: string, description: string|null, entry_date_was_supplied: bool}|null}  $effectiveData
+     */
+    private function replayRacedVehicleCreationAfterRollback(QueryException $original, string $idempotencyKey, array $effectiveData): Vehicle
+    {
+        return DB::transaction(function () use ($original, $idempotencyKey, $effectiveData) {
+            // Same MySQL REPEATABLE READ stale-snapshot concern as reserve/final-payment:
+            // after a rollback, re-read the idempotency_key in a fresh transaction/locking read.
+            $racedVehicle = Vehicle::query()
+                ->where('idempotency_key', $idempotencyKey)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $racedVehicle) {
+                throw $original;
+            }
+
+            return $this->replayOrRejectVehicleCreation($racedVehicle, $effectiveData);
         });
+    }
+
+    /**
+     * @param  array{vehicle: array<string, mixed>, comparable: array<string, mixed>, payment: array{amount: int, cash_account_id: int, entry_date: string, description: string|null, entry_date_was_supplied: bool}|null}  $effectiveData
+     */
+    private function replayOrRejectVehicleCreation(Vehicle $existingVehicle, array $effectiveData): Vehicle
+    {
+        if (! $this->isSameVehicleCreationRequest($existingVehicle, $effectiveData)) {
+            throw ValidationException::withMessages([
+                'idempotency_key' => ['此冪等鍵已被不同建車內容使用，請重新整理後再試'],
+            ]);
+        }
+
+        return $existingVehicle;
+    }
+
+    /**
+     * @param  array{vehicle: array<string, mixed>, comparable: array<string, mixed>, payment: array{amount: int, cash_account_id: int, entry_date: string, description: string|null, entry_date_was_supplied: bool}|null}  $effectiveData
+     */
+    private function isSameVehicleCreationRequest(Vehicle $existingVehicle, array $effectiveData): bool
+    {
+        // 比對對象是「建車當下儲存的快照」，而不是車輛目前的即時狀態：車輛在建立後
+        // 可以合法地被 update/list/reserve 等流程繼續修改，若拿目前狀態比對，同一把
+        // idempotency_key 的「完全相同」重試會因為車輛後續被正常編輯過而被誤判成
+        // 「不同建車內容」而 422，即使這次重試的 payload 其實跟當初建立時一字不差。
+        $storedComparable = json_decode((string) $existingVehicle->idempotency_payload, true);
+
+        if (! is_array($storedComparable) || $storedComparable !== $effectiveData['comparable']) {
+            return false;
+        }
+
+        return $this->isSameInitialPurchasePaymentRequest($existingVehicle, $effectiveData['payment']);
+    }
+
+    /**
+     * @param  array{amount: int, cash_account_id: int, entry_date: string, description: string|null, entry_date_was_supplied: bool}|null  $payment
+     */
+    private function isSameInitialPurchasePaymentRequest(Vehicle $existingVehicle, ?array $payment): bool
+    {
+        $existingEntry = MoneyEntry::query()
+            ->where('vehicle_id', $existingVehicle->id)
+            ->where('idempotency_key', $existingVehicle->idempotency_key.':initial-payment')
+            ->first();
+
+        if ($payment === null) {
+            return $existingEntry === null;
+        }
+
+        if (! $existingEntry) {
+            return false;
+        }
+
+        if ((int) $existingEntry->amount !== $payment['amount']) {
+            return false;
+        }
+
+        if ((int) $existingEntry->cash_account_id !== $payment['cash_account_id']) {
+            return false;
+        }
+
+        if ($existingEntry->description !== $payment['description']) {
+            return false;
+        }
+
+        if ($payment['entry_date_was_supplied'] && $existingEntry->entry_date?->toDateString() !== $payment['entry_date']) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
