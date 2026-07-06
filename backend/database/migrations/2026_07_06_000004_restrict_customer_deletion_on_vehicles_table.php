@@ -14,30 +14,46 @@ return new class extends Migration
      * relationship. This is a forward-only migration (not an edit to the earlier one)
      * so it actually reruns the constraint change on any database that already
      * applied 2026_07_06_000003 before this fix existed.
+     *
+     * Each column's drop+recreate is driven by the FK's *current* on_delete rule
+     * (read back from the database, not assumed) and skipped entirely once it
+     * already matches the target. MySQL/MariaDB run each Schema::table() command as
+     * its own auto-committing ALTER TABLE statement — there is no single-statement
+     * atomicity to rely on — so if this migration is interrupted partway (one column
+     * changed, the other not yet), simply re-running `migrate` finds each column
+     * already in (or not yet in) the desired state and finishes the remaining work
+     * instead of failing on an FK that was already dropped/added by the previous
+     * attempt.
      */
     public function up(): void
     {
-        Schema::table('vehicles', function (Blueprint $table) {
-            $table->dropForeign(['seller_customer_id']);
-            $table->dropForeign(['buyer_customer_id']);
-        });
-
-        Schema::table('vehicles', function (Blueprint $table) {
-            $table->foreign('seller_customer_id')->references('id')->on('customers')->restrictOnDelete();
-            $table->foreign('buyer_customer_id')->references('id')->on('customers')->restrictOnDelete();
-        });
+        $this->setOnDelete('seller_customer_id', 'restrict');
+        $this->setOnDelete('buyer_customer_id', 'restrict');
     }
 
     public function down(): void
     {
-        Schema::table('vehicles', function (Blueprint $table) {
-            $table->dropForeign(['seller_customer_id']);
-            $table->dropForeign(['buyer_customer_id']);
-        });
+        $this->setOnDelete('seller_customer_id', 'set null');
+        $this->setOnDelete('buyer_customer_id', 'set null');
+    }
 
-        Schema::table('vehicles', function (Blueprint $table) {
-            $table->foreign('seller_customer_id')->references('id')->on('customers')->nullOnDelete();
-            $table->foreign('buyer_customer_id')->references('id')->on('customers')->nullOnDelete();
+    private function setOnDelete(string $column, string $onDelete): void
+    {
+        $existing = collect(Schema::getForeignKeys('vehicles'))
+            ->first(fn (array $foreignKey) => $foreignKey['columns'] === [$column] && $foreignKey['foreign_table'] === 'customers');
+
+        if ($existing && $existing['on_delete'] === $onDelete) {
+            return;
+        }
+
+        Schema::table('vehicles', function (Blueprint $table) use ($column, $onDelete, $existing) {
+            if ($existing) {
+                $table->dropForeign([$column]);
+            }
+
+            $foreign = $table->foreign($column)->references('id')->on('customers');
+
+            $onDelete === 'restrict' ? $foreign->restrictOnDelete() : $foreign->nullOnDelete();
         });
     }
 };
