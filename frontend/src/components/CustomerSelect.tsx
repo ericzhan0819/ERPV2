@@ -23,19 +23,30 @@ export function CustomerSelect({ label, value, selectedLabel, onChange }: Custom
   // A newer keystroke's request can resolve before an older, slower one — without
   // this guard the stale response would land last and overwrite the results with
   // data for a query the input no longer shows, letting the user pick a customer
-  // that doesn't match what's on screen. The id is bumped synchronously as soon as
-  // query/open changes — NOT inside the debounced callback — so a request already
-  // in flight from the previous keystroke is invalidated immediately, even though
-  // its own fetch was sent before this keystroke's 250ms debounce has elapsed.
-  // Bumping it only when the debounced fetch fires would leave that exact window
-  // unguarded: an in-flight older request could still resolve and be accepted
-  // because the "latest" id hadn't moved on yet.
+  // that doesn't match what's on screen. The id is bumped synchronously on every
+  // effect run — NOT inside the debounced callback, and NOT only while open — so
+  // a request already in flight from the previous state is invalidated
+  // immediately, even though its own fetch was sent before this state's 250ms
+  // debounce has elapsed. Bumping it only when the debounced fetch fires would
+  // leave that exact window unguarded: an in-flight older request could still
+  // resolve and be accepted because the "latest" id hadn't moved on yet.
   const latestRequestId = useRef(0)
 
   useEffect(() => {
-    if (!open) return
-
+    // Bump on every run, including a close (open -> false): a request already in
+    // flight when the selector closes must not be allowed to land afterwards and
+    // silently repopulate `results` with data for a query that's no longer shown.
+    // Otherwise, reopening later (even with the query unchanged) could briefly
+    // render that stale list before a fresh fetch completes, and a click in that
+    // window would attach the wrong customer.
     const requestId = ++latestRequestId.current
+
+    if (!open) {
+      setResults([])
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
 
     const handle = setTimeout(() => {
