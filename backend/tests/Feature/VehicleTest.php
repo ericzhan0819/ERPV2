@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\CashAccount;
+use App\Models\Customer;
 use App\Models\MoneyEntry;
 use App\Models\User;
 use App\Models\Vehicle;
@@ -46,6 +47,54 @@ class VehicleTest extends TestCase
         ]);
 
         $response->assertStatus(422);
+    }
+
+    public function test_seller_customer_id_overrides_seller_name_and_phone_with_the_customers_own_data(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $customer = Customer::factory()->create(['name' => '客戶端真實姓名', 'phone' => '0900000001']);
+
+        $response = $this->actingAs($user, 'web')->postJson('/api/vehicles', [
+            'brand' => 'Toyota',
+            'model' => 'Camry',
+            'license_plate' => 'ABC-1234',
+            'seller_customer_id' => $customer->id,
+            // Deliberately mismatched free-text values: the customer link must win,
+            // otherwise the vehicle record could point at one customer while
+            // displaying a different name/phone for the seller.
+            'seller_name' => '不一致的名字',
+            'seller_phone' => '0999999999',
+        ]);
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.seller_name', '客戶端真實姓名');
+        $response->assertJsonPath('data.seller_phone', '0900000001');
+
+        $this->assertDatabaseHas('vehicles', [
+            'seller_customer_id' => $customer->id,
+            'seller_name' => '客戶端真實姓名',
+            'seller_phone' => '0900000001',
+        ]);
+    }
+
+    public function test_updating_seller_customer_id_resyncs_seller_snapshot(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['seller_name' => '舊賣家', 'seller_phone' => '0911111111']);
+        $customer = Customer::factory()->create(['name' => '新賣家', 'phone' => '0922222222']);
+
+        $response = $this->actingAs($user, 'web')->putJson("/api/vehicles/{$vehicle->id}", [
+            'brand' => $vehicle->brand,
+            'model' => $vehicle->model,
+            'license_plate' => $vehicle->license_plate,
+            'seller_customer_id' => $customer->id,
+            'seller_name' => '仍然不一致',
+            'seller_phone' => '0900000000',
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('data.seller_name', '新賣家');
+        $response->assertJsonPath('data.seller_phone', '0922222222');
     }
 
     public function test_index_supports_search_and_status_filter(): void

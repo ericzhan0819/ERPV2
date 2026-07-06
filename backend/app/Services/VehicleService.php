@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\CashAccount;
+use App\Models\Customer;
 use App\Models\MoneyEntry;
 use App\Models\Vehicle;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -45,6 +46,8 @@ class VehicleService
     public function createVehicle(array $data, int $userId): Vehicle
     {
         return DB::transaction(function () use ($data, $userId) {
+            $data = $this->applySellerCustomerSnapshot($data);
+
             $vehicle = new Vehicle($data);
             $vehicle->stock_no = $this->generateStockNo();
             $vehicle->status = 'preparing';
@@ -61,11 +64,41 @@ class VehicleService
      */
     public function updateVehicle(Vehicle $vehicle, array $data, int $userId): Vehicle
     {
+        $data = $this->applySellerCustomerSnapshot($data);
+
         $vehicle->fill($data);
         $vehicle->updated_by = $userId;
         $vehicle->save();
 
         return $vehicle;
+    }
+
+    /**
+     * 賣方客戶連結是權威來源：一旦指定 seller_customer_id，seller_name/seller_phone
+     * 一律以該客戶目前資料覆寫，避免使用者輸入與所選客戶不一致而讓車輛紀錄無法可靠
+     * 對應到實際客戶。
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function applySellerCustomerSnapshot(array $data): array
+    {
+        if (empty($data['seller_customer_id'])) {
+            return $data;
+        }
+
+        $customer = Customer::query()->find($data['seller_customer_id']);
+
+        if (! $customer) {
+            throw ValidationException::withMessages([
+                'seller_customer_id' => ['指定的賣方客戶不存在'],
+            ]);
+        }
+
+        $data['seller_name'] = $customer->name;
+        $data['seller_phone'] = $customer->phone;
+
+        return $data;
     }
 
     public function deleteVehicle(Vehicle $vehicle): void
@@ -153,7 +186,7 @@ class VehicleService
     public function reserveVehicle(Vehicle $vehicle, array $data, int $userId): Vehicle
     {
         $idempotencyKey = (string) $data['idempotency_key'];
-        $effectiveData = $this->normalizeReserveData($data);
+        $effectiveData = $this->applyBuyerCustomerSnapshot($this->normalizeReserveData($data));
 
         try {
             return DB::transaction(fn () => $this->createReservationInsideTransaction(
@@ -342,6 +375,34 @@ class VehicleService
             'entry_date' => $entryDateWasSupplied ? $data['entry_date'] : now()->toDateString(),
             'entry_date_was_supplied' => $entryDateWasSupplied,
         ];
+    }
+
+    /**
+     * 買方客戶連結是權威來源：一旦指定 buyer_customer_id，buyer_name/buyer_phone 一律
+     * 以該客戶目前資料覆寫，避免使用者輸入與所選客戶不一致。套用在 normalize 之後、
+     * 進入 transaction 之前，讓建立與 replay 比對看到的都是同一份已解析資料。
+     *
+     * @param  array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
+     * @return array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}
+     */
+    private function applyBuyerCustomerSnapshot(array $effectiveData): array
+    {
+        if ($effectiveData['buyer_customer_id'] === null) {
+            return $effectiveData;
+        }
+
+        $customer = Customer::query()->find($effectiveData['buyer_customer_id']);
+
+        if (! $customer) {
+            throw ValidationException::withMessages([
+                'buyer_customer_id' => ['指定的買方客戶不存在'],
+            ]);
+        }
+
+        $effectiveData['buyer_name'] = $customer->name;
+        $effectiveData['buyer_phone'] = $customer->phone;
+
+        return $effectiveData;
     }
 
     /**

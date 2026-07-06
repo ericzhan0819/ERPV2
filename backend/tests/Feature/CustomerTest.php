@@ -5,7 +5,9 @@ namespace Tests\Feature;
 use App\Models\Customer;
 use App\Models\User;
 use App\Models\Vehicle;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class CustomerTest extends TestCase
@@ -129,6 +131,21 @@ class CustomerTest extends TestCase
             ->assertJsonValidationErrors('customer');
 
         $this->assertDatabaseHas('customers', ['id' => $customer->id]);
+    }
+
+    public function test_foreign_key_restricts_deletion_of_linked_customer_even_bypassing_the_service_check(): void
+    {
+        // Proves the DB-level backstop (restrictOnDelete), not just the application
+        // check: deletes here go straight through the query builder, bypassing
+        // CustomerService::deleteCustomer()'s own relation check entirely, to confirm
+        // a linked customer can never be silently deleted (or nulled out) even if the
+        // app-level check were raced or skipped.
+        $customer = Customer::factory()->create();
+        Vehicle::factory()->create(['seller_customer_id' => $customer->id]);
+
+        $this->expectException(QueryException::class);
+
+        DB::table('customers')->where('id', $customer->id)->delete();
     }
 
     public function test_vehicle_seller_name_snapshot_does_not_change_when_customer_is_updated(): void

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\CashAccount;
+use App\Models\Customer;
 use App\Models\MoneyEntry;
 use App\Models\User;
 use App\Models\Vehicle;
@@ -88,6 +89,39 @@ class VehicleWorkflowTest extends TestCase
 
         $response->assertSuccessful();
         $this->assertNotNull($response->json('warning'));
+    }
+
+    public function test_buyer_customer_id_overrides_buyer_name_and_phone_with_the_customers_own_data(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'listed']);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $customer = Customer::factory()->create(['name' => '客戶端真實買家', 'phone' => '0900000002']);
+
+        $response = $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/reserve", [
+                // Deliberately mismatched free-text values: the customer link must
+                // win, so the vehicle's buyer snapshot always matches the customer
+                // it is actually linked to.
+                'buyer_name' => '不一致的名字',
+                'buyer_phone' => '0999999999',
+                'buyer_customer_id' => $customer->id,
+                'sold_price' => 480000,
+                'deposit_amount' => 100000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => (string) Str::uuid(),
+            ]);
+
+        $response->assertSuccessful();
+        $response->assertJsonPath('data.buyer_name', '客戶端真實買家');
+        $response->assertJsonPath('data.buyer_phone', '0900000002');
+
+        $this->assertDatabaseHas('vehicles', [
+            'id' => $vehicle->id,
+            'buyer_customer_id' => $customer->id,
+            'buyer_name' => '客戶端真實買家',
+            'buyer_phone' => '0900000002',
+        ]);
     }
 
     public function test_cannot_reserve_a_vehicle_that_is_not_listed(): void
@@ -1060,9 +1094,6 @@ class VehicleWorkflowTest extends TestCase
         $this->assertDatabaseHas('vehicles', ['id' => $vehicle->id, 'status' => 'sold']);
     }
 
-    /**
-     * @return Vehicle
-     */
     private function createReservedVehicleWithDeposit(User $user, CashAccount $cashAccount, int $soldPrice, int $depositAmount): Vehicle
     {
         $vehicle = Vehicle::factory()->create(['status' => 'preparing']);

@@ -1,11 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { isAxiosError } from 'axios'
 import { createVehicle } from '../../api/vehicles'
-import { listCustomers } from '../../api/customers'
+import { CustomerSelect } from '../../components/CustomerSelect'
 import type { CreateVehiclePayload } from '../../types/vehicle'
-import type { Customer } from '../../types/customer'
 
 interface FormState {
   brand: string
@@ -67,18 +66,20 @@ interface FieldProps {
   onChange: (value: string) => void
   type?: string
   required?: boolean
+  readOnly?: boolean
 }
 
-function Field({ label, value, onChange, type = 'text', required }: FieldProps) {
+function Field({ label, value, onChange, type = 'text', required, readOnly }: FieldProps) {
   return (
     <div>
       <label className="mb-1 block text-sm font-medium text-fg-muted">{label}</label>
       <input
         type={type}
         required={required}
+        readOnly={readOnly}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+        className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30 read-only:bg-surface-2 read-only:text-fg-muted"
       />
     </div>
   )
@@ -87,15 +88,9 @@ function Field({ label, value, onChange, type = 'text', required }: FieldProps) 
 export function VehicleCreate() {
   const navigate = useNavigate()
   const [form, setForm] = useState<FormState>(initialState)
-  const [customers, setCustomers] = useState<Customer[]>([])
+  const [sellerCustomerLabel, setSellerCustomerLabel] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-
-  useEffect(() => {
-    listCustomers({ per_page: 100 })
-      .then((response) => setCustomers(response.data))
-      .catch(() => undefined)
-  }, [])
 
   function set<K extends keyof FormState>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -143,23 +138,33 @@ export function VehicleCreate() {
           <Field label="顏色" value={form.color} onChange={(v) => set('color', v)} />
           <Field label="買入日期" value={form.purchase_date} onChange={(v) => set('purchase_date', v)} type="date" />
           <Field label="買入來源" value={form.purchase_source_type} onChange={(v) => set('purchase_source_type', v)} />
-          <Field label="原車主 / 供應商" value={form.seller_name} onChange={(v) => set('seller_name', v)} />
-          <Field label="聯絡電話" value={form.seller_phone} onChange={(v) => set('seller_phone', v)} />
-          <div>
-            <label className="mb-1 block text-sm font-medium text-fg-muted">關聯客戶（賣方）</label>
-            <select
-              value={form.seller_customer_id}
-              onChange={(e) => set('seller_customer_id', e.target.value)}
-              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
-            >
-              <option value="">不指定</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <CustomerSelect
+            label="關聯客戶（賣方）"
+            value={form.seller_customer_id}
+            selectedLabel={sellerCustomerLabel}
+            onChange={(customerId, customer) => {
+              set('seller_customer_id', customerId)
+              if (customer) {
+                set('seller_name', customer.name)
+                set('seller_phone', customer.phone ?? '')
+                setSellerCustomerLabel(customer.name)
+              } else {
+                setSellerCustomerLabel('')
+              }
+            }}
+          />
+          <Field
+            label="原車主 / 供應商"
+            value={form.seller_name}
+            onChange={(v) => set('seller_name', v)}
+            readOnly={!!form.seller_customer_id}
+          />
+          <Field
+            label="聯絡電話"
+            value={form.seller_phone}
+            onChange={(v) => set('seller_phone', v)}
+            readOnly={!!form.seller_customer_id}
+          />
           <Field label="收購價" value={form.purchase_price} onChange={(v) => set('purchase_price', v)} type="number" />
         </div>
 

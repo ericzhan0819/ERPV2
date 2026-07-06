@@ -4,13 +4,12 @@ import { Link, useParams } from 'react-router-dom'
 import { isAxiosError } from 'axios'
 import { closeSaleVehicle, getVehicle, listVehicleForSale, recordFinalPayment, reserveVehicle } from '../../api/vehicles'
 import { listCashAccountOptions } from '../../api/cashAccounts'
-import { listCustomers } from '../../api/customers'
 import type { VehicleDetailResponse } from '../../types/vehicle'
 import type { CashAccountOption } from '../../types/cashAccount'
-import type { Customer } from '../../types/customer'
 import { generateIdempotencyKey } from '../../utils/idempotency'
 import { vehicleStatusLabels } from '../../utils/vehicleStatus'
 import { VehicleStatusBadge } from '../../components/VehicleStatusBadge'
+import { CustomerSelect } from '../../components/CustomerSelect'
 import { useAuth } from '../../hooks/useAuth'
 import { canManageVehicles, canRunSalesFlow, canViewFinancials } from '../../utils/permissions'
 
@@ -65,12 +64,14 @@ function Field({
   onChange,
   type = 'text',
   required,
+  readOnly,
 }: {
   label: string
   value: string
   onChange: (value: string) => void
   type?: string
   required?: boolean
+  readOnly?: boolean
 }) {
   return (
     <div>
@@ -78,9 +79,10 @@ function Field({
       <input
         type={type}
         required={required}
+        readOnly={readOnly}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+        className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30 read-only:bg-surface-2 read-only:text-fg-muted"
       />
     </div>
   )
@@ -140,7 +142,6 @@ export function VehicleDetail() {
   const vehicleId = Number(id)
   const [detail, setDetail] = useState<VehicleDetailResponse | null>(null)
   const [cashAccounts, setCashAccounts] = useState<CashAccountOption[]>([])
-  const [customers, setCustomers] = useState<Customer[]>([])
   const [error, setError] = useState<string | null>(null)
   const [activeModal, setActiveModal] = useState<ActiveModal>(null)
   const [formError, setFormError] = useState<string | null>(null)
@@ -158,9 +159,6 @@ export function VehicleDetail() {
     loadDetail()
     listCashAccountOptions()
       .then(setCashAccounts)
-      .catch(() => undefined)
-    listCustomers({ per_page: 100 })
-      .then((response) => setCustomers(response.data))
       .catch(() => undefined)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
@@ -440,7 +438,6 @@ export function VehicleDetail() {
           error={formError}
           submitting={submitting}
           cashAccounts={cashAccounts}
-          customers={customers}
         />
       )}
       {activeModal === 'final-payment' && (
@@ -514,7 +511,6 @@ function ReserveModal({
   error,
   submitting,
   cashAccounts,
-  customers,
 }: {
   onClose: () => void
   onSubmit: (form: {
@@ -530,11 +526,11 @@ function ReserveModal({
   error: string | null
   submitting: boolean
   cashAccounts: CashAccountOption[]
-  customers: Customer[]
 }) {
   const [buyer_name, setBuyerName] = useState('')
   const [buyer_phone, setBuyerPhone] = useState('')
   const [buyer_customer_id, setBuyerCustomerId] = useState('')
+  const [buyerCustomerLabel, setBuyerCustomerLabel] = useState('')
   const [sold_price, setSoldPrice] = useState('')
   const [deposit_amount, setDepositAmount] = useState('')
   const [cash_account_id, setCashAccountId] = useState('')
@@ -563,23 +559,23 @@ function ReserveModal({
   return (
     <Modal title="收訂金並保留" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <Field label="買方姓名" value={buyer_name} onChange={setBuyerName} required />
-        <Field label="買方電話" value={buyer_phone} onChange={setBuyerPhone} />
-        <div>
-          <label className="mb-1 block text-sm font-medium text-fg-muted">關聯客戶（買方）</label>
-          <select
-            value={buyer_customer_id}
-            onChange={(e) => setBuyerCustomerId(e.target.value)}
-            className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
-          >
-            <option value="">不指定</option>
-            {customers.map((customer) => (
-              <option key={customer.id} value={customer.id}>
-                {customer.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        <CustomerSelect
+          label="關聯客戶（買方）"
+          value={buyer_customer_id}
+          selectedLabel={buyerCustomerLabel}
+          onChange={(customerId, customer) => {
+            setBuyerCustomerId(customerId)
+            if (customer) {
+              setBuyerName(customer.name)
+              setBuyerPhone(customer.phone ?? '')
+              setBuyerCustomerLabel(customer.name)
+            } else {
+              setBuyerCustomerLabel('')
+            }
+          }}
+        />
+        <Field label="買方姓名" value={buyer_name} onChange={setBuyerName} required readOnly={!!buyer_customer_id} />
+        <Field label="買方電話" value={buyer_phone} onChange={setBuyerPhone} readOnly={!!buyer_customer_id} />
         <Field label="成交價" value={sold_price} onChange={setSoldPrice} type="number" required />
         <Field label="訂金金額" value={deposit_amount} onChange={setDepositAmount} type="number" required />
         <CashAccountField cashAccounts={cashAccounts} value={cash_account_id} onChange={setCashAccountId} />
