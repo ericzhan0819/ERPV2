@@ -241,6 +241,6 @@
 ---
 
 ## 8. 文件收尾
-- [ ] backend/API.md：補充新端點（/api/users/{id}/role, /api/money-entries/{id}/approve, /api/money-entries/{id}/reject, /api/customers/*, /api/vehicles/* 含 idempotency_key）
-- [ ] README.md：如需更新（新欄位、角色說明等）
-- [ ] 本檔案（PLAN_v1.1.md）：逐項勾選完成狀態
+- [x] backend/API.md：補充新端點（/api/users/{id}/role、/api/money-entries/{id}/approve、/api/money-entries/{id}/reject、/api/customers/*、/api/cash-accounts/options、/api/vehicles/* 新增欄位與 idempotency_key），並補上 v1.1 角色敏感欄位遮蔽總覽、VehicleResource/MoneyEntryResource 最新 JSON 範例
+- [x] README.md：補充 v1.1 說明（角色、審核流程、客戶模組手動驗證步驟；預設 seed 僅有 admin 帳號，manager/sales 需另外建立）
+- [x] 本檔案（PLAN_v1.1.md）：逐項勾選完成狀態
