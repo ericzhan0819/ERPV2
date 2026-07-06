@@ -215,6 +215,8 @@
 - [x] 相同 key + 相同 payload → replay，無重複
 - [x] 相同 key + 不同 payload → 422
 - [x] **MySQL concurrency test**（非 SQLite）：並發雙送相同 key → 只有一台 Vehicle 與一筆 payment，兩個請求都安全返回
+- [x] Code review 修正：以每日序號列鎖定 `stock_no`，避免當日首筆不同 key 並發產生重號；補上遞增、既有資料銜接、交易回滾及不同 key 真 MySQL 並行測試
+- [x] Code review 修正：關聯買方客戶後，即使客戶資料後續異動，相同保留 payload 仍可安全 replay
 - [x] sales 呼叫建車端點（含 initial_purchase_payment）→ 403（policy 已完全擋下，見上）
 - [x] payment entry 應 approved，不進審核
 
@@ -226,6 +228,7 @@
 - [x] 新增頁面依 UI.md 語意色彩 token、light/dark mode（審查 Customers/Users/MoneyEntries 審核 UI/Vehicle 入庫表單/Badge 元件，未發現寫死 hex，皆使用語意 token）
 - [ ] 表單遵守「visible labels + required * + per-field error + on-blur validation」— label 可見與必填 `*` 已補齊（VehicleCreate/VehicleDetail 原本漏標，已修正），但 per-field 錯誤訊息 + on-blur 驗證屬全站既有模式（含 1.0 頁面），目前仍是單一錯誤橫幅、submit 時才驗證。此為跨頁面架構調整，未在本次一併重構，避免大範圍改動，列為後續項目
 - [x] 依 UI.md badge/button/card/sidebar 規範（ApprovalStatusBadge/ActiveStatusBadge/VehicleStatusBadge/MoneyDirectionBadge 皆 icon+文字、三件組色彩；Sidebar 依角色以 `.filter()` 真實移除節點，非 CSS 隱藏；各頁單一 primary 按鈕、刪除等破壞性操作以 `text-error` 區隔）
+- [x] Code review 修正：sales 收支列表同步移除金額／資金帳戶欄位，避免後端遮蔽後前端顯示 `NaN`
 
 ### Smoke 驗收（22 項，對應 `企劃書_v1.1.md` §12）
 - [ ] 1–13：admin 完整入庫流程到成交結案列印 — 未執行，原因見任務回覆（無瀏覽器自動化工具可實際點選 UI）

@@ -20,16 +20,16 @@ export interface MoneyEntry {
   entry_date: string
   direction: MoneyDirection
   category: string
-  amount: number
+  amount?: number
   vehicle_id: number | null
-  cash_account_id: number
+  cash_account_id?: number
   counterparty_name: string | null
   description: string | null
   approval_status: MoneyEntryApprovalStatus
   approved_by: number | null
   approved_at: string | null
   vehicle: MoneyEntryVehicleRef | null
-  cash_account: MoneyEntryCashAccountRef | null
+  cash_account?: MoneyEntryCashAccountRef | null
   created_at: string | null
   updated_at: string | null
 }

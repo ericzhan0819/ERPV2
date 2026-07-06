@@ -10,12 +10,15 @@ import type { Vehicle, VehicleListResponse } from '../../types/vehicle'
 import { categoriesForDirection, directionLabels } from '../../utils/moneyEntryCategory'
 import { MoneyDirectionBadge } from '../../components/MoneyDirectionBadge'
 import { ApprovalStatusBadge } from '../../components/ApprovalStatusBadge'
+import { canViewFinancials } from '../../utils/permissions'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
 export function MoneyEntryList() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  const canViewFinance = canViewFinancials(user?.role)
+  const columnCount = 7 + (canViewFinance ? 2 : 0) + (isAdmin ? 1 : 0)
 
   const [entries, setEntries] = useState<MoneyEntry[]>([])
   const [meta, setMeta] = useState<MoneyEntryListMeta | null>(null)
@@ -227,8 +230,8 @@ export function MoneyEntryList() {
               <th className="px-4 py-3 text-left font-medium text-fg-muted">日期</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">收入/支出</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">分類</th>
-              <th className="px-4 py-3 text-left font-medium text-fg-muted">金額</th>
-              <th className="px-4 py-3 text-left font-medium text-fg-muted">資金帳戶</th>
+              {canViewFinance && <th className="px-4 py-3 text-left font-medium text-fg-muted">金額</th>}
+              {canViewFinance && <th className="px-4 py-3 text-left font-medium text-fg-muted">資金帳戶</th>}
               <th className="px-4 py-3 text-left font-medium text-fg-muted">關聯車輛</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">對象</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">備註</th>
@@ -239,14 +242,14 @@ export function MoneyEntryList() {
           <tbody className="divide-y divide-border">
             {loading && (
               <tr>
-                <td colSpan={isAdmin ? 10 : 9} className="px-4 py-6 text-center text-fg-muted">
+                <td colSpan={columnCount} className="px-4 py-6 text-center text-fg-muted">
                   載入中...
                 </td>
               </tr>
             )}
             {!loading && entries.length === 0 && (
               <tr>
-                <td colSpan={isAdmin ? 10 : 9} className="px-4 py-6 text-center text-fg-muted">
+                <td colSpan={columnCount} className="px-4 py-6 text-center text-fg-muted">
                   {search || direction || category || cashAccountId || vehicleId || dateFrom || dateTo || approvalStatus ? (
                     <div className="flex flex-col items-center gap-2">
                       <span>尚無符合條件的收支紀錄</span>
@@ -287,8 +290,12 @@ export function MoneyEntryList() {
                     <MoneyDirectionBadge direction={entry.direction} />
                   </td>
                   <td className="px-4 py-3">{entry.category}</td>
-                  <td className="px-4 py-3 tabular-nums">{currencyFormatter.format(entry.amount)}</td>
-                  <td className="px-4 py-3">{entry.cash_account?.name ?? '-'}</td>
+                  {canViewFinance && (
+                    <td className="px-4 py-3 tabular-nums">
+                      {entry.amount === undefined ? '-' : currencyFormatter.format(entry.amount)}
+                    </td>
+                  )}
+                  {canViewFinance && <td className="px-4 py-3">{entry.cash_account?.name ?? '-'}</td>}
                   <td className="px-4 py-3">
                     {entry.vehicle ? (
                       <Link to={`/vehicles/${entry.vehicle.id}`} className="text-fg hover:underline">

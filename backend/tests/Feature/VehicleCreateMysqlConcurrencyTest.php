@@ -114,6 +114,177 @@ class VehicleCreateMysqlConcurrencyTest extends TestCase
         }
     }
 
+    public function test_different_idempotency_keys_created_concurrently_receive_distinct_stock_numbers(): void
+    {
+        $this->skipUnlessRealMysqlConcurrencyTestCanRun();
+        $this->assertSafeToFreshMigrateMysqlConcurrencyDatabase();
+        $this->artisan('migrate:fresh')->run();
+
+        $user = User::factory()->create(['is_active' => true]);
+        $firstPayload = [
+            'brand' => 'Toyota',
+            'model' => 'Camry',
+            'license_plate' => 'RACE-0001',
+            'idempotency_key' => (string) Str::uuid(),
+        ];
+        $secondPayload = [
+            'brand' => 'Honda',
+            'model' => 'Civic',
+            'license_plate' => 'RACE-0002',
+            'idempotency_key' => (string) Str::uuid(),
+        ];
+
+        $sockets = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+        if ($sockets === false) {
+            $this->markTestSkipped('此環境不支援 stream_socket_pair，無法建立父子行程同步屏障。');
+        }
+
+        $firstResultPath = tempnam(sys_get_temp_dir(), 'erpv2-stock-race-a-');
+        $secondResultPath = tempnam(sys_get_temp_dir(), 'erpv2-stock-race-b-');
+        if ($firstResultPath === false || $secondResultPath === false) {
+            $this->fail('無法建立 stock_no 並行測試暫存結果檔。');
+        }
+
+        $firstPid = pcntl_fork();
+        if ($firstPid === -1) {
+            $this->fail('pcntl_fork 失敗，無法建立第一個建車行程。');
+        }
+
+        if ($firstPid === 0) {
+            fclose($sockets[0]);
+            $this->runSequenceHoldingCreateInChild($sockets[1], $firstResultPath, $firstPayload, $user->id);
+        }
+
+        fclose($sockets[1]);
+        stream_set_timeout($sockets[0], self::CHILD_HANDSHAKE_TIMEOUT_SECONDS);
+        $secondPid = 0;
+
+        try {
+            $signal = fread($sockets[0], 1);
+            $metadata = stream_get_meta_data($sockets[0]);
+            if ($signal !== 'L' || ($metadata['timed_out'] ?? false)) {
+                $this->fail('第一個建車行程未在時限內鎖住每日序號列。');
+            }
+
+            $secondPid = pcntl_fork();
+            if ($secondPid === -1) {
+                $this->fail('pcntl_fork 失敗，無法建立第二個建車行程。');
+            }
+
+            if ($secondPid === 0) {
+                fclose($sockets[0]);
+                $this->runCreateRequestInChild($secondResultPath, $secondPayload, $user->id);
+            }
+
+            // Give the second process time to contend on the uncommitted sequence row,
+            // then let the first transaction commit. Correct locking makes the second
+            // request continue with the next number instead of also choosing 0001.
+            usleep(250000);
+            fwrite($sockets[0], 'C');
+            fclose($sockets[0]);
+
+            $firstStatus = $this->waitForChildOrStop($firstPid);
+            $firstPid = 0;
+            $secondStatus = $this->waitForChildOrStop($secondPid);
+            $secondPid = 0;
+
+            $firstResult = $this->readChildResult($firstResultPath);
+            $secondResult = $this->readChildResult($secondResultPath);
+
+            $this->assertTrue(
+                pcntl_wifexited($firstStatus) && pcntl_wexitstatus($firstStatus) === 0,
+                '第一個並行建車請求失敗：'.json_encode($firstResult, JSON_UNESCAPED_UNICODE)
+            );
+            $this->assertTrue(
+                pcntl_wifexited($secondStatus) && pcntl_wexitstatus($secondStatus) === 0,
+                '第二個並行建車請求失敗：'.json_encode($secondResult, JSON_UNESCAPED_UNICODE)
+            );
+
+            $stockNumbers = [$firstResult['stock_no'] ?? null, $secondResult['stock_no'] ?? null];
+            sort($stockNumbers);
+            $this->assertSame(['V'.now()->format('Ymd').'0001', 'V'.now()->format('Ymd').'0002'], $stockNumbers);
+
+            DB::purge();
+            $this->assertSame(2, Vehicle::query()
+                ->whereIn('idempotency_key', [$firstPayload['idempotency_key'], $secondPayload['idempotency_key']])
+                ->count());
+        } finally {
+            if (is_resource($sockets[0])) {
+                fclose($sockets[0]);
+            }
+            if ($firstPid > 0) {
+                $this->waitForChildOrStop($firstPid);
+            }
+            if ($secondPid > 0) {
+                $this->waitForChildOrStop($secondPid);
+            }
+            @unlink($firstResultPath);
+            @unlink($secondResultPath);
+        }
+    }
+
+    /**
+     * @param  resource  $socket
+     * @param  array<string, mixed>  $payload
+     */
+    private function runSequenceHoldingCreateInChild($socket, string $resultPath, array $payload, int $userId): never
+    {
+        DB::disconnect();
+        DB::purge();
+
+        $lockSignalSent = false;
+        DB::listen(function (QueryExecuted $query) use (&$lockSignalSent, $socket): void {
+            $sql = strtolower($query->sql);
+            if ($lockSignalSent || ! str_contains($sql, 'vehicle_stock_sequences') || ! str_contains($sql, 'insert')) {
+                return;
+            }
+
+            $lockSignalSent = true;
+            fwrite($socket, 'L');
+
+            if (fread($socket, 1) !== 'C') {
+                throw new RuntimeException('父行程未允許第一個建車交易提交。');
+            }
+        });
+
+        $this->runCreateRequestInChild($resultPath, $payload, $userId, $socket);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @param  resource|null  $socket
+     */
+    private function runCreateRequestInChild(string $resultPath, array $payload, int $userId, $socket = null): never
+    {
+        DB::disconnect();
+        DB::purge();
+
+        try {
+            $vehicle = app(VehicleService::class)->createVehicle($payload, $userId);
+            file_put_contents($resultPath, json_encode([
+                'ok' => true,
+                'vehicle_id' => $vehicle->id,
+                'stock_no' => $vehicle->stock_no,
+            ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+
+            if (is_resource($socket)) {
+                fclose($socket);
+            }
+            exit(0);
+        } catch (Throwable $e) {
+            file_put_contents($resultPath, json_encode([
+                'ok' => false,
+                'class' => $e::class,
+                'message' => $e->getMessage(),
+            ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+
+            if (is_resource($socket)) {
+                fclose($socket);
+            }
+            exit(1);
+        }
+    }
+
     /**
      * @param  resource  $socket
      * @param  array<string, mixed>  $payload

@@ -143,6 +143,41 @@ class VehicleWorkflowTest extends TestCase
         ]);
     }
 
+    public function test_reservation_replay_is_not_invalidated_by_later_buyer_customer_changes(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'listed']);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $customer = Customer::factory()->create(['name' => '原始買家', 'phone' => '0900000002']);
+        $idempotencyKey = (string) Str::uuid();
+
+        $payload = [
+            'buyer_name' => '原始買家',
+            'buyer_phone' => '0900000002',
+            'buyer_customer_id' => $customer->id,
+            'sold_price' => 480000,
+            'deposit_amount' => 100000,
+            'cash_account_id' => $cashAccount->id,
+            'idempotency_key' => $idempotencyKey,
+        ];
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/reserve", $payload)
+            ->assertSuccessful();
+
+        $customer->update(['name' => '更新後買家', 'phone' => '0911111111']);
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/reserve", $payload)
+            ->assertSuccessful()
+            ->assertJsonPath('data.buyer_name', '原始買家')
+            ->assertJsonPath('data.buyer_phone', '0900000002');
+
+        $this->assertSame(1, MoneyEntry::query()
+            ->where('idempotency_key', $idempotencyKey)
+            ->count());
+    }
+
     public function test_cannot_reserve_a_vehicle_that_is_not_listed(): void
     {
         $user = User::factory()->create(['is_active' => true]);

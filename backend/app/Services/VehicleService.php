@@ -550,7 +550,7 @@ class VehicleService
     public function reserveVehicle(Vehicle $vehicle, array $data, int $userId): Vehicle
     {
         $idempotencyKey = (string) $data['idempotency_key'];
-        $effectiveData = $this->applyBuyerCustomerSnapshot($this->normalizeReserveData($data));
+        $effectiveData = $this->normalizeReserveData($data);
 
         try {
             return DB::transaction(fn () => $this->createReservationInsideTransaction(
@@ -588,6 +588,7 @@ class VehicleService
 
         $this->assertStatus($lockedVehicle, 'listed', '只有上架中的車輛可以收訂金並保留');
         $this->assertCashAccountActive($effectiveData['cash_account_id']);
+        $effectiveData = $this->applyBuyerCustomerSnapshot($effectiveData);
 
         $lockedVehicle->fill([
             'buyer_name' => $effectiveData['buyer_name'],
@@ -680,7 +681,12 @@ class VehicleService
             return false;
         }
 
-        if ($entry->counterparty_name !== $effectiveData['buyer_name']) {
+        // buyer_name / buyer_phone are derived snapshots when buyer_customer_id
+        // is present. A later customer profile edit must not turn an otherwise exact
+        // retry into a different request, so compare those free-text fields only when
+        // the reservation was not linked to a customer.
+        if ($effectiveData['buyer_customer_id'] === null
+            && $entry->counterparty_name !== $effectiveData['buyer_name']) {
             return false;
         }
 
@@ -701,12 +707,14 @@ class VehicleService
             return false;
         }
 
-        if ($vehicle->buyer_name !== $effectiveData['buyer_name']) {
-            return false;
-        }
+        if ($effectiveData['buyer_customer_id'] === null) {
+            if ($vehicle->buyer_name !== $effectiveData['buyer_name']) {
+                return false;
+            }
 
-        if ($vehicle->buyer_phone !== $effectiveData['buyer_phone']) {
-            return false;
+            if ($vehicle->buyer_phone !== $effectiveData['buyer_phone']) {
+                return false;
+            }
         }
 
         if ((int) $vehicle->buyer_customer_id !== (int) $effectiveData['buyer_customer_id']) {
@@ -755,7 +763,14 @@ class VehicleService
             return $effectiveData;
         }
 
-        $customer = Customer::query()->find($effectiveData['buyer_customer_id']);
+        // Resolve and lock the customer inside the same transaction that writes
+        // the vehicle snapshot. This prevents a concurrent update/delete from making
+        // the linked customer and captured snapshot disagree or surfacing as a raw FK
+        // failure after validation already succeeded.
+        $customer = Customer::query()
+            ->whereKey($effectiveData['buyer_customer_id'])
+            ->lockForUpdate()
+            ->first();
 
         if (! $customer) {
             throw ValidationException::withMessages([
@@ -1063,15 +1078,47 @@ class VehicleService
 
     private function generateStockNo(): string
     {
+        $stockDate = now()->toDateString();
         $prefix = 'V'.now()->format('Ymd');
 
+        // Lock a stable per-day sequence row instead of the latest vehicle row. On the
+        // first vehicle of a day there is no vehicle row to lock, so two transactions
+        // could previously both generate ...0001 and one would fail with a deadlock or
+        // stock_no unique violation. insertOrIgnore is safe for the row-creation race;
+        // the following locking read serializes every sequence increment.
+        DB::table('vehicle_stock_sequences')->insertOrIgnore([
+            'stock_date' => $stockDate,
+            'last_sequence' => 0,
+        ]);
+
+        $storedSequence = DB::table('vehicle_stock_sequences')
+            ->where('stock_date', $stockDate)
+            ->lockForUpdate()
+            ->value('last_sequence');
+
+        if ($storedSequence === null) {
+            throw new \RuntimeException('無法取得車輛庫存編號序號');
+        }
+
+        // A newly deployed sequence table can coexist with vehicles created before the
+        // migration. Reconcile against the highest existing number before incrementing
+        // so the first post-deploy create cannot reuse an existing stock_no.
         $lastStockNo = Vehicle::query()
             ->where('stock_no', 'like', "{$prefix}%")
-            ->lockForUpdate()
             ->orderByDesc('stock_no')
             ->value('stock_no');
+        $existingSequence = $lastStockNo ? (int) substr($lastStockNo, -4) : 0;
+        $sequence = max((int) $storedSequence, $existingSequence) + 1;
 
-        $sequence = $lastStockNo ? ((int) substr($lastStockNo, -4)) + 1 : 1;
+        if ($sequence > 9999) {
+            throw ValidationException::withMessages([
+                'stock_no' => ['當日車輛庫存編號已達上限'],
+            ]);
+        }
+
+        DB::table('vehicle_stock_sequences')
+            ->where('stock_date', $stockDate)
+            ->update(['last_sequence' => $sequence]);
 
         return $prefix.str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
     }
