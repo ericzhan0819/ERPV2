@@ -264,6 +264,112 @@ class VehicleCreateWithPurchasePaymentTest extends TestCase
         $response->assertJsonValidationErrors('idempotency_key');
     }
 
+    public function test_idempotency_key_longer_than_the_derived_payment_key_limit_fails_validation(): void
+    {
+        // 建車同步購車付款時，實際寫入 money_entries.idempotency_key（欄位長度 100）
+        // 的鍵是 "{idempotency_key}:initial-payment"（衍生後綴 16 字元），因此
+        // idempotency_key 本身上限必須是 84，否則衍生鍵會超出欄位長度，讓原本合法
+        // 的建車請求在寫入付款時因資料庫例外而整筆回滾。
+        $user = User::factory()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+
+        $response = $this->actingAs($user, 'web')->postJson('/api/vehicles', [
+            'brand' => 'Toyota',
+            'model' => 'Camry',
+            'license_plate' => 'ABC-1234',
+            'idempotency_key' => str_repeat('a', 85),
+            'initial_purchase_payment' => [
+                'amount' => 100000,
+                'cash_account_id' => $cashAccount->id,
+            ],
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors('idempotency_key');
+    }
+
+    public function test_idempotency_key_at_the_derived_payment_key_limit_succeeds(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $idempotencyKey = str_repeat('a', 84);
+
+        $response = $this->actingAs($user, 'web')->postJson('/api/vehicles', [
+            'brand' => 'Toyota',
+            'model' => 'Camry',
+            'license_plate' => 'ABC-1234',
+            'idempotency_key' => $idempotencyKey,
+            'initial_purchase_payment' => [
+                'amount' => 100000,
+                'cash_account_id' => $cashAccount->id,
+            ],
+        ]);
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('money_entries', [
+            'idempotency_key' => $idempotencyKey.':initial-payment',
+        ]);
+    }
+
+    public function test_idempotency_key_longer_than_84_chars_still_succeeds_without_payment(): void
+    {
+        // max:84 只在「這次請求真的會建立同步付款」時才需要收緊，因為那才會衍生出
+        // 受 money_entries.idempotency_key 欄位長度限制的鍵。純建車（無
+        // initial_purchase_payment）不會產生這把衍生鍵，不應該被連帶波及，
+        // 沿用既有其他端點（reserve/final-payment）的 max:100 即可。
+        $user = User::factory()->create(['is_active' => true]);
+        $idempotencyKey = str_repeat('a', 100);
+
+        $response = $this->actingAs($user, 'web')->postJson('/api/vehicles', [
+            'brand' => 'Toyota',
+            'model' => 'Camry',
+            'license_plate' => 'ABC-1234',
+            'idempotency_key' => $idempotencyKey,
+        ]);
+
+        $response->assertCreated();
+        $this->assertDatabaseHas('vehicles', ['idempotency_key' => $idempotencyKey]);
+    }
+
+    public function test_retry_with_full_datetime_entry_date_replays_against_the_date_only_stored_value(): void
+    {
+        // FormRequest 的 date 規則接受完整 datetime 字串。若正規化沒有把它收斂成
+        // 純日期，重試比對會拿 money_entries.entry_date 存回的純日期字串對「原始
+        // datetime 字串」，兩者永遠對不上，導致完全相同的重試被誤判成不同 payload
+        // 而 422，即使第一次請求已經成功。
+        $user = User::factory()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $idempotencyKey = (string) Str::uuid();
+
+        $payload = [
+            'brand' => 'Toyota',
+            'model' => 'Camry',
+            'license_plate' => 'ABC-1234',
+            'idempotency_key' => $idempotencyKey,
+            'initial_purchase_payment' => [
+                'amount' => 100000,
+                'cash_account_id' => $cashAccount->id,
+                'entry_date' => '2026-01-01 10:00:00',
+            ],
+        ];
+
+        $first = $this->actingAs($user, 'web')->postJson('/api/vehicles', $payload);
+        $first->assertCreated();
+        $vehicleId = $first->json('data.id');
+
+        $storedEntry = MoneyEntry::query()->where('vehicle_id', $vehicleId)->where('category', '購車付款')->firstOrFail();
+        $this->assertSame('2026-01-01', $storedEntry->entry_date?->toDateString());
+
+        $retry = $this->actingAs($user, 'web')->postJson('/api/vehicles', $payload);
+
+        $retry->assertSuccessful();
+        $this->assertSame($vehicleId, $retry->json('data.id'));
+        $this->assertSame(1, MoneyEntry::query()
+            ->where('vehicle_id', $vehicleId)
+            ->where('category', '購車付款')
+            ->count());
+    }
+
     public function test_sales_cannot_create_vehicle_with_initial_purchase_payment(): void
     {
         // sales 已被 VehiclePolicy::create 完全擋在建車功能之外（見 RoleAccessTest），

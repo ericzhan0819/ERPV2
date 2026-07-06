@@ -188,10 +188,18 @@ class VehicleService
 
         $entryDateWasSupplied = ! empty($paymentInput['entry_date']);
 
+        // FormRequest 的 date 規則接受完整 datetime 字串（例如 "2026-01-01 10:00:00"），
+        // 但 money_entries.entry_date 是 date 欄位，實際落地只會保留日期。若這裡保留
+        // 原始輸入不做正規化，重試比對時會拿「date 欄位存回的純日期」對「原始 datetime
+        // 字串」，兩者永遠對不上，導致完全相同的重試被誤判成不同 payload 而 422。
+        $entryDate = $entryDateWasSupplied
+            ? \Illuminate\Support\Carbon::parse($paymentInput['entry_date'])->toDateString()
+            : now()->toDateString();
+
         return [
             'amount' => (int) $paymentInput['amount'],
             'cash_account_id' => (int) $paymentInput['cash_account_id'],
-            'entry_date' => $entryDateWasSupplied ? $paymentInput['entry_date'] : now()->toDateString(),
+            'entry_date' => $entryDate,
             'description' => $paymentInput['description'] ?? null,
             'entry_date_was_supplied' => $entryDateWasSupplied,
         ];

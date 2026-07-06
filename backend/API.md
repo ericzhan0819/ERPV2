@@ -133,7 +133,7 @@ Request body（`StoreVehicleRequest`）：
 | floor_price | int | 否 | ≥0 |
 | sales_note | string | 否 | |
 | notes | string | 否 | |
-| idempotency_key | string | 是（max:100） | 防止重複送出造成重複建車 |
+| idempotency_key | string | 是（max:100，勾選同步購車付款時為 max:84） | 防止重複送出造成重複建車；勾選同步付款時上限收緊為 84，因為會衍生出 `{idempotency_key}:initial-payment` 寫入 `money_entries.idempotency_key`（欄位長度 100），未同步付款則不受影響，維持 max:100 |
 | initial_purchase_payment | object | 否 | 勾選同步建立購車付款時才帶入，見下表 |
 
 `initial_purchase_payment`（勾選同步購車付款時）：
