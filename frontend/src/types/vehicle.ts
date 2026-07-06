@@ -11,6 +11,17 @@ export interface Vehicle {
   vin: string | null
   mileage_km: number | null
   color: string | null
+  displacement: string | null
+  transmission: string | null
+  fuel_type: string | null
+  parking_location: string | null
+  has_registration_document: boolean
+  has_spare_key: boolean
+  is_transfer_completed: boolean
+  is_inspection_completed: boolean
+  is_preparation_completed: boolean
+  lien_note: string | null
+  condition_note: string | null
   purchase_date: string | null
   purchase_source_type: string | null
   seller_name: string | null
@@ -129,6 +140,17 @@ export interface CreateVehiclePayload {
   vin?: string
   mileage_km?: number
   color?: string
+  displacement?: string
+  transmission?: string
+  fuel_type?: string
+  parking_location?: string
+  has_registration_document?: boolean
+  has_spare_key?: boolean
+  is_transfer_completed?: boolean
+  is_inspection_completed?: boolean
+  is_preparation_completed?: boolean
+  lien_note?: string
+  condition_note?: string
   purchase_date?: string
   purchase_source_type?: string
   seller_name?: string

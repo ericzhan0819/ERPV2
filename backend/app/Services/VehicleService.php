@@ -47,6 +47,7 @@ class VehicleService
     {
         return DB::transaction(function () use ($data, $userId) {
             $data = $this->applySellerCustomerSnapshot($data);
+            $data = $this->normalizeIntakeCheckFields($data);
 
             $vehicle = new Vehicle($data);
             $vehicle->stock_no = $this->generateStockNo();
@@ -65,6 +66,7 @@ class VehicleService
     public function updateVehicle(Vehicle $vehicle, array $data, int $userId): Vehicle
     {
         $data = $this->applySellerCustomerSnapshot($data);
+        $data = $this->normalizeIntakeCheckFields($data);
 
         // seller_customer_id may simply be absent from this request (as opposed to
         // explicitly cleared to null) while the vehicle already has a link. That
@@ -105,6 +107,32 @@ class VehicleService
         }
 
         return array_merge($data, $this->resolveSellerCustomerSnapshot((int) $data['seller_customer_id']));
+    }
+
+    /**
+     * 入庫檢核欄位在資料庫是 NOT NULL boolean（default false）。FormRequest 允許
+     * 顯式傳入 null（視為「未勾選」），若原樣寫入會觸發 DB NOT NULL 例外，因此
+     * 在進 mass assignment 前先把顯式 null 正規化為 false；完全未帶欄位則維持
+     * 不動，讓 create 走 model 預設值、update 保留原值。
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function normalizeIntakeCheckFields(array $data): array
+    {
+        foreach ([
+            'has_registration_document',
+            'has_spare_key',
+            'is_transfer_completed',
+            'is_inspection_completed',
+            'is_preparation_completed',
+        ] as $field) {
+            if (array_key_exists($field, $data) && $data[$field] === null) {
+                $data[$field] = false;
+            }
+        }
+
+        return $data;
     }
 
     /**

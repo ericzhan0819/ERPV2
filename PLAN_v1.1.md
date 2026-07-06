@@ -163,24 +163,24 @@
 ## 5. 車輛入庫建檔欄位與表單（對應 `企劃書_v1.1.md` §4）
 
 ### Schema
-- [ ] Migration：vehicles 新增 displacement/transmission/fuel_type/parking_location（nullable string）
-- [ ] Migration：vehicles 新增入庫檢核欄位：has_registration_document/has_spare_key/is_transfer_completed/is_inspection_completed/is_preparation_completed（boolean, default false）
-- [ ] Migration：vehicles 新增 lien_note/condition_note（text, nullable）
+- [x] Migration：vehicles 新增 displacement/transmission/fuel_type/parking_location（nullable string）
+- [x] Migration：vehicles 新增入庫檢核欄位：has_registration_document/has_spare_key/is_transfer_completed/is_inspection_completed/is_preparation_completed（boolean, default false）
+- [x] Migration：vehicles 新增 lien_note/condition_note（text, nullable）
 
 ### Model / API
-- [ ] Vehicle Model：fillable + casts（booleans）
-- [ ] StoreVehicleRequest/UpdateVehicleRequest：驗證新欄位
-- [ ] VehicleResource：輸出新欄位
+- [x] Vehicle Model：fillable + casts（booleans）
+- [x] StoreVehicleRequest/UpdateVehicleRequest：驗證新欄位
+- [x] VehicleResource：輸出新欄位
 
 ### 前端
-- [ ] VehicleCreate 分區：基本資料 → 買入資料 → 入庫檢核（checkboxes + textareas） → 購車付款（見第 6 階段） → 備註
-- [ ] VehicleDetail：顯示檢核狀態，sales 無編輯權限
-- [ ] 列印頁：同步新欄位
+- [x] VehicleCreate 分區：基本資料 → 買入資料 → 入庫檢核（checkboxes + textareas） → 備註（購車付款區塊留待第 6 階段一併實作，本階段未加空區塊）
+- [x] VehicleDetail：顯示檢核狀態，sales 無編輯權限
+- [x] 列印頁：同步新欄位
 
 ### 測試
-- [ ] 新欄位 CRUD 正常
-- [ ] 既有資料相容（backward compatible）
-- [ ] sales 無編輯權限
+- [x] 新欄位 CRUD 正常
+- [x] 既有資料相容（backward compatible）
+- [x] sales 無編輯權限
 
 ---
 

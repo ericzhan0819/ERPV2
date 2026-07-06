@@ -18,6 +18,17 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'vin',
     'mileage_km',
     'color',
+    'displacement',
+    'transmission',
+    'fuel_type',
+    'parking_location',
+    'has_registration_document',
+    'has_spare_key',
+    'is_transfer_completed',
+    'is_inspection_completed',
+    'is_preparation_completed',
+    'lien_note',
+    'condition_note',
     'purchase_date',
     'purchase_source_type',
     'seller_name',
@@ -40,6 +51,14 @@ class Vehicle extends Model
 {
     use HasFactory;
 
+    protected $attributes = [
+        'has_registration_document' => false,
+        'has_spare_key' => false,
+        'is_transfer_completed' => false,
+        'is_inspection_completed' => false,
+        'is_preparation_completed' => false,
+    ];
+
     protected function casts(): array
     {
         return [
@@ -53,6 +72,11 @@ class Vehicle extends Model
             'sold_price' => 'integer',
             'mileage_km' => 'integer',
             'year' => 'integer',
+            'has_registration_document' => 'boolean',
+            'has_spare_key' => 'boolean',
+            'is_transfer_completed' => 'boolean',
+            'is_inspection_completed' => 'boolean',
+            'is_preparation_completed' => 'boolean',
         ];
     }
 

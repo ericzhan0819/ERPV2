@@ -199,6 +199,131 @@ class VehicleTest extends TestCase
         $response->assertJsonPath('data.seller_phone', '0900000002');
     }
 
+    public function test_creating_a_vehicle_accepts_intake_fields(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+
+        $response = $this->actingAs($user, 'web')->postJson('/api/vehicles', [
+            'brand' => 'Toyota',
+            'model' => 'Camry',
+            'license_plate' => 'ABC-1234',
+            'displacement' => '2000c.c.',
+            'transmission' => '手自排',
+            'fuel_type' => '汽油',
+            'parking_location' => 'A區3號',
+            'has_registration_document' => true,
+            'has_spare_key' => true,
+            'is_transfer_completed' => false,
+            'is_inspection_completed' => true,
+            'is_preparation_completed' => false,
+            'lien_note' => '尚有貸款未結清',
+            'condition_note' => '外觀良好，右前保桿有小刮痕',
+        ]);
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.displacement', '2000c.c.');
+        $response->assertJsonPath('data.transmission', '手自排');
+        $response->assertJsonPath('data.fuel_type', '汽油');
+        $response->assertJsonPath('data.parking_location', 'A區3號');
+        $response->assertJsonPath('data.has_registration_document', true);
+        $response->assertJsonPath('data.has_spare_key', true);
+        $response->assertJsonPath('data.is_transfer_completed', false);
+        $response->assertJsonPath('data.is_inspection_completed', true);
+        $response->assertJsonPath('data.is_preparation_completed', false);
+        $response->assertJsonPath('data.lien_note', '尚有貸款未結清');
+        $response->assertJsonPath('data.condition_note', '外觀良好，右前保桿有小刮痕');
+
+        $this->assertDatabaseHas('vehicles', [
+            'brand' => 'Toyota',
+            'displacement' => '2000c.c.',
+            'has_registration_document' => true,
+            'is_transfer_completed' => false,
+        ]);
+    }
+
+    public function test_creating_a_vehicle_without_intake_fields_defaults_checks_to_false(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+
+        $response = $this->actingAs($user, 'web')->postJson('/api/vehicles', [
+            'brand' => 'Toyota',
+            'model' => 'Camry',
+            'license_plate' => 'ABC-1234',
+        ]);
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.has_registration_document', false);
+        $response->assertJsonPath('data.has_spare_key', false);
+        $response->assertJsonPath('data.is_transfer_completed', false);
+        $response->assertJsonPath('data.is_inspection_completed', false);
+        $response->assertJsonPath('data.is_preparation_completed', false);
+        $response->assertJsonPath('data.displacement', null);
+        $response->assertJsonPath('data.lien_note', null);
+    }
+
+    public function test_creating_a_vehicle_with_explicit_null_intake_checks_does_not_error(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+
+        $response = $this->actingAs($user, 'web')->postJson('/api/vehicles', [
+            'brand' => 'Toyota',
+            'model' => 'Camry',
+            'license_plate' => 'ABC-1234',
+            'has_registration_document' => null,
+            'has_spare_key' => null,
+            'is_transfer_completed' => null,
+            'is_inspection_completed' => null,
+            'is_preparation_completed' => null,
+        ]);
+
+        $response->assertCreated();
+        $response->assertJsonPath('data.has_registration_document', false);
+        $response->assertJsonPath('data.has_spare_key', false);
+        $response->assertJsonPath('data.is_transfer_completed', false);
+        $response->assertJsonPath('data.is_inspection_completed', false);
+        $response->assertJsonPath('data.is_preparation_completed', false);
+    }
+
+    public function test_updating_a_vehicle_with_explicit_null_intake_check_does_not_error(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['is_preparation_completed' => true]);
+
+        $response = $this->actingAs($user, 'web')->patchJson("/api/vehicles/{$vehicle->id}", [
+            'brand' => $vehicle->brand,
+            'model' => $vehicle->model,
+            'license_plate' => $vehicle->license_plate,
+            'is_preparation_completed' => null,
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('data.is_preparation_completed', false);
+    }
+
+    public function test_updating_a_vehicle_can_change_intake_check_fields(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create();
+
+        $response = $this->actingAs($user, 'web')->patchJson("/api/vehicles/{$vehicle->id}", [
+            'brand' => $vehicle->brand,
+            'model' => $vehicle->model,
+            'license_plate' => $vehicle->license_plate,
+            'is_preparation_completed' => true,
+            'condition_note' => '已完成整備',
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('data.is_preparation_completed', true);
+        $response->assertJsonPath('data.condition_note', '已完成整備');
+
+        $this->assertDatabaseHas('vehicles', [
+            'id' => $vehicle->id,
+            'is_preparation_completed' => true,
+            'condition_note' => '已完成整備',
+        ]);
+    }
+
     public function test_index_supports_search_and_status_filter(): void
     {
         $user = User::factory()->create(['is_active' => true]);

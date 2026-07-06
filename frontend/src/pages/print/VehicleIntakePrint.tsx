@@ -83,6 +83,56 @@ export function VehicleIntakePrint() {
             <span>顏色</span>
             <span>{vehicle.color ?? '-'}</span>
           </div>
+          <div className="print-row">
+            <span>排氣量</span>
+            <span>{vehicle.displacement ?? '-'}</span>
+          </div>
+          <div className="print-row">
+            <span>變速系統</span>
+            <span>{vehicle.transmission ?? '-'}</span>
+          </div>
+          <div className="print-row">
+            <span>燃料</span>
+            <span>{vehicle.fuel_type ?? '-'}</span>
+          </div>
+          <div className="print-row">
+            <span>停放位置</span>
+            <span>{vehicle.parking_location ?? '-'}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="print-section">
+        <h2>入庫檢核</h2>
+        <div className="print-grid">
+          <div className="print-row">
+            <span>行照</span>
+            <span>{vehicle.has_registration_document ? '有' : '無'}</span>
+          </div>
+          <div className="print-row">
+            <span>鑰匙 / 備用鑰匙</span>
+            <span>{vehicle.has_spare_key ? '有' : '無'}</span>
+          </div>
+          <div className="print-row">
+            <span>過戶</span>
+            <span>{vehicle.is_transfer_completed ? '已完成' : '未完成'}</span>
+          </div>
+          <div className="print-row">
+            <span>驗車</span>
+            <span>{vehicle.is_inspection_completed ? '已完成' : '未完成'}</span>
+          </div>
+          <div className="print-row">
+            <span>整備</span>
+            <span>{vehicle.is_preparation_completed ? '已完成' : '未完成'}</span>
+          </div>
+          <div className="print-row">
+            <span>貸款 / 權利問題備註</span>
+            <span>{vehicle.lien_note ?? '-'}</span>
+          </div>
+          <div className="print-row">
+            <span>車況備註</span>
+            <span>{vehicle.condition_note ?? '-'}</span>
+          </div>
         </div>
       </div>
 

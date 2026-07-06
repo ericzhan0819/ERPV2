@@ -353,7 +353,21 @@ export function VehicleDetail() {
           <InfoRow label="VIN" value={vehicle.vin ?? '-'} />
           <InfoRow label="里程" value={vehicle.mileage_km ? `${vehicle.mileage_km} km` : '-'} />
           <InfoRow label="顏色" value={vehicle.color ?? '-'} />
+          <InfoRow label="排氣量" value={vehicle.displacement ?? '-'} />
+          <InfoRow label="變速系統" value={vehicle.transmission ?? '-'} />
+          <InfoRow label="燃料" value={vehicle.fuel_type ?? '-'} />
+          <InfoRow label="停放位置" value={vehicle.parking_location ?? '-'} />
           <InfoRow label="備註" value={vehicle.notes ?? '-'} />
+        </Panel>
+
+        <Panel title="入庫檢核">
+          <InfoRow label="行照" value={vehicle.has_registration_document ? '有' : '無'} />
+          <InfoRow label="鑰匙 / 備用鑰匙" value={vehicle.has_spare_key ? '有' : '無'} />
+          <InfoRow label="過戶" value={vehicle.is_transfer_completed ? '已完成' : '未完成'} />
+          <InfoRow label="驗車" value={vehicle.is_inspection_completed ? '已完成' : '未完成'} />
+          <InfoRow label="整備" value={vehicle.is_preparation_completed ? '已完成' : '未完成'} />
+          <InfoRow label="貸款 / 權利問題備註" value={vehicle.lien_note ?? '-'} />
+          <InfoRow label="車況備註" value={vehicle.condition_note ?? '-'} />
         </Panel>
 
         <Panel title="採購資料">
