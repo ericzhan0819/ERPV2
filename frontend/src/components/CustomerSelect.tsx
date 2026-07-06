@@ -20,16 +20,32 @@ export function CustomerSelect({ label, value, selectedLabel, onChange }: Custom
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  // A newer keystroke's request can resolve before an older, slower one — without
+  // this guard the stale response would land last and overwrite the results with
+  // data for a query the input no longer shows, letting the user pick a customer
+  // that doesn't match what's on screen. Only the most recently *issued* request's
+  // response is applied; every earlier one is dropped on arrival.
+  const latestRequestId = useRef(0)
 
   useEffect(() => {
     if (!open) return
 
     setLoading(true)
     const handle = setTimeout(() => {
+      const requestId = ++latestRequestId.current
       listCustomers({ search: query || undefined, per_page: 20 })
-        .then((response) => setResults(response.data))
-        .catch(() => setResults([]))
-        .finally(() => setLoading(false))
+        .then((response) => {
+          if (requestId !== latestRequestId.current) return
+          setResults(response.data)
+        })
+        .catch(() => {
+          if (requestId !== latestRequestId.current) return
+          setResults([])
+        })
+        .finally(() => {
+          if (requestId !== latestRequestId.current) return
+          setLoading(false)
+        })
     }, 250)
 
     return () => clearTimeout(handle)

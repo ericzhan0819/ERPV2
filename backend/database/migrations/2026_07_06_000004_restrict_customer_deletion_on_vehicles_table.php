@@ -48,7 +48,15 @@ return new class extends Migration
 
         Schema::table('vehicles', function (Blueprint $table) use ($column, $onDelete, $existing) {
             if ($existing) {
-                $table->dropForeign([$column]);
+                // Drop by the constraint's actual discovered name, not Laravel's
+                // conventional "{table}_{column}_foreign" derived from the column —
+                // a database whose FK was created under a different name (a legacy
+                // migration, a manual DBA change) would otherwise make dropForeign()
+                // target a constraint that doesn't exist and abort the migration.
+                // SQLite foreign keys are always unnamed (getForeignKeys() reports
+                // 'name' => null there), so fall back to the column-array form,
+                // which SQLite's grammar handles via a full table rebuild anyway.
+                $table->dropForeign($existing['name'] ?? [$column]);
             }
 
             $foreign = $table->foreign($column)->references('id')->on('customers');

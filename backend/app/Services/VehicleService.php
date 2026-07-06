@@ -67,6 +67,17 @@ class VehicleService
         $data = $this->applySellerCustomerSnapshot($data);
 
         $vehicle->fill($data);
+
+        // seller_customer_id may simply be absent from this request (as opposed to
+        // explicitly cleared to null) — fill() then leaves the vehicle's existing
+        // link untouched. If a link still remains after fill(), the customer's
+        // current data must still win over whatever seller_name/phone this request
+        // brought along, otherwise the snapshot can silently drift from the link
+        // it's supposed to represent.
+        if (! array_key_exists('seller_customer_id', $data) && $vehicle->seller_customer_id) {
+            $vehicle->fill($this->resolveSellerCustomerSnapshot($vehicle->seller_customer_id));
+        }
+
         $vehicle->updated_by = $userId;
         $vehicle->save();
 
@@ -87,7 +98,15 @@ class VehicleService
             return $data;
         }
 
-        $customer = Customer::query()->find($data['seller_customer_id']);
+        return array_merge($data, $this->resolveSellerCustomerSnapshot((int) $data['seller_customer_id']));
+    }
+
+    /**
+     * @return array{seller_name: string, seller_phone: string|null}
+     */
+    private function resolveSellerCustomerSnapshot(int $customerId): array
+    {
+        $customer = Customer::query()->find($customerId);
 
         if (! $customer) {
             throw ValidationException::withMessages([
@@ -95,10 +114,7 @@ class VehicleService
             ]);
         }
 
-        $data['seller_name'] = $customer->name;
-        $data['seller_phone'] = $customer->phone;
-
-        return $data;
+        return ['seller_name' => $customer->name, 'seller_phone' => $customer->phone];
     }
 
     public function deleteVehicle(Vehicle $vehicle): void

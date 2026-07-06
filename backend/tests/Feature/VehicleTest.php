@@ -97,6 +97,68 @@ class VehicleTest extends TestCase
         $response->assertJsonPath('data.seller_phone', '0922222222');
     }
 
+    public function test_updating_a_linked_vehicle_without_touching_seller_customer_id_does_not_desync_snapshot(): void
+    {
+        // A request that never mentions seller_customer_id (as opposed to explicitly
+        // clearing it to null) must not let free-text seller_name/phone silently
+        // drift away from the customer the vehicle is still linked to.
+        $user = User::factory()->create(['is_active' => true]);
+        $customer = Customer::factory()->create(['name' => '已連結客戶', 'phone' => '0933333333']);
+        $vehicle = Vehicle::factory()->create([
+            'seller_customer_id' => $customer->id,
+            'seller_name' => '已連結客戶',
+            'seller_phone' => '0933333333',
+        ]);
+
+        $response = $this->actingAs($user, 'web')->putJson("/api/vehicles/{$vehicle->id}", [
+            'brand' => $vehicle->brand,
+            'model' => $vehicle->model,
+            'license_plate' => $vehicle->license_plate,
+            // seller_customer_id intentionally omitted entirely.
+            'seller_name' => '不同的名字',
+            'seller_phone' => '0900000001',
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('data.seller_customer_id', $customer->id);
+        $response->assertJsonPath('data.seller_name', '已連結客戶');
+        $response->assertJsonPath('data.seller_phone', '0933333333');
+
+        $this->assertDatabaseHas('vehicles', [
+            'id' => $vehicle->id,
+            'seller_customer_id' => $customer->id,
+            'seller_name' => '已連結客戶',
+            'seller_phone' => '0933333333',
+        ]);
+    }
+
+    public function test_updating_a_linked_vehicle_can_explicitly_unlink_the_customer(): void
+    {
+        // Explicitly sending seller_customer_id = null is a deliberate unlink, unlike
+        // omitting the field — the caller's free-text seller_name/phone must apply.
+        $user = User::factory()->create(['is_active' => true]);
+        $customer = Customer::factory()->create(['name' => '原客戶', 'phone' => '0944444444']);
+        $vehicle = Vehicle::factory()->create([
+            'seller_customer_id' => $customer->id,
+            'seller_name' => '原客戶',
+            'seller_phone' => '0944444444',
+        ]);
+
+        $response = $this->actingAs($user, 'web')->putJson("/api/vehicles/{$vehicle->id}", [
+            'brand' => $vehicle->brand,
+            'model' => $vehicle->model,
+            'license_plate' => $vehicle->license_plate,
+            'seller_customer_id' => null,
+            'seller_name' => '自由輸入賣家',
+            'seller_phone' => '0900000002',
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('data.seller_customer_id', null);
+        $response->assertJsonPath('data.seller_name', '自由輸入賣家');
+        $response->assertJsonPath('data.seller_phone', '0900000002');
+    }
+
     public function test_index_supports_search_and_status_filter(): void
     {
         $user = User::factory()->create(['is_active' => true]);
