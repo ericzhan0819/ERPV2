@@ -462,7 +462,7 @@ UI 風格遵守 `UI.md`：
 3. 重要實作說明
 4. 驗證指令與結果
 5. 未執行的驗證與原因
-6. 建議 commit message
+6. 給出建議 commit message，而非自動commit
 
 不得只回覆「完成」。
 

@@ -66,18 +66,24 @@ class VehicleService
     {
         $data = $this->applySellerCustomerSnapshot($data);
 
-        $vehicle->fill($data);
-
         // seller_customer_id may simply be absent from this request (as opposed to
-        // explicitly cleared to null) — fill() then leaves the vehicle's existing
-        // link untouched. If a link still remains after fill(), the customer's
-        // current data must still win over whatever seller_name/phone this request
-        // brought along, otherwise the snapshot can silently drift from the link
-        // it's supposed to represent.
+        // explicitly cleared to null) while the vehicle already has a link. That
+        // link is not being touched, so the snapshot must not move either way:
+        // - it must NOT be re-derived from the customer's *current* data, since
+        //   seller_name/phone are a historical snapshot captured at link time —
+        //   letting a later, unrelated vehicle edit (e.g. just updating mileage)
+        //   silently pull in whatever the customer has been renamed to since would
+        //   retroactively rewrite history.
+        // - it must NOT take whatever free-text seller_name/phone happened to be
+        //   in this request either, since that could silently diverge from the
+        //   customer the vehicle is still linked to.
+        // Either way the existing stored values win, so any submitted values for
+        // these two fields are dropped before fill() when the link is untouched.
         if (! array_key_exists('seller_customer_id', $data) && $vehicle->seller_customer_id) {
-            $vehicle->fill($this->resolveSellerCustomerSnapshot($vehicle->seller_customer_id));
+            unset($data['seller_name'], $data['seller_phone']);
         }
 
+        $vehicle->fill($data);
         $vehicle->updated_by = $userId;
         $vehicle->save();
 

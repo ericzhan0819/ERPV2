@@ -23,16 +23,22 @@ export function CustomerSelect({ label, value, selectedLabel, onChange }: Custom
   // A newer keystroke's request can resolve before an older, slower one — without
   // this guard the stale response would land last and overwrite the results with
   // data for a query the input no longer shows, letting the user pick a customer
-  // that doesn't match what's on screen. Only the most recently *issued* request's
-  // response is applied; every earlier one is dropped on arrival.
+  // that doesn't match what's on screen. The id is bumped synchronously as soon as
+  // query/open changes — NOT inside the debounced callback — so a request already
+  // in flight from the previous keystroke is invalidated immediately, even though
+  // its own fetch was sent before this keystroke's 250ms debounce has elapsed.
+  // Bumping it only when the debounced fetch fires would leave that exact window
+  // unguarded: an in-flight older request could still resolve and be accepted
+  // because the "latest" id hadn't moved on yet.
   const latestRequestId = useRef(0)
 
   useEffect(() => {
     if (!open) return
 
+    const requestId = ++latestRequestId.current
     setLoading(true)
+
     const handle = setTimeout(() => {
-      const requestId = ++latestRequestId.current
       listCustomers({ search: query || undefined, per_page: 20 })
         .then((response) => {
           if (requestId !== latestRequestId.current) return

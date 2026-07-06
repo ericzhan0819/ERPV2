@@ -132,6 +132,46 @@ class VehicleTest extends TestCase
         ]);
     }
 
+    public function test_unrelated_vehicle_update_does_not_pull_in_the_customers_current_data(): void
+    {
+        // The seller snapshot is captured at link time and must stay frozen even
+        // after the linked customer is later renamed — an update to a completely
+        // unrelated vehicle field (here: mileage) must not become a side channel
+        // for the customer's current data to retroactively overwrite history.
+        $user = User::factory()->create(['is_active' => true]);
+        $customer = Customer::factory()->create(['name' => '原始姓名', 'phone' => '0911111111']);
+        $vehicle = Vehicle::factory()->create([
+            'seller_customer_id' => $customer->id,
+            'seller_name' => '原始姓名',
+            'seller_phone' => '0911111111',
+            'mileage_km' => 10000,
+        ]);
+
+        $customer->update(['name' => '改名後的客戶', 'phone' => '0922222222']);
+
+        $response = $this->actingAs($user, 'web')->putJson("/api/vehicles/{$vehicle->id}", [
+            'brand' => $vehicle->brand,
+            'model' => $vehicle->model,
+            'license_plate' => $vehicle->license_plate,
+            'mileage_km' => 12000,
+            // seller_customer_id and seller_name/seller_phone are all omitted —
+            // this update has nothing to do with the seller.
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('data.mileage_km', 12000);
+        $response->assertJsonPath('data.seller_customer_id', $customer->id);
+        $response->assertJsonPath('data.seller_name', '原始姓名');
+        $response->assertJsonPath('data.seller_phone', '0911111111');
+
+        $this->assertDatabaseHas('vehicles', [
+            'id' => $vehicle->id,
+            'mileage_km' => 12000,
+            'seller_name' => '原始姓名',
+            'seller_phone' => '0911111111',
+        ]);
+    }
+
     public function test_updating_a_linked_vehicle_can_explicitly_unlink_the_customer(): void
     {
         // Explicitly sending seller_customer_id = null is a deliberate unlink, unlike
