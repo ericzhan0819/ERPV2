@@ -247,3 +247,14 @@
 - [x] backend/API.md：補充新端點（/api/users/{id}/role、/api/money-entries/{id}/approve、/api/money-entries/{id}/reject、/api/customers/*、/api/cash-accounts/options、/api/vehicles/* 新增欄位與 idempotency_key），並補上 v1.1 角色敏感欄位遮蔽總覽、VehicleResource/MoneyEntryResource 最新 JSON 範例
 - [x] README.md：補充 v1.1 說明（角色、審核流程、客戶模組手動驗證步驟；預設 seed 僅有 admin 帳號，manager/sales 需另外建立）
 - [x] 本檔案（PLAN_v1.1.md）：逐項勾選完成狀態
+
+---
+
+## 9. 使用者追加：稽核紀錄模組
+- [x] `audit_logs` append-only schema、Model 與 admin-only Policy/API
+- [x] 自動記錄 User／Vehicle／MoneyEntry／CashAccount／Customer 新增、修改、刪除
+- [x] 記錄登入／登出、操作者快照、IP、User-Agent 與 request path
+- [x] 排除 password／remember_token／idempotency_key／idempotency_payload 敏感值
+- [x] 前端 admin-only 稽核列表、篩選、分頁與異動前後值展開檢視
+- [x] 權限、敏感值、登入登出與 append-only 自動化測試
+- [x] API.md／README.md 文件更新

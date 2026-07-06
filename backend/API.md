@@ -662,6 +662,65 @@ Request body（`ResetUserPasswordRequest`）：`password`(必填,min:8)。
 
 ---
 
-## 11. 冪等性（idempotency_key）
+## 11. Audit Logs（稽核紀錄，僅限管理員）
+
+稽核紀錄為 append-only，API 只提供查詢，不提供新增、修改或刪除端點。系統自動記錄：
+
+- 登入、登出
+- 車輛、收支、資金帳戶、客戶、員工帳號的新增／修改／刪除
+- 操作者 ID 與姓名／Email／角色快照
+- 異動前後值、IP、User-Agent、HTTP method 與 request path
+
+`password`、`remember_token`、`idempotency_key`、`idempotency_payload` 不會寫入稽核內容。
+
+### GET /api/audit-logs
+
+Query 參數：
+
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| actor_id | int | 操作者使用者 ID |
+| action | string | `created`／`updated`／`deleted`／`login`／`logout` |
+| subject_type | string | `user`／`vehicle`／`money_entry`／`cash_account`／`customer`／`authentication` |
+| date_from | date | 起始日期 |
+| date_to | date | 結束日期，不得早於 `date_from` |
+| search | string | 操作者姓名／Email 或操作對象模糊搜尋 |
+| per_page | int | 1~100，預設 30 |
+| page | int | 頁碼 |
+
+回傳：分頁後的 `AuditLogResource` 陣列。
+
+### GET /api/audit-logs/{id}
+
+回傳單筆 `AuditLogResource`。`manager`／`sales` 呼叫上述端點皆回傳 403。
+
+### AuditLogResource
+
+```json
+{
+  "id": 1,
+  "actor_id": 2,
+  "actor_name": "系統管理員",
+  "actor_email": "admin@example.com",
+  "actor_role": "admin",
+  "action": "updated",
+  "subject_type": "vehicle",
+  "subject_id": 15,
+  "subject_label": "V202607070001 Toyota Camry",
+  "before_values": { "status": "preparing" },
+  "after_values": { "status": "listed" },
+  "ip_address": "127.0.0.1",
+  "user_agent": "Mozilla/5.0 ...",
+  "request_method": "POST",
+  "request_path": "api/vehicles/15/list",
+  "created_at": "2026-07-07T10:00:00.000000Z"
+}
+```
+
+若操作者帳號日後被刪除，`actor_id` 會變成 `null`，但姓名、Email 與角色快照仍會保留。
+
+---
+
+## 12. 冪等性（idempotency_key）
 
 `purchase-payment`、`expense`、`deposit`、`final-payment`、`refund`、`reserve`、`POST /vehicles`（勾選同步購車付款時）、`POST /money-entries` 等會建立金流紀錄的端點都要求前端帶入 `idempotency_key`（前端可用 UUID）。同一個 key 重複送出、且內容相同時會回傳原本已建立的紀錄，不會重複入帳；若同一個 key 被用在不同內容的請求上，會回傳 422 錯誤。目的是避免網路重試造成重複收支。

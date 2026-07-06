@@ -2,6 +2,15 @@
 
 namespace App\Providers;
 
+use App\Models\AuditLog;
+use App\Models\CashAccount;
+use App\Models\Customer;
+use App\Models\MoneyEntry;
+use App\Models\User;
+use App\Models\Vehicle;
+use App\Observers\AuditObserver;
+use App\Policies\AuditLogPolicy;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -19,6 +28,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        Gate::policy(AuditLog::class, AuditLogPolicy::class);
+
+        foreach ([User::class, Vehicle::class, MoneyEntry::class, CashAccount::class, Customer::class] as $model) {
+            $model::observe(AuditObserver::class);
+        }
     }
 }

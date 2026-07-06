@@ -14,6 +14,7 @@ import { MoneyEntryList } from './pages/money-entries/MoneyEntryList'
 import { MoneyEntryCreate } from './pages/money-entries/MoneyEntryCreate'
 import { CashAccountList } from './pages/cash-accounts/CashAccountList'
 import { UserList } from './pages/users/UserList'
+import { AuditLogList } from './pages/audit-logs/AuditLogList'
 import { VehicleIntakePrint } from './pages/print/VehicleIntakePrint'
 import { VehicleClosingPrint } from './pages/print/VehicleClosingPrint'
 
@@ -101,6 +102,14 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={['admin', 'manager']}>
                 <CashAccountList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/audit-logs"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AuditLogList />
               </ProtectedRoute>
             }
           />

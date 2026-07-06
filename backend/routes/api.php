@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CashAccountController;
 use App\Http\Controllers\CustomerController;
@@ -84,6 +85,11 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     });
 
     Route::middleware('role:admin')->group(function () {
+        Route::get('audit-logs', [AuditLogController::class, 'index'])
+            ->middleware('can:viewAny,App\Models\AuditLog');
+        Route::get('audit-logs/{audit_log}', [AuditLogController::class, 'show'])
+            ->middleware('can:view,audit_log');
+
         Route::apiResource('customers', CustomerController::class)->only(['destroy']);
 
         Route::apiResource('cash-accounts', CashAccountController::class)->only(['store', 'update', 'destroy']);

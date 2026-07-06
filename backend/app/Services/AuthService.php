@@ -8,9 +8,12 @@ use Illuminate\Auth\AuthenticationException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
+use Throwable;
 
 class AuthService
 {
+    public function __construct(private readonly AuditLogService $auditLogService) {}
+
     private const MAX_EMAIL_IP_ATTEMPTS = 5;
 
     private const EMAIL_IP_DECAY_SECONDS = 60;
@@ -69,6 +72,17 @@ class AuthService
 
         request()->session()->regenerate();
 
+        try {
+            $this->auditLogService->recordAuthentication('login', $user);
+        } catch (Throwable $e) {
+            // A successful session must not survive if its login cannot be audited.
+            Auth::guard('web')->logout();
+            request()->session()->invalidate();
+            request()->session()->regenerateToken();
+
+            throw $e;
+        }
+
         return $user;
     }
 
@@ -93,11 +107,21 @@ class AuthService
      */
     public function logout(): void
     {
-        if (Auth::guard('web')->check()) {
-            Auth::guard('web')->logout();
-        }
+        $user = Auth::guard('web')->user();
 
-        request()->session()->invalidate();
-        request()->session()->regenerateToken();
+        try {
+            if ($user instanceof User) {
+                $this->auditLogService->recordAuthentication('logout', $user);
+            }
+        } finally {
+            // Logout remains security-first: even if audit persistence fails, the
+            // authenticated session is always invalidated before the error escapes.
+            if (Auth::guard('web')->check()) {
+                Auth::guard('web')->logout();
+            }
+
+            request()->session()->invalidate();
+            request()->session()->regenerateToken();
+        }
     }
 }
