@@ -7,6 +7,9 @@ import { Dashboard } from './pages/Dashboard'
 import { VehicleList } from './pages/vehicles/VehicleList'
 import { VehicleCreate } from './pages/vehicles/VehicleCreate'
 import { VehicleDetail } from './pages/vehicles/VehicleDetail'
+import { CustomerList } from './pages/customers/CustomerList'
+import { CustomerCreate } from './pages/customers/CustomerCreate'
+import { CustomerDetail } from './pages/customers/CustomerDetail'
 import { MoneyEntryList } from './pages/money-entries/MoneyEntryList'
 import { MoneyEntryCreate } from './pages/money-entries/MoneyEntryCreate'
 import { CashAccountList } from './pages/cash-accounts/CashAccountList'
@@ -53,6 +56,30 @@ function App() {
             }
           />
           <Route path="/vehicles/:id" element={<VehicleDetail />} />
+          <Route
+            path="/customers"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'manager', 'sales']}>
+                <CustomerList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/customers/create"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'manager', 'sales']}>
+                <CustomerCreate />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/customers/:id"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'manager', 'sales']}>
+                <CustomerDetail />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/money-entries"
             element={

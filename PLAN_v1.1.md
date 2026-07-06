@@ -130,33 +130,33 @@
 ## 4. Customer Module（對應 `企劃書_v1.1.md` §6）
 
 ### Schema / Model
-- [ ] Migration：customers 表（id, name, phone, line_id, customer_type, source, address, notes, created_by, updated_by, timestamps）
-- [ ] Migration：vehicles 新增 `seller_customer_id`/`buyer_customer_id`（nullable, nullOnDelete）
-- [ ] Customer Model + CustomerService（delete 檢查關聯 vehicles，有則拒絕）
+- [x] Migration：customers 表（id, name, phone, line_id, customer_type, source, address, notes, created_by, updated_by, timestamps）
+- [x] Migration：vehicles 新增 `seller_customer_id`/`buyer_customer_id`（nullable, nullOnDelete）
+- [x] Customer Model + CustomerService（delete 檢查關聯 vehicles，有則拒絕）
 
 ### API
-- [ ] CustomerController（full CRUD）
-- [ ] StoreCustomerRequest/UpdateCustomerRequest
-- [ ] CustomerResource
-- [ ] routes/api.php：`apiResource('customers', ...)`，delete 限 admin
+- [x] CustomerController（full CRUD）
+- [x] StoreCustomerRequest/UpdateCustomerRequest
+- [x] CustomerResource
+- [x] routes/api.php：`apiResource('customers', ...)`，delete 限 admin
 
 ### Vehicle 整合
-- [ ] Vehicle Model：`sellerCustomer()`/`buyerCustomer()` relations
-- [ ] StoreVehicleRequest/UpdateVehicleRequest：seller_customer_id/buyer_customer_id（nullable, exists:customers）
-- [ ] VehicleResource：新增欄位
-- [ ] VehicleService::createVehicle()：接收可選 customer_id
-- [ ] ReserveModal：可選 buyer_customer_id
+- [x] Vehicle Model：`sellerCustomer()`/`buyerCustomer()` relations
+- [x] StoreVehicleRequest/UpdateVehicleRequest：seller_customer_id/buyer_customer_id（nullable, exists:customers）
+- [x] VehicleResource：新增欄位
+- [x] VehicleService::createVehicle()：接收可選 customer_id
+- [x] ReserveModal：可選 buyer_customer_id
 
 ### 前端
-- [ ] 新增 /customers（list/create/detail）
-- [ ] Sidebar 加「客戶」
-- [ ] VehicleCreate：seller_customer_id 選擇欄（快照 seller_name/phone）
-- [ ] VehicleDetail/ReserveModal：buyer_customer_id 選擇欄
+- [x] 新增 /customers（list/create/detail）
+- [x] Sidebar 加「客戶」
+- [x] VehicleCreate：seller_customer_id 選擇欄（快照 seller_name/phone）
+- [x] VehicleDetail/ReserveModal：buyer_customer_id 選擇欄
 
 ### 測試
-- [ ] 刪除有關聯 vehicles 的 customer 被阻擋
-- [ ] 快照欄位不隨 customer 異動改變
-- [ ] sales 無法刪除 customer（role check）
+- [x] 刪除有關聯 vehicles 的 customer 被阻擋
+- [x] 快照欄位不隨 customer 異動改變
+- [x] sales 無法刪除 customer（role check）
 
 ---
 

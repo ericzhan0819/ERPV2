@@ -15,6 +15,7 @@ export interface Vehicle {
   purchase_source_type: string | null
   seller_name: string | null
   seller_phone: string | null
+  seller_customer_id: number | null
   purchase_price?: number | null
   asking_price?: number | null
   floor_price?: number | null
@@ -25,6 +26,7 @@ export interface Vehicle {
   sold_price?: number | null
   buyer_name: string | null
   buyer_phone: string | null
+  buyer_customer_id: number | null
   notes: string | null
   created_at: string | null
   updated_at: string | null
@@ -81,6 +83,7 @@ export interface ListVehiclePayload {
 export interface ReserveVehiclePayload {
   buyer_name: string
   buyer_phone?: string
+  buyer_customer_id?: number
   sold_price: number
   deposit_amount: number
   cash_account_id: number
@@ -130,6 +133,7 @@ export interface CreateVehiclePayload {
   purchase_source_type?: string
   seller_name?: string
   seller_phone?: string
+  seller_customer_id?: number
   purchase_price?: number
   asking_price?: number
   floor_price?: number

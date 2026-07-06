@@ -5,6 +5,7 @@ import type { UserRole } from '../types/user'
 const FINANCIAL_ROLES: UserRole[] = ['admin', 'manager']
 const VEHICLE_MANAGE_ROLES: UserRole[] = ['admin', 'manager']
 const SALES_FLOW_ROLES: UserRole[] = ['admin', 'manager', 'sales']
+const CUSTOMER_DELETE_ROLES: UserRole[] = ['admin']
 
 export function canViewFinancials(role: UserRole | undefined): boolean {
   return !!role && FINANCIAL_ROLES.includes(role)
@@ -16,4 +17,8 @@ export function canManageVehicles(role: UserRole | undefined): boolean {
 
 export function canRunSalesFlow(role: UserRole | undefined): boolean {
   return !!role && SALES_FLOW_ROLES.includes(role)
+}
+
+export function canDeleteCustomer(role: UserRole | undefined): boolean {
+  return !!role && CUSTOMER_DELETE_ROLES.includes(role)
 }

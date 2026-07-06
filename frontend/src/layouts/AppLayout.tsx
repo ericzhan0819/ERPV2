@@ -1,11 +1,12 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Car, Wallet, Banknote, Users } from 'lucide-react'
+import { LayoutDashboard, Car, Wallet, Banknote, Users, Contact } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { ThemeToggle } from '../components/ThemeToggle'
 
 const navItems = [
   { to: '/dashboard', label: '總覽', icon: LayoutDashboard, roles: ['admin', 'manager', 'sales'] },
   { to: '/vehicles', label: '車輛', icon: Car, roles: ['admin', 'manager', 'sales'] },
+  { to: '/customers', label: '客戶', icon: Contact, roles: ['admin', 'manager', 'sales'] },
   { to: '/money-entries', label: '收支', icon: Wallet, roles: ['admin', 'manager', 'sales'] },
   { to: '/cash-accounts', label: '資金帳戶', icon: Banknote, roles: ['admin', 'manager'] },
   { to: '/users', label: '員工/帳號管理', icon: Users, roles: ['admin'] },

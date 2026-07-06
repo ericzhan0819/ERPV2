@@ -4,8 +4,10 @@ import { Link, useParams } from 'react-router-dom'
 import { isAxiosError } from 'axios'
 import { closeSaleVehicle, getVehicle, listVehicleForSale, recordFinalPayment, reserveVehicle } from '../../api/vehicles'
 import { listCashAccountOptions } from '../../api/cashAccounts'
+import { listCustomers } from '../../api/customers'
 import type { VehicleDetailResponse } from '../../types/vehicle'
 import type { CashAccountOption } from '../../types/cashAccount'
+import type { Customer } from '../../types/customer'
 import { generateIdempotencyKey } from '../../utils/idempotency'
 import { vehicleStatusLabels } from '../../utils/vehicleStatus'
 import { VehicleStatusBadge } from '../../components/VehicleStatusBadge'
@@ -138,6 +140,7 @@ export function VehicleDetail() {
   const vehicleId = Number(id)
   const [detail, setDetail] = useState<VehicleDetailResponse | null>(null)
   const [cashAccounts, setCashAccounts] = useState<CashAccountOption[]>([])
+  const [customers, setCustomers] = useState<Customer[]>([])
   const [error, setError] = useState<string | null>(null)
   const [activeModal, setActiveModal] = useState<ActiveModal>(null)
   const [formError, setFormError] = useState<string | null>(null)
@@ -155,6 +158,9 @@ export function VehicleDetail() {
     loadDetail()
     listCashAccountOptions()
       .then(setCashAccounts)
+      .catch(() => undefined)
+    listCustomers({ per_page: 100 })
+      .then((response) => setCustomers(response.data))
       .catch(() => undefined)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
@@ -196,6 +202,7 @@ export function VehicleDetail() {
   async function handleReserve(form: {
     buyer_name: string
     buyer_phone: string
+    buyer_customer_id: string
     sold_price: string
     deposit_amount: string
     cash_account_id: string
@@ -208,6 +215,7 @@ export function VehicleDetail() {
       await reserveVehicle(vehicleId, {
         buyer_name: form.buyer_name,
         buyer_phone: form.buyer_phone || undefined,
+        buyer_customer_id: form.buyer_customer_id ? Number(form.buyer_customer_id) : undefined,
         sold_price: Number(form.sold_price),
         deposit_amount: Number(form.deposit_amount),
         cash_account_id: Number(form.cash_account_id),
@@ -432,6 +440,7 @@ export function VehicleDetail() {
           error={formError}
           submitting={submitting}
           cashAccounts={cashAccounts}
+          customers={customers}
         />
       )}
       {activeModal === 'final-payment' && (
@@ -505,11 +514,13 @@ function ReserveModal({
   error,
   submitting,
   cashAccounts,
+  customers,
 }: {
   onClose: () => void
   onSubmit: (form: {
     buyer_name: string
     buyer_phone: string
+    buyer_customer_id: string
     sold_price: string
     deposit_amount: string
     cash_account_id: string
@@ -519,9 +530,11 @@ function ReserveModal({
   error: string | null
   submitting: boolean
   cashAccounts: CashAccountOption[]
+  customers: Customer[]
 }) {
   const [buyer_name, setBuyerName] = useState('')
   const [buyer_phone, setBuyerPhone] = useState('')
+  const [buyer_customer_id, setBuyerCustomerId] = useState('')
   const [sold_price, setSoldPrice] = useState('')
   const [deposit_amount, setDepositAmount] = useState('')
   const [cash_account_id, setCashAccountId] = useState('')
@@ -535,7 +548,16 @@ function ReserveModal({
       idempotencyKey = generateIdempotencyKey()
       idempotencyKeyRef.current = idempotencyKey
     }
-    onSubmit({ buyer_name, buyer_phone, sold_price, deposit_amount, cash_account_id, description, idempotency_key: idempotencyKey })
+    onSubmit({
+      buyer_name,
+      buyer_phone,
+      buyer_customer_id,
+      sold_price,
+      deposit_amount,
+      cash_account_id,
+      description,
+      idempotency_key: idempotencyKey,
+    })
   }
 
   return (
@@ -543,6 +565,21 @@ function ReserveModal({
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field label="買方姓名" value={buyer_name} onChange={setBuyerName} required />
         <Field label="買方電話" value={buyer_phone} onChange={setBuyerPhone} />
+        <div>
+          <label className="mb-1 block text-sm font-medium text-fg-muted">關聯客戶（買方）</label>
+          <select
+            value={buyer_customer_id}
+            onChange={(e) => setBuyerCustomerId(e.target.value)}
+            className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+          >
+            <option value="">不指定</option>
+            {customers.map((customer) => (
+              <option key={customer.id} value={customer.id}>
+                {customer.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <Field label="成交價" value={sold_price} onChange={setSoldPrice} type="number" required />
         <Field label="訂金金額" value={deposit_amount} onChange={setDepositAmount} type="number" required />
         <CashAccountField cashAccounts={cashAccounts} value={cash_account_id} onChange={setCashAccountId} />

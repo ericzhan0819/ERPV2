@@ -172,7 +172,7 @@ class VehicleService
     }
 
     /**
-     * @param  array{buyer_name: string, buyer_phone: string|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
+     * @param  array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
      */
     private function createReservationInsideTransaction(Vehicle $vehicle, string $idempotencyKey, array $effectiveData, int $userId): Vehicle
     {
@@ -195,6 +195,7 @@ class VehicleService
         $lockedVehicle->fill([
             'buyer_name' => $effectiveData['buyer_name'],
             'buyer_phone' => $effectiveData['buyer_phone'],
+            'buyer_customer_id' => $effectiveData['buyer_customer_id'],
             'sold_price' => $effectiveData['sold_price'],
         ]);
         $lockedVehicle->status = 'reserved';
@@ -227,7 +228,7 @@ class VehicleService
     }
 
     /**
-     * @param  array{buyer_name: string, buyer_phone: string|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
+     * @param  array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
      */
     private function replayRacedReservationAfterRollback(QueryException $original, int $vehicleId, string $idempotencyKey, array $effectiveData): Vehicle
     {
@@ -248,7 +249,7 @@ class VehicleService
     }
 
     /**
-     * @param  array{buyer_name: string, buyer_phone: string|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
+     * @param  array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
      */
     private function replayOrRejectReservation(MoneyEntry $entry, int $vehicleId, array $effectiveData): Vehicle
     {
@@ -262,7 +263,7 @@ class VehicleService
     }
 
     /**
-     * @param  array{buyer_name: string, buyer_phone: string|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
+     * @param  array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
      */
     private function isSameReservationRequest(MoneyEntry $entry, int $vehicleId, array $effectiveData): bool
     {
@@ -311,6 +312,10 @@ class VehicleService
             return false;
         }
 
+        if ((int) $vehicle->buyer_customer_id !== (int) $effectiveData['buyer_customer_id']) {
+            return false;
+        }
+
         if ((int) $vehicle->sold_price !== $effectiveData['sold_price']) {
             return false;
         }
@@ -320,7 +325,7 @@ class VehicleService
 
     /**
      * @param  array<string, mixed>  $data
-     * @return array{buyer_name: string, buyer_phone: string|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}
+     * @return array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}
      */
     private function normalizeReserveData(array $data): array
     {
@@ -329,6 +334,7 @@ class VehicleService
         return [
             'buyer_name' => $data['buyer_name'],
             'buyer_phone' => $data['buyer_phone'] ?? null,
+            'buyer_customer_id' => isset($data['buyer_customer_id']) ? (int) $data['buyer_customer_id'] : null,
             'sold_price' => (int) $data['sold_price'],
             'deposit_amount' => (int) $data['deposit_amount'],
             'cash_account_id' => (int) $data['cash_account_id'],

@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'purchase_source_type',
     'seller_name',
     'seller_phone',
+    'seller_customer_id',
     'purchase_price',
     'asking_price',
     'floor_price',
@@ -32,6 +33,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'sold_price',
     'buyer_name',
     'buyer_phone',
+    'buyer_customer_id',
     'notes',
 ])]
 class Vehicle extends Model
@@ -57,6 +59,16 @@ class Vehicle extends Model
     public function moneyEntries(): HasMany
     {
         return $this->hasMany(MoneyEntry::class);
+    }
+
+    public function sellerCustomer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class, 'seller_customer_id');
+    }
+
+    public function buyerCustomer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class, 'buyer_customer_id');
     }
 
     public function createdBy(): BelongsTo

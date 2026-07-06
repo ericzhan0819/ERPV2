@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { isAxiosError } from 'axios'
 import { createVehicle } from '../../api/vehicles'
+import { listCustomers } from '../../api/customers'
 import type { CreateVehiclePayload } from '../../types/vehicle'
+import type { Customer } from '../../types/customer'
 
 interface FormState {
   brand: string
@@ -17,6 +19,7 @@ interface FormState {
   purchase_source_type: string
   seller_name: string
   seller_phone: string
+  seller_customer_id: string
   purchase_price: string
   notes: string
 }
@@ -33,6 +36,7 @@ const initialState: FormState = {
   purchase_source_type: '',
   seller_name: '',
   seller_phone: '',
+  seller_customer_id: '',
   purchase_price: '',
   notes: '',
 }
@@ -51,6 +55,7 @@ function buildPayload(form: FormState): CreateVehiclePayload {
   if (form.purchase_source_type) payload.purchase_source_type = form.purchase_source_type
   if (form.seller_name) payload.seller_name = form.seller_name
   if (form.seller_phone) payload.seller_phone = form.seller_phone
+  if (form.seller_customer_id) payload.seller_customer_id = Number(form.seller_customer_id)
   if (form.purchase_price) payload.purchase_price = Number(form.purchase_price)
   if (form.notes) payload.notes = form.notes
   return payload
@@ -82,8 +87,15 @@ function Field({ label, value, onChange, type = 'text', required }: FieldProps) 
 export function VehicleCreate() {
   const navigate = useNavigate()
   const [form, setForm] = useState<FormState>(initialState)
+  const [customers, setCustomers] = useState<Customer[]>([])
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    listCustomers({ per_page: 100 })
+      .then((response) => setCustomers(response.data))
+      .catch(() => undefined)
+  }, [])
 
   function set<K extends keyof FormState>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -133,6 +145,21 @@ export function VehicleCreate() {
           <Field label="買入來源" value={form.purchase_source_type} onChange={(v) => set('purchase_source_type', v)} />
           <Field label="原車主 / 供應商" value={form.seller_name} onChange={(v) => set('seller_name', v)} />
           <Field label="聯絡電話" value={form.seller_phone} onChange={(v) => set('seller_phone', v)} />
+          <div>
+            <label className="mb-1 block text-sm font-medium text-fg-muted">關聯客戶（賣方）</label>
+            <select
+              value={form.seller_customer_id}
+              onChange={(e) => set('seller_customer_id', e.target.value)}
+              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+            >
+              <option value="">不指定</option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <Field label="收購價" value={form.purchase_price} onChange={(v) => set('purchase_price', v)} type="number" />
         </div>
 

@@ -25,6 +25,7 @@ class UpdateVehicleRequest extends FormRequest
             'purchase_source_type' => ['nullable', 'string', 'max:255'],
             'seller_name' => ['nullable', 'string', 'max:255'],
             'seller_phone' => ['nullable', 'string', 'max:255'],
+            'seller_customer_id' => ['nullable', 'integer', 'exists:customers,id'],
             'purchase_price' => ['nullable', 'integer', 'min:0'],
             'asking_price' => ['nullable', 'integer', 'min:0'],
             'floor_price' => ['nullable', 'integer', 'min:0'],

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CashAccountController;
+use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MoneyEntryController;
 use App\Http\Controllers\UserController;
@@ -77,7 +78,14 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::apiResource('cash-accounts', CashAccountController::class)->only(['index', 'show']);
     });
 
+    // 客戶 CRUD：admin/manager/sales 皆可新增、編輯、查詢，僅 admin 可刪除
+    Route::middleware('role:admin,manager,sales')->group(function () {
+        Route::apiResource('customers', CustomerController::class)->except(['destroy']);
+    });
+
     Route::middleware('role:admin')->group(function () {
+        Route::apiResource('customers', CustomerController::class)->only(['destroy']);
+
         Route::apiResource('cash-accounts', CashAccountController::class)->only(['store', 'update', 'destroy']);
         Route::patch('cash-accounts/{cash_account}/status', [CashAccountController::class, 'updateStatus']);
 
