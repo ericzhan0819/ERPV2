@@ -221,6 +221,9 @@ class VehicleService
                 'floor_price' => $data['floor_price'] ?? null,
                 'listing_date' => $data['listing_date'] ?? now()->toDateString(),
                 'sales_note' => $data['sales_note'] ?? null,
+                // 「整備完成並上架」這個動作本身就是在宣告整備已完成，若不同步這裡，
+                // 車輛會在已上架/已售出狀態下仍顯示「整備未完成」，與操作語意矛盾。
+                'is_preparation_completed' => true,
             ]);
             $lockedVehicle->status = 'listed';
             $lockedVehicle->updated_by = $userId;

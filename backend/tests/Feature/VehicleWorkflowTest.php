@@ -19,6 +19,25 @@ class VehicleWorkflowTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_listing_a_vehicle_marks_preparation_as_completed(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'preparing', 'is_preparation_completed' => false]);
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/list", [
+                'asking_price' => 500000,
+            ])
+            ->assertSuccessful()
+            ->assertJsonPath('data.status', 'listed')
+            ->assertJsonPath('data.is_preparation_completed', true);
+
+        $this->assertDatabaseHas('vehicles', [
+            'id' => $vehicle->id,
+            'is_preparation_completed' => true,
+        ]);
+    }
+
     public function test_full_workflow_from_preparing_to_sold(): void
     {
         $user = User::factory()->create(['is_active' => true]);
