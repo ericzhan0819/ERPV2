@@ -59,8 +59,13 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('vehicles/{vehicle}/refund', [VehicleController::class, 'refund'])
         ->middleware('can:refund,vehicle');
 
-    // 一般收支 CRUD：admin/manager/sales 皆可送出，manager/sales 建立進 pending 待審核
-    Route::apiResource('money-entries', MoneyEntryController::class)->middleware('role:admin,manager,sales');
+    // 一般收支 CRUD：admin/manager/sales 皆可送出，manager/sales 建立進 pending 待審核。
+    // update/destroy 額外綁定 MoneyEntryPolicy：manager/sales 只能異動自己送出、尚未核准的收支，
+    // 不得竄改或刪除其他 manager/sales 送出的待審收支。
+    Route::apiResource('money-entries', MoneyEntryController::class)
+        ->middleware('role:admin,manager,sales')
+        ->middlewareFor('update', 'can:update,money_entry')
+        ->middlewareFor('destroy', 'can:delete,money_entry');
 
     // 資金帳戶選單（不含餘額欄位）：admin、manager、sales 皆可用於收訂金 / 收尾款 / 支出登記等表單選擇帳戶
     Route::middleware('role:admin,manager,sales')->group(function () {

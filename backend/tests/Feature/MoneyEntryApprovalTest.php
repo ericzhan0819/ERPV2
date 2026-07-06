@@ -256,6 +256,117 @@ class MoneyEntryApprovalTest extends TestCase
         ]);
     }
 
+    public function test_sales_cannot_update_or_delete_another_sales_users_pending_entry(): void
+    {
+        $author = User::factory()->sales()->create(['is_active' => true]);
+        $otherSales = User::factory()->sales()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $entry = MoneyEntry::factory()->create([
+            'cash_account_id' => $cashAccount->id,
+            'direction' => 'income',
+            'category' => '一般收入',
+            'amount' => 1000,
+            'source_type' => 'manual',
+            'approval_status' => 'pending',
+            'created_by' => $author->id,
+        ]);
+
+        $this->actingAs($otherSales, 'web')->patchJson("/api/money-entries/{$entry->id}", [
+            'entry_date' => '2026-07-02',
+            'direction' => 'income',
+            'category' => '一般收入',
+            'amount' => 9999,
+            'cash_account_id' => $cashAccount->id,
+        ])->assertStatus(403);
+
+        $this->actingAs($otherSales, 'web')->deleteJson("/api/money-entries/{$entry->id}")->assertStatus(403);
+
+        $this->assertDatabaseHas('money_entries', ['id' => $entry->id, 'amount' => 1000]);
+    }
+
+    public function test_manager_cannot_update_or_delete_another_users_pending_entry(): void
+    {
+        $author = User::factory()->sales()->create(['is_active' => true]);
+        $manager = User::factory()->manager()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $entry = MoneyEntry::factory()->create([
+            'cash_account_id' => $cashAccount->id,
+            'direction' => 'income',
+            'category' => '一般收入',
+            'amount' => 1000,
+            'source_type' => 'manual',
+            'approval_status' => 'pending',
+            'created_by' => $author->id,
+        ]);
+
+        $this->actingAs($manager, 'web')->patchJson("/api/money-entries/{$entry->id}", [
+            'entry_date' => '2026-07-02',
+            'direction' => 'income',
+            'category' => '一般收入',
+            'amount' => 9999,
+            'cash_account_id' => $cashAccount->id,
+        ])->assertStatus(403);
+
+        $this->actingAs($manager, 'web')->deleteJson("/api/money-entries/{$entry->id}")->assertStatus(403);
+
+        $this->assertDatabaseHas('money_entries', ['id' => $entry->id, 'amount' => 1000]);
+    }
+
+    public function test_sales_can_update_and_delete_own_pending_entry(): void
+    {
+        $sales = User::factory()->sales()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $entry = MoneyEntry::factory()->create([
+            'cash_account_id' => $cashAccount->id,
+            'direction' => 'income',
+            'category' => '一般收入',
+            'amount' => 1000,
+            'source_type' => 'manual',
+            'approval_status' => 'pending',
+            'created_by' => $sales->id,
+        ]);
+
+        $this->actingAs($sales, 'web')->patchJson("/api/money-entries/{$entry->id}", [
+            'entry_date' => '2026-07-02',
+            'direction' => 'income',
+            'category' => '一般收入',
+            'amount' => 1500,
+            'cash_account_id' => $cashAccount->id,
+        ])->assertSuccessful();
+
+        $this->actingAs($sales, 'web')->deleteJson("/api/money-entries/{$entry->id}")->assertSuccessful();
+
+        $this->assertDatabaseMissing('money_entries', ['id' => $entry->id]);
+    }
+
+    public function test_admin_can_update_and_delete_any_users_pending_entry(): void
+    {
+        $sales = User::factory()->sales()->create(['is_active' => true]);
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $entry = MoneyEntry::factory()->create([
+            'cash_account_id' => $cashAccount->id,
+            'direction' => 'income',
+            'category' => '一般收入',
+            'amount' => 1000,
+            'source_type' => 'manual',
+            'approval_status' => 'pending',
+            'created_by' => $sales->id,
+        ]);
+
+        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$entry->id}", [
+            'entry_date' => '2026-07-02',
+            'direction' => 'income',
+            'category' => '一般收入',
+            'amount' => 1500,
+            'cash_account_id' => $cashAccount->id,
+        ])->assertSuccessful();
+
+        $this->actingAs($admin, 'web')->deleteJson("/api/money-entries/{$entry->id}")->assertSuccessful();
+
+        $this->assertDatabaseMissing('money_entries', ['id' => $entry->id]);
+    }
+
     public function test_index_can_filter_by_approval_status(): void
     {
         $admin = User::factory()->admin()->create(['is_active' => true]);

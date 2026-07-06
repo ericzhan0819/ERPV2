@@ -207,6 +207,7 @@ class MoneyEntryTest extends TestCase
             'amount' => 1000,
             'source_type' => 'manual',
             'approval_status' => 'pending',
+            'created_by' => $user->id,
         ]);
 
         $this->actingAs($user, 'web')
@@ -240,6 +241,7 @@ class MoneyEntryTest extends TestCase
             'amount' => 1000,
             'source_type' => 'manual',
             'approval_status' => 'pending',
+            'created_by' => $user->id,
         ]);
 
         $this->actingAs($user, 'web')
@@ -274,6 +276,7 @@ class MoneyEntryTest extends TestCase
             'amount' => 1000,
             'source_type' => 'manual',
             'approval_status' => 'pending',
+            'created_by' => $user->id,
         ]);
 
         $this->actingAs($user, 'web')
@@ -303,6 +306,7 @@ class MoneyEntryTest extends TestCase
             'amount' => 1000,
             'source_type' => 'manual',
             'approval_status' => 'pending',
+            'created_by' => $user->id,
         ]);
 
         $this->actingAs($user, 'web')
@@ -362,6 +366,7 @@ class MoneyEntryTest extends TestCase
             'amount' => 1000,
             'source_type' => 'manual',
             'approval_status' => 'pending',
+            'created_by' => $user->id,
         ]);
 
         $this->actingAs($user, 'web')
@@ -394,6 +399,7 @@ class MoneyEntryTest extends TestCase
             'category' => '訂金收入',
             'amount' => 100000,
             'source_type' => 'vehicle_workflow',
+            'created_by' => $user->id,
         ]);
 
         $this->actingAs($user, 'web')
@@ -426,6 +432,7 @@ class MoneyEntryTest extends TestCase
      */
     public function test_quarantine_migration_marks_legacy_vehicle_bound_manual_entries_as_legacy_unknown(): void
     {
+        $user = User::factory()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
 
         $reservedVehicle = Vehicle::factory()->create([
@@ -494,6 +501,7 @@ class MoneyEntryTest extends TestCase
             'counterparty_name' => null,
             'idempotency_key' => (string) Str::uuid(),
             'approval_status' => 'pending',
+            'created_by' => $user->id,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -524,8 +532,6 @@ class MoneyEntryTest extends TestCase
         );
 
         // API 層驗證：一般營運 manual 收支仍可透過一般 CRUD 修改/刪除。
-        $user = User::factory()->create(['is_active' => true]);
-
         $this->actingAs($user, 'web')
             ->patchJson("/api/money-entries/{$generalEntryId}", [
                 'entry_date' => '2026-06-02',
@@ -555,6 +561,7 @@ class MoneyEntryTest extends TestCase
             'category' => '維修支出',
             'amount' => 1000,
             'source_type' => 'legacy_unknown',
+            'created_by' => $user->id,
         ]);
 
         $this->actingAs($user, 'web')
