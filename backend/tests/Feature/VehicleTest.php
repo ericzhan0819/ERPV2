@@ -324,47 +324,59 @@ class VehicleTest extends TestCase
         ]);
     }
 
-    public function test_updating_a_listed_vehicle_cannot_revert_preparation_completed_to_false(): void
+    public function test_updating_a_listed_vehicle_rejects_reverting_preparation_completed_to_false(): void
     {
         $user = User::factory()->create(['is_active' => true]);
-        $vehicle = Vehicle::factory()->create(['status' => 'listed', 'is_preparation_completed' => true]);
+        $vehicle = Vehicle::factory()->create([
+            'status' => 'listed',
+            'is_preparation_completed' => true,
+            'model' => 'Camry',
+        ]);
 
         $response = $this->actingAs($user, 'web')->patchJson("/api/vehicles/{$vehicle->id}", [
             'brand' => $vehicle->brand,
-            'model' => $vehicle->model,
+            'model' => 'Corolla',
             'license_plate' => $vehicle->license_plate,
             'is_preparation_completed' => false,
         ]);
 
-        $response->assertOk();
-        $response->assertJsonPath('data.is_preparation_completed', true);
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors('is_preparation_completed');
 
+        // 整份請求必須整個被拒絕，不能靜默丟棄該欄位後把其餘欄位（例如 model）存進去，
+        // 否則呼叫端會誤以為請求整體成功，卻不知道整備完成狀態的部分被悄悄忽略。
         $this->assertDatabaseHas('vehicles', [
             'id' => $vehicle->id,
             'is_preparation_completed' => true,
+            'model' => 'Camry',
         ]);
     }
 
-    public function test_updating_a_reserved_or_sold_vehicle_cannot_revert_preparation_completed_to_null(): void
+    public function test_updating_a_reserved_or_sold_vehicle_rejects_reverting_preparation_completed_to_null(): void
     {
         $user = User::factory()->create(['is_active' => true]);
 
         foreach (['reserved', 'sold'] as $status) {
-            $vehicle = Vehicle::factory()->create(['status' => $status, 'is_preparation_completed' => true]);
+            $vehicle = Vehicle::factory()->create([
+                'status' => $status,
+                'is_preparation_completed' => true,
+                'model' => 'Camry',
+            ]);
 
             $response = $this->actingAs($user, 'web')->patchJson("/api/vehicles/{$vehicle->id}", [
                 'brand' => $vehicle->brand,
-                'model' => $vehicle->model,
+                'model' => 'Corolla',
                 'license_plate' => $vehicle->license_plate,
                 'is_preparation_completed' => null,
             ]);
 
-            $response->assertOk();
-            $response->assertJsonPath('data.is_preparation_completed', true);
+            $response->assertStatus(422);
+            $response->assertJsonValidationErrors('is_preparation_completed');
 
             $this->assertDatabaseHas('vehicles', [
                 'id' => $vehicle->id,
                 'is_preparation_completed' => true,
+                'model' => 'Camry',
             ]);
         }
     }
@@ -392,7 +404,11 @@ class VehicleTest extends TestCase
         // is_preparation_completed 設為 true。updateVehicle() 必須以交易內重新
         // lockForUpdate 讀到的最新狀態判斷，而不是沿用呼叫端傳入的舊 $vehicle，
         // 否則會誤判成仍在 preparing 而放行 false，重新造出矛盾狀態。
-        $vehicle = Vehicle::factory()->create(['status' => 'preparing', 'is_preparation_completed' => false]);
+        $vehicle = Vehicle::factory()->create([
+            'status' => 'preparing',
+            'is_preparation_completed' => false,
+            'model' => 'Camry',
+        ]);
         $staleVehicle = Vehicle::query()->whereKey($vehicle->id)->firstOrFail();
         $user = User::factory()->create(['is_active' => true]);
 
@@ -401,17 +417,24 @@ class VehicleTest extends TestCase
             'is_preparation_completed' => true,
         ]);
 
-        $updated = app(VehicleService::class)->updateVehicle($staleVehicle, [
-            'brand' => $staleVehicle->brand,
-            'model' => $staleVehicle->model,
-            'license_plate' => $staleVehicle->license_plate,
-            'is_preparation_completed' => false,
-        ], $user->id);
+        try {
+            app(VehicleService::class)->updateVehicle($staleVehicle, [
+                'brand' => $staleVehicle->brand,
+                'model' => 'Corolla',
+                'license_plate' => $staleVehicle->license_plate,
+                'is_preparation_completed' => false,
+            ], $user->id);
 
-        $this->assertTrue($updated->is_preparation_completed);
+            $this->fail('應該因為車輛已於競態中上架而拋出 ValidationException');
+        } catch (ValidationException $exception) {
+            $this->assertSame(422, $exception->status);
+            $this->assertArrayHasKey('is_preparation_completed', $exception->errors());
+        }
+
         $this->assertDatabaseHas('vehicles', [
             'id' => $vehicle->id,
             'is_preparation_completed' => true,
+            'model' => 'Camry',
         ]);
     }
 

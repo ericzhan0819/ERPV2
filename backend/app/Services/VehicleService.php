@@ -100,10 +100,14 @@ class VehicleService
             // 代表「已上架」本身即宣告整備完成。一般更新 API 不應該讓這個已宣告的事實
             // 被回改成 false／null，否則車輛在上架中/保留中/已售出狀態下又會重新出現
             // 「整備未完成」，與上架動作的語意矛盾。未觸及此欄位或欲設為 true 則不受影響。
+            // 這裡必須明確拒絕（422）而不是靜默丟棄該欄位再回傳 200：呼叫端才能分辨
+            // 這次請求的其他欄位是否真的有被儲存，而不是誤以為整份請求都成功了。
             if (array_key_exists('is_preparation_completed', $data)
                 && ! $data['is_preparation_completed']
                 && in_array($lockedVehicle->status, ['listed', 'reserved', 'sold'], true)) {
-                unset($data['is_preparation_completed']);
+                throw ValidationException::withMessages([
+                    'is_preparation_completed' => ['車輛已上架，無法將整備完成狀態改回未完成'],
+                ]);
             }
 
             $lockedVehicle->fill($data);
