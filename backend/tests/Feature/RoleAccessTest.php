@@ -105,18 +105,25 @@ class RoleAccessTest extends TestCase
         $this->actingAs($sales, 'web')->getJson("/api/vehicles/{$vehicle->id}/print/closing")->assertStatus(403);
     }
 
-    public function test_sales_cannot_access_money_entries_or_cash_account_balances(): void
+    public function test_sales_can_submit_money_entries_as_pending_but_cannot_access_cash_account_balances(): void
     {
         $sales = User::factory()->sales()->create(['is_active' => true]);
 
-        $this->actingAs($sales, 'web')->getJson('/api/money-entries')->assertStatus(403);
-        $this->actingAs($sales, 'web')->postJson('/api/money-entries', [
+        $this->actingAs($sales, 'web')->getJson('/api/money-entries')->assertOk();
+
+        $response = $this->actingAs($sales, 'web')->postJson('/api/money-entries', [
             'entry_date' => now()->toDateString(),
             'direction' => 'income',
             'category' => '一般收入',
             'amount' => 1000,
-            'cash_account_id' => CashAccount::factory()->create()->id,
-        ])->assertStatus(403);
+            'cash_account_id' => CashAccount::factory()->create(['is_active' => true])->id,
+            'idempotency_key' => (string) Str::uuid(),
+        ]);
+        $response->assertCreated();
+        $this->assertDatabaseHas('money_entries', [
+            'id' => $response->json('data.id'),
+            'approval_status' => 'pending',
+        ]);
 
         $this->actingAs($sales, 'web')->getJson('/api/cash-accounts')->assertStatus(403);
         $this->actingAs($sales, 'web')->getJson('/api/cash-accounts/balances')->assertStatus(403);

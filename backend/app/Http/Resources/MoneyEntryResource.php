@@ -21,6 +21,9 @@ class MoneyEntryResource extends JsonResource
             'cash_account_id' => $this->when($canSeeAmount, $this->cash_account_id),
             'counterparty_name' => $this->counterparty_name,
             'description' => $this->description,
+            'approval_status' => $this->approval_status,
+            'approved_by' => $this->approved_by,
+            'approved_at' => $this->approved_at?->toISOString(),
             'vehicle' => $this->whenLoaded('vehicle', fn () => $this->vehicle ? [
                 'id' => $this->vehicle->id,
                 'stock_no' => $this->vehicle->stock_no,

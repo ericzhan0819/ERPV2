@@ -46,11 +46,13 @@ class DashboardService
         $monthEnd = Carbon::now()->endOfMonth();
 
         $monthlyIncome = (int) MoneyEntry::query()
+            ->approved()
             ->where('direction', 'income')
             ->whereBetween('entry_date', [$monthStart, $monthEnd])
             ->sum('amount');
 
         $monthlyExpense = (int) MoneyEntry::query()
+            ->approved()
             ->where('direction', 'expense')
             ->whereBetween('entry_date', [$monthStart, $monthEnd])
             ->sum('amount');

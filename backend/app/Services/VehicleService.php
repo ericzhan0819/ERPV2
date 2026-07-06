@@ -102,11 +102,13 @@ class VehicleService
     public function financialSummary(Vehicle $vehicle): array
     {
         $incomeTotal = (int) MoneyEntry::query()
+            ->approved()
             ->where('vehicle_id', $vehicle->id)
             ->where('direction', 'income')
             ->sum('amount');
 
         $expenseTotal = (int) MoneyEntry::query()
+            ->approved()
             ->where('vehicle_id', $vehicle->id)
             ->where('direction', 'expense')
             ->sum('amount');
@@ -214,6 +216,8 @@ class VehicleService
         ]);
         $entry->created_by = $userId;
         $entry->updated_by = $userId;
+        // 車輛流程收支不進審核佇列，避免車輛狀態流程被卡住。
+        $entry->approval_status = MoneyEntry::APPROVAL_APPROVED;
 
         // Let a duplicate-key QueryException escape so DB::transaction rolls back;
         // it is caught and retried against a fresh transaction/snapshot by the caller.
@@ -395,6 +399,8 @@ class VehicleService
         ]);
         $entry->created_by = $userId;
         $entry->updated_by = $userId;
+        // 車輛流程收支不進審核佇列，避免車輛狀態流程被卡住。
+        $entry->approval_status = MoneyEntry::APPROVAL_APPROVED;
 
         // Let a duplicate-key QueryException escape so DB::transaction rolls back;
         // it is caught and retried against a fresh transaction/snapshot by the caller.
@@ -450,6 +456,7 @@ class VehicleService
             }
 
             $hasIncome = MoneyEntry::query()
+                ->approved()
                 ->where('vehicle_id', $lockedVehicle->id)
                 ->where('direction', 'income')
                 ->exists();
@@ -578,6 +585,7 @@ class VehicleService
     private function buildFinalPaymentWarning(Vehicle $vehicle): ?string
     {
         $incomeTotal = (int) MoneyEntry::query()
+            ->approved()
             ->where('vehicle_id', $vehicle->id)
             ->where('direction', 'income')
             ->sum('amount');
@@ -608,6 +616,7 @@ class VehicleService
         $this->assertStatus($vehicle, 'sold', '只有已售出的車輛可以列印成交結案收支明細');
 
         $entries = MoneyEntry::query()
+            ->approved()
             ->where('vehicle_id', $vehicle->id)
             ->orderBy('entry_date')
             ->orderBy('id')

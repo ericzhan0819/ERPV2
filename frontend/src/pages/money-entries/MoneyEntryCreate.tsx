@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { isAxiosError } from 'axios'
 import { apiClient } from '../../api/client'
-import { listCashAccounts } from '../../api/cashAccounts'
+import { listCashAccountOptions } from '../../api/cashAccounts'
 import { createMoneyEntry } from '../../api/moneyEntries'
 import type { CashAccountOption } from '../../types/cashAccount'
 import type { CreateMoneyEntryPayload, MoneyDirection } from '../../types/moneyEntry'
@@ -49,7 +49,7 @@ export function MoneyEntryCreate() {
   const idempotencyKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
-    listCashAccounts().then((accounts) => setCashAccounts(accounts.filter((a) => a.is_active))).catch(() => setCashAccounts([]))
+    listCashAccountOptions().then((accounts) => setCashAccounts(accounts.filter((a) => a.is_active))).catch(() => setCashAccounts([]))
     apiClient
       .get<VehicleListResponse>('/api/vehicles', { params: { per_page: 100 } })
       .then((response) => setVehicles(response.data.data))

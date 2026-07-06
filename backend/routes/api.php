@@ -59,8 +59,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('vehicles/{vehicle}/refund', [VehicleController::class, 'refund'])
         ->middleware('can:refund,vehicle');
 
-    // 一般收支 CRUD：sales 尚無法操作（第 3 階段審核流程完成前一律 403）
-    Route::apiResource('money-entries', MoneyEntryController::class)->middleware('role:admin,manager');
+    // 一般收支 CRUD：admin/manager/sales 皆可送出，manager/sales 建立進 pending 待審核
+    Route::apiResource('money-entries', MoneyEntryController::class)->middleware('role:admin,manager,sales');
 
     // 資金帳戶選單（不含餘額欄位）：admin、manager、sales 皆可用於收訂金 / 收尾款 / 支出登記等表單選擇帳戶
     Route::middleware('role:admin,manager,sales')->group(function () {
@@ -75,6 +75,10 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::middleware('role:admin')->group(function () {
         Route::apiResource('cash-accounts', CashAccountController::class)->only(['store', 'update', 'destroy']);
         Route::patch('cash-accounts/{cash_account}/status', [CashAccountController::class, 'updateStatus']);
+
+        // 一般收支審核：只有 admin 可核准 / 駁回 pending 的 manual 收支
+        Route::patch('money-entries/{money_entry}/approve', [MoneyEntryController::class, 'approve']);
+        Route::patch('money-entries/{money_entry}/reject', [MoneyEntryController::class, 'reject']);
 
         Route::apiResource('users', UserController::class);
         Route::patch('users/{user}/status', [UserController::class, 'updateStatus']);

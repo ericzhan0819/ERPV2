@@ -18,6 +18,7 @@ class IndexMoneyEntryRequest extends FormRequest
             'cash_account_id' => ['nullable', 'integer', 'exists:cash_accounts,id'],
             'direction' => ['nullable', 'string', 'in:income,expense'],
             'category' => ['nullable', 'string', 'max:255'],
+            'approval_status' => ['nullable', 'string', 'in:approved,pending,rejected'],
             'date_from' => ['nullable', 'date'],
             'date_to' => ['nullable', 'date'],
             'search' => ['nullable', 'string', 'max:255'],

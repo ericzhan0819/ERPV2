@@ -206,6 +206,7 @@ class MoneyEntryTest extends TestCase
             'category' => '一般收入',
             'amount' => 1000,
             'source_type' => 'manual',
+            'approval_status' => 'pending',
         ]);
 
         $this->actingAs($user, 'web')
@@ -238,6 +239,7 @@ class MoneyEntryTest extends TestCase
             'category' => '維修支出',
             'amount' => 1000,
             'source_type' => 'manual',
+            'approval_status' => 'pending',
         ]);
 
         $this->actingAs($user, 'web')
@@ -271,6 +273,7 @@ class MoneyEntryTest extends TestCase
             'category' => '維修支出',
             'amount' => 1000,
             'source_type' => 'manual',
+            'approval_status' => 'pending',
         ]);
 
         $this->actingAs($user, 'web')
@@ -299,6 +302,7 @@ class MoneyEntryTest extends TestCase
             'category' => '維修支出',
             'amount' => 1000,
             'source_type' => 'manual',
+            'approval_status' => 'pending',
         ]);
 
         $this->actingAs($user, 'web')
@@ -357,6 +361,7 @@ class MoneyEntryTest extends TestCase
             'category' => '租金',
             'amount' => 1000,
             'source_type' => 'manual',
+            'approval_status' => 'pending',
         ]);
 
         $this->actingAs($user, 'web')
@@ -488,6 +493,7 @@ class MoneyEntryTest extends TestCase
             'amount' => 5000,
             'counterparty_name' => null,
             'idempotency_key' => (string) Str::uuid(),
+            'approval_status' => 'pending',
             'created_at' => now(),
             'updated_at' => now(),
         ]);

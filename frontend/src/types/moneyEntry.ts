@@ -1,5 +1,7 @@
 export type MoneyDirection = 'income' | 'expense'
 
+export type MoneyEntryApprovalStatus = 'approved' | 'pending' | 'rejected'
+
 export interface MoneyEntryVehicleRef {
   id: number
   stock_no: string
@@ -23,6 +25,9 @@ export interface MoneyEntry {
   cash_account_id: number
   counterparty_name: string | null
   description: string | null
+  approval_status: MoneyEntryApprovalStatus
+  approved_by: number | null
+  approved_at: string | null
   vehicle: MoneyEntryVehicleRef | null
   cash_account: MoneyEntryCashAccountRef | null
   created_at: string | null
@@ -49,6 +54,7 @@ export interface MoneyEntryListParams {
   date_from?: string
   date_to?: string
   search?: string
+  approval_status?: MoneyEntryApprovalStatus
   page?: number
 }
 

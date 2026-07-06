@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\CashAccount;
 use App\Models\MoneyEntry;
+use App\Models\User;
 use App\Models\Vehicle;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\QueryException;
@@ -83,6 +84,10 @@ class MoneyEntryService
             $query->where('category', $filters['category']);
         }
 
+        if (! empty($filters['approval_status'])) {
+            $query->where('approval_status', $filters['approval_status']);
+        }
+
         if (! empty($filters['date_from'])) {
             $query->whereDate('entry_date', '>=', $filters['date_from']);
         }
@@ -108,7 +113,7 @@ class MoneyEntryService
     /**
      * @param  array<string, mixed>  $data
      */
-    public function createEntry(array $data, int $userId): MoneyEntry
+    public function createEntry(array $data, User $user): MoneyEntry
     {
         $idempotencyKey = (string) $data['idempotency_key'];
         $effectiveData = [
@@ -123,7 +128,7 @@ class MoneyEntryService
         ];
 
         try {
-            return DB::transaction(fn () => $this->createGeneralEntryInsideTransaction($idempotencyKey, $effectiveData, $userId));
+            return DB::transaction(fn () => $this->createGeneralEntryInsideTransaction($idempotencyKey, $effectiveData, $user));
         } catch (QueryException $e) {
             if (! $this->isIdempotencyKeyUniqueViolation($e)) {
                 throw $e;
@@ -136,7 +141,7 @@ class MoneyEntryService
     /**
      * @param  array{vehicle_id: int|null, cash_account_id: int, entry_date: string, direction: string, category: string, amount: int, counterparty_name: string|null, description: string|null}  $effectiveData
      */
-    private function createGeneralEntryInsideTransaction(string $idempotencyKey, array $effectiveData, int $userId): MoneyEntry
+    private function createGeneralEntryInsideTransaction(string $idempotencyKey, array $effectiveData, User $user): MoneyEntry
     {
         $existingEntry = MoneyEntry::query()->where('idempotency_key', $idempotencyKey)->first();
 
@@ -163,8 +168,11 @@ class MoneyEntryService
             'idempotency_key' => $idempotencyKey,
             'source_type' => MoneyEntry::SOURCE_MANUAL,
         ]);
-        $entry->created_by = $userId;
-        $entry->updated_by = $userId;
+        $entry->created_by = $user->id;
+        $entry->updated_by = $user->id;
+        // 一般收支審核邊界：只套用於 manual 收支。admin 建立直接 approved，
+        // manager/sales 建立進 pending，待 admin 核准後才計入正式餘額。
+        $entry->approval_status = $user->isAdmin() ? MoneyEntry::APPROVAL_APPROVED : MoneyEntry::APPROVAL_PENDING;
 
         // Let a duplicate-key QueryException escape so DB::transaction rolls back;
         // it is caught and retried against a fresh transaction/snapshot by the caller.
@@ -184,6 +192,12 @@ class MoneyEntryService
             if ($lockedEntry->source_type !== MoneyEntry::SOURCE_MANUAL) {
                 throw ValidationException::withMessages([
                     'source_type' => ['流程、快捷或來源未確認的既有收支不得透過一般收支功能修改'],
+                ]);
+            }
+
+            if ($lockedEntry->approval_status !== MoneyEntry::APPROVAL_PENDING) {
+                throw ValidationException::withMessages([
+                    'approval_status' => ['已核准或已駁回的收支不得修改，如需修正請新增一筆收支'],
                 ]);
             }
 
@@ -218,12 +232,65 @@ class MoneyEntryService
                 ]);
             }
 
+            if ($lockedEntry->approval_status !== MoneyEntry::APPROVAL_PENDING) {
+                throw ValidationException::withMessages([
+                    'approval_status' => ['已核准或已駁回的收支不得刪除，如需修正請新增一筆收支'],
+                ]);
+            }
+
             if ($lockedEntry->vehicle_id !== null) {
                 $this->assertVehicleMutable((int) $lockedEntry->vehicle_id);
             }
 
             $lockedEntry->delete();
         });
+    }
+
+    public function approve(MoneyEntry $entry, int $approverId): MoneyEntry
+    {
+        return DB::transaction(function () use ($entry, $approverId) {
+            $lockedEntry = MoneyEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
+
+            $this->assertPendingManualEntry($lockedEntry, '核准');
+
+            $lockedEntry->approval_status = MoneyEntry::APPROVAL_APPROVED;
+            $lockedEntry->approved_by = $approverId;
+            $lockedEntry->approved_at = now();
+            $lockedEntry->save();
+
+            return $lockedEntry;
+        });
+    }
+
+    public function reject(MoneyEntry $entry, int $approverId): MoneyEntry
+    {
+        return DB::transaction(function () use ($entry, $approverId) {
+            $lockedEntry = MoneyEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
+
+            $this->assertPendingManualEntry($lockedEntry, '駁回');
+
+            $lockedEntry->approval_status = MoneyEntry::APPROVAL_REJECTED;
+            $lockedEntry->approved_by = $approverId;
+            $lockedEntry->approved_at = now();
+            $lockedEntry->save();
+
+            return $lockedEntry;
+        });
+    }
+
+    private function assertPendingManualEntry(MoneyEntry $entry, string $action): void
+    {
+        if ($entry->source_type !== MoneyEntry::SOURCE_MANUAL) {
+            throw ValidationException::withMessages([
+                'source_type' => ["流程、快捷或來源未確認的收支不需要{$action}"],
+            ]);
+        }
+
+        if ($entry->approval_status !== MoneyEntry::APPROVAL_PENDING) {
+            throw ValidationException::withMessages([
+                'approval_status' => ["只有待審核的收支可以{$action}，狀態不可逆"],
+            ]);
+        }
     }
 
     /**
@@ -285,6 +352,8 @@ class MoneyEntryService
         ]);
         $entry->created_by = $userId;
         $entry->updated_by = $userId;
+        // 車輛快捷收支不進審核佇列，避免車輛狀態流程被卡住。
+        $entry->approval_status = MoneyEntry::APPROVAL_APPROVED;
 
         // Let a duplicate-key QueryException escape so DB::transaction rolls back;
         // it is caught and retried against a fresh transaction/snapshot by the caller.
@@ -377,11 +446,13 @@ class MoneyEntryService
     public function balanceForAccount(CashAccount $cashAccount): int
     {
         $income = (int) MoneyEntry::query()
+            ->approved()
             ->where('cash_account_id', $cashAccount->id)
             ->where('direction', 'income')
             ->sum('amount');
 
         $expense = (int) MoneyEntry::query()
+            ->approved()
             ->where('cash_account_id', $cashAccount->id)
             ->where('direction', 'expense')
             ->sum('amount');
@@ -397,11 +468,13 @@ class MoneyEntryService
         $openingBalance = (int) CashAccount::query()->where('type', $type)->sum('opening_balance');
 
         $income = (int) MoneyEntry::query()
+            ->approved()
             ->whereHas('cashAccount', fn ($query) => $query->where('type', $type))
             ->where('direction', 'income')
             ->sum('amount');
 
         $expense = (int) MoneyEntry::query()
+            ->approved()
             ->whereHas('cashAccount', fn ($query) => $query->where('type', $type))
             ->where('direction', 'expense')
             ->sum('amount');

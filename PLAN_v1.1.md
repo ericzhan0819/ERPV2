@@ -92,38 +92,38 @@
 - approved/rejected 單向不可逆，若要修正需建新 entry
 
 ### Schema
-- [ ] Migration：money_entries 新增 `approval_status`（default 'approved', in:'approved','pending','rejected'）
-- [ ] Migration：money_entries 新增 `approved_by` FK（nullable）與 `approved_at` timestamp（nullable）
-- [ ] 既有資料回填 `approval_status='approved'`
+- [x] Migration：money_entries 新增 `approval_status`（default 'approved', in:'approved','pending','rejected'）
+- [x] Migration：money_entries 新增 `approved_by` FK（nullable）與 `approved_at` timestamp（nullable）
+- [x] 既有資料回填 `approval_status='approved'`
 
 ### Model / Service
-- [ ] MoneyEntry Model：新欄位 casts，**不加 fillable**（防前端偽造）
-- [ ] MoneyEntryService::createEntry()：依 role 設定 approval_status（admin=approved，manager/sales=pending）
-- [ ] MoneyEntryService：`updateEntry()`/`deleteEntry()` 只允許 pending（approved/rejected 拒絕）
-- [ ] MoneyEntryService：新增 `approve($entry, $user)`/`reject($entry, $user)` 方法
-- [ ] 新增 scope `scopeApproved()` 或 helper 方法，避免各處重複寫 `where('approval_status', 'approved')`
+- [x] MoneyEntry Model：新欄位 casts，**不加 fillable**（防前端偽造）
+- [x] MoneyEntryService::createEntry()：依 role 設定 approval_status（admin=approved，manager/sales=pending）
+- [x] MoneyEntryService：`updateEntry()`/`deleteEntry()` 只允許 pending（approved/rejected 拒絕）
+- [x] MoneyEntryService：新增 `approve($entry, $user)`/`reject($entry, $user)` 方法
+- [x] 新增 scope `scopeApproved()` 或 helper 方法，避免各處重複寫 `where('approval_status', 'approved')`
 
 ### 金額彙總修改點（關鍵）
-- [ ] `MoneyEntryService::balanceForAccount()` 加 `where('approval_status', 'approved')`
-- [ ] `MoneyEntryService::balanceForType()` 加 `where('approval_status', 'approved')`
-- [ ] `DashboardService::buildSummary()` 的 monthly_income/monthly_expense 加 `where('approval_status', 'approved')`
-- [ ] `VehicleService::financialSummary()` 加 `where('approval_status', 'approved')`
-- [ ] `VehicleService::buildFinalPaymentWarning()` 的 income 只計 approved
-- [ ] `VehicleService::printClosingData()` 的 summary 自動套用（financialSummary 已過濾），entries 可選 A（僅 approved）或 B（全部但標註狀態）
+- [x] `MoneyEntryService::balanceForAccount()` 加 `where('approval_status', 'approved')`
+- [x] `MoneyEntryService::balanceForType()` 加 `where('approval_status', 'approved')`
+- [x] `DashboardService::buildSummary()` 的 monthly_income/monthly_expense 加 `where('approval_status', 'approved')`
+- [x] `VehicleService::financialSummary()` 加 `where('approval_status', 'approved')`
+- [x] `VehicleService::buildFinalPaymentWarning()` 的 income 只計 approved
+- [x] `VehicleService::printClosingData()` 的 summary 自動套用（financialSummary 已過濾），entries 選 A（僅 approved）
 
 ### API / 前端
-- [ ] StoreMoneyEntryRequest：**不含** approval_status 驗證規則
-- [ ] 新增 `PATCH /api/money-entries/{id}/approve` 與 `/reject`（admin only）
-- [ ] MoneyEntryResource：輸出 approval_status, approved_by, approved_at
-- [ ] MoneyEntryList：新增「待審核」篩選器，admin 可核准/駁回
+- [x] StoreMoneyEntryRequest：**不含** approval_status 驗證規則
+- [x] 新增 `PATCH /api/money-entries/{id}/approve` 與 `/reject`（admin only）
+- [x] MoneyEntryResource：輸出 approval_status, approved_by, approved_at
+- [x] MoneyEntryList：新增「待審核」篩選器，admin 可核准/駁回
 
 ### 測試
-- [ ] admin 建立 manual → approved，manager/sales 建立 manual → pending
-- [ ] vehicle_workflow 產生 → 永遠 approved
-- [ ] pending 不影響 balanceForAccount/balanceForType/Dashboard/Vehicle summary
-- [ ] approved 後影響，rejected 永不計入
-- [ ] approved/rejected 後不可編輯/刪除（422），狀態不可逆
-- [ ] manager/sales 無法呼叫 approve/reject（403）
+- [x] admin 建立 manual → approved，manager/sales 建立 manual → pending
+- [x] vehicle_workflow 產生 → 永遠 approved
+- [x] pending 不影響 balanceForAccount/balanceForType/Dashboard/Vehicle summary
+- [x] approved 後影響，rejected 永不計入
+- [x] approved/rejected 後不可編輯/刪除（422），狀態不可逆
+- [x] manager/sales 無法呼叫 approve/reject（403）
 
 ---
 

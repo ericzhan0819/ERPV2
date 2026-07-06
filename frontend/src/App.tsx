@@ -56,7 +56,7 @@ function App() {
           <Route
             path="/money-entries"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'manager']}>
+              <ProtectedRoute allowedRoles={['admin', 'manager', 'sales']}>
                 <MoneyEntryList />
               </ProtectedRoute>
             }
@@ -64,7 +64,7 @@ function App() {
           <Route
             path="/money-entries/create"
             element={
-              <ProtectedRoute allowedRoles={['admin', 'manager']}>
+              <ProtectedRoute allowedRoles={['admin', 'manager', 'sales']}>
                 <MoneyEntryCreate />
               </ProtectedRoute>
             }

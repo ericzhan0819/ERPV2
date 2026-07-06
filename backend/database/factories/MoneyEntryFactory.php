@@ -25,6 +25,7 @@ class MoneyEntryFactory extends Factory
             'counterparty_name' => null,
             'description' => null,
             'idempotency_key' => null,
+            'approval_status' => MoneyEntry::APPROVAL_APPROVED,
         ];
     }
 }

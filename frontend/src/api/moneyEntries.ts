@@ -10,3 +10,13 @@ export async function createMoneyEntry(payload: CreateMoneyEntryPayload): Promis
   const { data } = await apiClient.post<{ data: MoneyEntry }>('/api/money-entries', payload)
   return data.data
 }
+
+export async function approveMoneyEntry(id: number): Promise<MoneyEntry> {
+  const { data } = await apiClient.patch<{ data: MoneyEntry }>(`/api/money-entries/${id}/approve`)
+  return data.data
+}
+
+export async function rejectMoneyEntry(id: number): Promise<MoneyEntry> {
+  const { data } = await apiClient.patch<{ data: MoneyEntry }>(`/api/money-entries/${id}/reject`)
+  return data.data
+}

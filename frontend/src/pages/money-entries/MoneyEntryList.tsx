@@ -1,17 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiClient } from '../../api/client'
-import { listCashAccounts } from '../../api/cashAccounts'
-import { listMoneyEntries } from '../../api/moneyEntries'
+import { listCashAccountOptions } from '../../api/cashAccounts'
+import { approveMoneyEntry, listMoneyEntries, rejectMoneyEntry } from '../../api/moneyEntries'
+import { useAuth } from '../../hooks/useAuth'
 import type { CashAccountOption } from '../../types/cashAccount'
-import type { MoneyDirection, MoneyEntry, MoneyEntryListMeta } from '../../types/moneyEntry'
+import type { MoneyDirection, MoneyEntry, MoneyEntryApprovalStatus, MoneyEntryListMeta } from '../../types/moneyEntry'
 import type { Vehicle, VehicleListResponse } from '../../types/vehicle'
 import { categoriesForDirection, directionLabels } from '../../utils/moneyEntryCategory'
 import { MoneyDirectionBadge } from '../../components/MoneyDirectionBadge'
+import { ApprovalStatusBadge } from '../../components/ApprovalStatusBadge'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
 export function MoneyEntryList() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
+
   const [entries, setEntries] = useState<MoneyEntry[]>([])
   const [meta, setMeta] = useState<MoneyEntryListMeta | null>(null)
   const [cashAccounts, setCashAccounts] = useState<CashAccountOption[]>([])
@@ -24,19 +29,21 @@ export function MoneyEntryList() {
   const [vehicleId, setVehicleId] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [approvalStatus, setApprovalStatus] = useState<MoneyEntryApprovalStatus | ''>('')
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [reviewingId, setReviewingId] = useState<number | null>(null)
 
   useEffect(() => {
-    listCashAccounts().then(setCashAccounts).catch(() => setCashAccounts([]))
+    listCashAccountOptions().then(setCashAccounts).catch(() => setCashAccounts([]))
     apiClient
       .get<VehicleListResponse>('/api/vehicles', { params: { per_page: 100 } })
       .then((response) => setVehicles(response.data.data))
       .catch(() => setVehicles([]))
   }, [])
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     setLoading(true)
     setError(null)
     listMoneyEntries({
@@ -47,6 +54,7 @@ export function MoneyEntryList() {
       vehicle_id: vehicleId ? Number(vehicleId) : undefined,
       date_from: dateFrom || undefined,
       date_to: dateTo || undefined,
+      approval_status: approvalStatus || undefined,
       page,
     })
       .then((response) => {
@@ -55,7 +63,35 @@ export function MoneyEntryList() {
       })
       .catch(() => setError('收支列表載入失敗'))
       .finally(() => setLoading(false))
-  }, [search, direction, category, cashAccountId, vehicleId, dateFrom, dateTo, page])
+  }, [search, direction, category, cashAccountId, vehicleId, dateFrom, dateTo, approvalStatus, page])
+
+  useEffect(() => {
+    reload()
+  }, [reload])
+
+  async function handleApprove(id: number) {
+    setReviewingId(id)
+    try {
+      await approveMoneyEntry(id)
+      reload()
+    } catch {
+      setError('核准失敗，請稍後再試')
+    } finally {
+      setReviewingId(null)
+    }
+  }
+
+  async function handleReject(id: number) {
+    setReviewingId(id)
+    try {
+      await rejectMoneyEntry(id)
+      reload()
+    } catch {
+      setError('駁回失敗，請稍後再試')
+    } finally {
+      setReviewingId(null)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -167,6 +203,19 @@ export function MoneyEntryList() {
           }}
           className="rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
         />
+        <select
+          value={approvalStatus}
+          onChange={(e) => {
+            setPage(1)
+            setApprovalStatus(e.target.value as MoneyEntryApprovalStatus | '')
+          }}
+          className="rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+        >
+          <option value="">全部審核狀態</option>
+          <option value="pending">待審核</option>
+          <option value="approved">已核准</option>
+          <option value="rejected">已駁回</option>
+        </select>
       </div>
 
       {error && <p className="text-sm text-error">{error}</p>}
@@ -183,19 +232,21 @@ export function MoneyEntryList() {
               <th className="px-4 py-3 text-left font-medium text-fg-muted">關聯車輛</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">對象</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">備註</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">審核狀態</th>
+              {isAdmin && <th className="px-4 py-3 text-left font-medium text-fg-muted">審核操作</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {loading && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-fg-muted">
+                <td colSpan={isAdmin ? 10 : 9} className="px-4 py-6 text-center text-fg-muted">
                   載入中...
                 </td>
               </tr>
             )}
             {!loading && entries.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-fg-muted">
+                <td colSpan={isAdmin ? 10 : 9} className="px-4 py-6 text-center text-fg-muted">
                   尚無符合條件的收支紀錄
                 </td>
               </tr>
@@ -221,6 +272,35 @@ export function MoneyEntryList() {
                   </td>
                   <td className="px-4 py-3">{entry.counterparty_name ?? '-'}</td>
                   <td className="px-4 py-3">{entry.description ?? '-'}</td>
+                  <td className="px-4 py-3">
+                    <ApprovalStatusBadge status={entry.approval_status} />
+                  </td>
+                  {isAdmin && (
+                    <td className="px-4 py-3">
+                      {entry.approval_status === 'pending' ? (
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={reviewingId === entry.id}
+                            onClick={() => handleApprove(entry.id)}
+                            className="rounded-lg border border-border-strong px-2.5 py-1 text-xs font-medium text-success hover:bg-surface-2 disabled:opacity-50"
+                          >
+                            核准
+                          </button>
+                          <button
+                            type="button"
+                            disabled={reviewingId === entry.id}
+                            onClick={() => handleReject(entry.id)}
+                            className="rounded-lg border border-border-strong px-2.5 py-1 text-xs font-medium text-error hover:bg-surface-2 disabled:opacity-50"
+                          >
+                            駁回
+                          </button>
+                        </div>
+                      ) : (
+                        '-'
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
           </tbody>

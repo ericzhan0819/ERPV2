@@ -45,12 +45,33 @@ class MoneyEntry extends Model
      */
     public const SOURCE_LEGACY_UNKNOWN = 'legacy_unknown';
 
+    /**
+     * 一般收支尚待 admin 審核，不計入正式餘額。
+     */
+    public const APPROVAL_PENDING = 'pending';
+
+    /**
+     * 已計入正式餘額；admin 建立時直接落地，manager/sales 建立需經核准。
+     */
+    public const APPROVAL_APPROVED = 'approved';
+
+    /**
+     * 已駁回，永久不計入正式餘額；如需修正必須新增一筆 entry，不可改回 pending。
+     */
+    public const APPROVAL_REJECTED = 'rejected';
+
     protected function casts(): array
     {
         return [
             'entry_date' => 'date',
             'amount' => 'integer',
+            'approved_at' => 'datetime',
         ];
+    }
+
+    public function scopeApproved($query)
+    {
+        return $query->where('approval_status', self::APPROVAL_APPROVED);
     }
 
     public function vehicle(): BelongsTo
@@ -71,5 +92,10 @@ class MoneyEntry extends Model
     public function updatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function approvedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
     }
 }
