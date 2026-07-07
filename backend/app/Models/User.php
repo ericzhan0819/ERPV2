@@ -66,11 +66,21 @@ class User extends Authenticatable
     }
 
     /**
-     * 允許看到收購價 / 開價 / 底價 / 成交價 / 毛利 / 收支金額等敏感財務欄位的角色。
+     * 允許看到收購價 / 成交價 / 毛利 / 資金帳戶餘額 / 完整收支金額等最敏感財務欄位的角色。
      * 刻意採白名單而非「非 sales」的黑名單：未知或未來新增角色預設看不到財務資料。
      */
     public function canViewFinancials(): bool
     {
         return $this->hasAnyRole([self::ROLE_ADMIN, self::ROLE_MANAGER]);
+    }
+
+    /**
+     * 允許看到開價 / 底價的角色。這兩個欄位是業務跟客人議價的依據，
+     * 因此 sales 也需要看到，但收購價 / 成交價 / 毛利等仍只給 canViewFinancials()。
+     * 同樣採白名單：未知或未來新增角色預設看不到。
+     */
+    public function canViewSalesPricing(): bool
+    {
+        return $this->hasAnyRole([self::ROLE_ADMIN, self::ROLE_MANAGER, self::ROLE_SALES]);
     }
 }

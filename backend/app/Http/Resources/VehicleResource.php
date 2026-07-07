@@ -10,6 +10,7 @@ class VehicleResource extends JsonResource
     public function toArray(Request $request): array
     {
         $canSeeFinancials = $request->user()?->canViewFinancials() ?? false;
+        $canSeeSalesPricing = $request->user()?->canViewSalesPricing() ?? false;
 
         return [
             'id' => $this->id,
@@ -39,8 +40,8 @@ class VehicleResource extends JsonResource
             'seller_phone' => $this->seller_phone,
             'seller_customer_id' => $this->seller_customer_id,
             'purchase_price' => $this->when($canSeeFinancials, $this->purchase_price),
-            'asking_price' => $this->when($canSeeFinancials, $this->asking_price),
-            'floor_price' => $this->when($canSeeFinancials, $this->floor_price),
+            'asking_price' => $this->when($canSeeSalesPricing, $this->asking_price),
+            'floor_price' => $this->when($canSeeSalesPricing, $this->floor_price),
             'listing_date' => $this->listing_date?->toDateString(),
             'sales_note' => $this->sales_note,
             'reserved_at' => $this->reserved_at?->toISOString(),

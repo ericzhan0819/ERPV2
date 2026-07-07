@@ -49,7 +49,8 @@
 
 ### 核心原則
 - 敏感欄位**不可只靠前端隱藏**，後端 JSON 必須用 `when()`/`unless()` 真正不輸出
-- sales 不可見：`purchase_price`, `asking_price`, `floor_price`, `sold_price`、毛利、`amount`、`cash_account_id`、Dashboard 金額欄位
+- sales 不可見：`purchase_price`, `sold_price`、毛利、`amount`、`cash_account_id`、Dashboard 金額欄位
+- sales 可見：`asking_price`, `floor_price`（開價 / 底價，業務跟客人議價依據，不在上述禁止清單內）
 - sales 呼叫金額 endpoint（`/api/cash-accounts/balances`、`/api/money-entries` 等）應 **403**，不是遮蔽版本
 - Dashboard 給 sales：只有 `vehicle_counts` 與 `monthly_sold_count`，無金額欄位
 
@@ -65,7 +66,7 @@
   - Cash Account balances：`role:admin,manager` only
 
 ### Resource 遮蔽
-- [x] VehicleResource：purchase_price, asking_price, floor_price, sold_price 依角色 `when()`
+- [x] VehicleResource：purchase_price, sold_price 依 `canViewFinancials()` `when()`；asking_price, floor_price 依 `canViewSalesPricing()`（admin/manager/sales）`when()`
 - [x] MoneyEntryResource：amount, cash_account_id 依角色 `when()`
 - [x] DashboardController：sales 得到淨化版本（無金額欄位）
 

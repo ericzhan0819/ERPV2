@@ -11,7 +11,7 @@ import { vehicleStatusLabels } from '../../utils/vehicleStatus'
 import { VehicleStatusBadge } from '../../components/VehicleStatusBadge'
 import { CustomerSelect } from '../../components/CustomerSelect'
 import { useAuth } from '../../hooks/useAuth'
-import { canManageVehicles, canRunSalesFlow, canViewFinancials } from '../../utils/permissions'
+import { canManageVehicles, canRunSalesFlow, canViewFinancials, canViewSalesPricing } from '../../utils/permissions'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
@@ -142,6 +142,7 @@ type ActiveModal = 'list' | 'reserve' | 'final-payment' | 'close-sale' | null
 export function VehicleDetail() {
   const { user } = useAuth()
   const canViewFinance = canViewFinancials(user?.role)
+  const canViewSalesPrice = canViewSalesPricing(user?.role)
   const canManage = canManageVehicles(user?.role)
   const canSell = canRunSalesFlow(user?.role)
   const { id } = useParams<{ id: string }>()
@@ -384,8 +385,8 @@ export function VehicleDetail() {
         </Panel>
 
         <Panel title="銷售資料">
-          {canViewFinance && <InfoRow label="開價" value={formatCurrency(vehicle.asking_price)} />}
-          {canViewFinance && <InfoRow label="底價" value={formatCurrency(vehicle.floor_price)} />}
+          {canViewSalesPrice && <InfoRow label="開價" value={formatCurrency(vehicle.asking_price)} />}
+          {canViewSalesPrice && <InfoRow label="底價" value={formatCurrency(vehicle.floor_price)} />}
           {canViewFinance && <InfoRow label="成交價" value={formatCurrency(vehicle.sold_price)} />}
           <InfoRow label="買方姓名" value={vehicle.buyer_name ?? '-'} />
           <InfoRow label="買方電話" value={vehicle.buyer_phone ?? '-'} />

@@ -99,7 +99,7 @@ v1.1 允許實作：
 
 * `users.role` 固定角色：`admin` / `manager` / `sales`
 * role-based middleware / policy / resource 遮蔽
-* sales 敏感金額遮蔽：收購價、底價、毛利、資金餘額、完整收支金額
+* sales 敏感金額遮蔽：收購價、成交價、毛利、資金餘額、完整收支金額（開價 / 底價為業務議價依據，sales 可見，不在遮蔽範圍內）
 * 一般收支審核：`manual` source 的一般收支由 manager / sales 建立時進 pending，admin 核准後才計入正式餘額
 * Customer Module：客戶、賣方 / 買方關聯、車輛關聯摘要
 * 車輛入庫建檔欄位補強：排氣量、變速、燃料、停放位置、證件 / 備鑰 / 過戶 / 驗車檢核、貸款或車況備註
@@ -163,7 +163,8 @@ sales    業務 / 銷售執行
 * 不可只靠前端隱藏，後端 JSON 必須真正遮蔽。
 * sales 不可看的欄位應不存在於 JSON，不可回傳 `0`、空字串或假值。
 * 測試需驗證原始 JSON 沒有敏感欄位。
-* sales 不可取得資金帳戶餘額、收購價、底價、毛利、完整收支金額。
+* sales 不可取得資金帳戶餘額、收購價、成交價、毛利、完整收支金額。
+* sales 可取得開價（asking_price）與底價（floor_price），因為這是業務跟客人談價錢的依據；不可因此推論 sales 也能看收購價、成交價、毛利、資金餘額或完整收支金額。
 * manager 可看營運金額，但不可管理使用者，也不可寫入 Cash Account。
 * admin 可看與操作全部 v1.1 範圍內功能。
 

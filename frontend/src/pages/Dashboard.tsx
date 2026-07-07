@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { getDashboardSummary } from '../api/dashboard'
 import type { DashboardSummary } from '../types/dashboard'
 import { useAuth } from '../hooks/useAuth'
-import { canManageVehicles, canViewFinancials } from '../utils/permissions'
+import { canManageVehicles, canRunSalesFlow, canViewFinancials } from '../utils/permissions'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
@@ -27,16 +27,19 @@ function Card({ label, value }: CardProps) {
 
 const quickActions = [
   { to: '/vehicles/create', label: '新增買入車輛' },
+  { to: '/vehicles', label: '車輛列表' },
+  { to: '/customers', label: '客戶列表' },
+  { to: '/customers/create', label: '新增客戶' },
+  { to: '/money-entries', label: '收支紀錄' },
   { to: '/money-entries/create?direction=income', label: '新增一般收入' },
   { to: '/money-entries/create?direction=expense', label: '新增一般支出' },
-  { to: '/vehicles', label: '車輛列表' },
-  { to: '/money-entries', label: '收支紀錄' },
 ]
 
 export function Dashboard() {
   const { user } = useAuth()
   const canViewFinance = canViewFinancials(user?.role)
   const canManage = canManageVehicles(user?.role)
+  const canRunSales = canRunSalesFlow(user?.role)
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -96,7 +99,7 @@ export function Dashboard() {
           {quickActions
             .filter((action) => {
               if (action.to === '/vehicles/create') return canManage
-              if (action.to.startsWith('/money-entries')) return canViewFinance
+              if (action.to.startsWith('/customers') || action.to.startsWith('/money-entries')) return canRunSales
               return true
             })
             .map((action) => (

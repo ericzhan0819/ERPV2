@@ -14,7 +14,7 @@ class RoleAccessTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_sales_cannot_see_vehicle_financial_fields_in_json(): void
+    public function test_sales_cannot_see_purchase_and_sold_price_but_can_see_sales_pricing_in_json(): void
     {
         $sales = User::factory()->sales()->create(['is_active' => true]);
         $vehicle = Vehicle::factory()->create([
@@ -28,9 +28,9 @@ class RoleAccessTest extends TestCase
 
         $response->assertOk();
         $response->assertJsonMissingPath('vehicle.purchase_price');
-        $response->assertJsonMissingPath('vehicle.asking_price');
-        $response->assertJsonMissingPath('vehicle.floor_price');
         $response->assertJsonMissingPath('vehicle.sold_price');
+        $response->assertJsonPath('vehicle.asking_price', 600000);
+        $response->assertJsonPath('vehicle.floor_price', 550000);
         $response->assertJsonMissingPath('summary');
     }
 
@@ -181,6 +181,9 @@ class RoleAccessTest extends TestCase
         $vehicleResponse = $this->actingAs($unknownRoleUser, 'web')->getJson("/api/vehicles/{$vehicle->id}");
         $vehicleResponse->assertOk();
         $vehicleResponse->assertJsonMissingPath('vehicle.purchase_price');
+        $vehicleResponse->assertJsonMissingPath('vehicle.sold_price');
+        $vehicleResponse->assertJsonMissingPath('vehicle.asking_price');
+        $vehicleResponse->assertJsonMissingPath('vehicle.floor_price');
         $vehicleResponse->assertJsonMissingPath('summary');
 
         $dashboardResponse = $this->actingAs($unknownRoleUser, 'web')->getJson('/api/dashboard/summary');
