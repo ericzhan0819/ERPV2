@@ -18,7 +18,7 @@ class VehicleCreateWithPurchasePaymentTest extends TestCase
 
     public function test_creating_a_vehicle_without_payment_creates_no_money_entry(): void
     {
-        $user = User::factory()->create(['is_active' => true]);
+        $user = User::factory()->admin()->create(['is_active' => true]);
 
         $response = $this->actingAs($user, 'web')->postJson('/api/vehicles', [
             'brand' => 'Toyota',
@@ -34,7 +34,7 @@ class VehicleCreateWithPurchasePaymentTest extends TestCase
 
     public function test_creating_a_vehicle_with_payment_creates_vehicle_and_approved_expense_entry_together(): void
     {
-        $user = User::factory()->create(['is_active' => true]);
+        $user = User::factory()->admin()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
 
         $response = $this->actingAs($user, 'web')->postJson('/api/vehicles', [
@@ -68,7 +68,7 @@ class VehicleCreateWithPurchasePaymentTest extends TestCase
 
     public function test_payment_creation_failure_due_to_inactive_cash_account_rolls_back_the_whole_vehicle(): void
     {
-        $user = User::factory()->create(['is_active' => true]);
+        $user = User::factory()->admin()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create(['is_active' => false]);
         $idempotencyKey = (string) Str::uuid();
 
@@ -90,7 +90,7 @@ class VehicleCreateWithPurchasePaymentTest extends TestCase
 
     public function test_retry_with_same_idempotency_key_and_same_payload_replays_without_duplicating(): void
     {
-        $user = User::factory()->create(['is_active' => true]);
+        $user = User::factory()->admin()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
         $idempotencyKey = (string) Str::uuid();
 
@@ -123,7 +123,7 @@ class VehicleCreateWithPurchasePaymentTest extends TestCase
 
     public function test_retry_with_same_idempotency_key_but_different_payload_is_rejected(): void
     {
-        $user = User::factory()->create(['is_active' => true]);
+        $user = User::factory()->admin()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
         $idempotencyKey = (string) Str::uuid();
 
@@ -151,7 +151,7 @@ class VehicleCreateWithPurchasePaymentTest extends TestCase
         // 重試若省略了某個 optional 欄位（這裡是 color），不能因為「這次沒帶所以不比對」
         // 就被誤判成跟原本已儲存的值相同而靜默 replay 成功；省略掉的欄位必須視為
         // 「未提供 = null」，一旦與原本已儲存的非 null 值不同，就必須被視為不同 payload。
-        $user = User::factory()->create(['is_active' => true]);
+        $user = User::factory()->admin()->create(['is_active' => true]);
         $idempotencyKey = (string) Str::uuid();
 
         $this->actingAs($user, 'web')->postJson('/api/vehicles', [
@@ -181,7 +181,7 @@ class VehicleCreateWithPurchasePaymentTest extends TestCase
         // 「車輛目前的即時狀態」而不是「建車當下的快照」去比對，同一把 idempotency_key
         // 的完全相同重試（例如網路逾時造成的重送）會因為車輛已被後續合法編輯過，
         // 誤判成「不同建車內容」而被 422 拒絕，即使 retry payload 與當初建立時一字不差。
-        $user = User::factory()->create(['is_active' => true]);
+        $user = User::factory()->admin()->create(['is_active' => true]);
         $idempotencyKey = (string) Str::uuid();
 
         $payload = [
@@ -224,7 +224,7 @@ class VehicleCreateWithPurchasePaymentTest extends TestCase
         // 資料覆寫（見 applySellerCustomerSnapshot）。若冪等比對把這兩個衍生欄位也
         // 納入，客戶在兩次請求之間被改名，就會讓「同樣指定同一位客戶」的完全相同
         // 重試被誤判成不同建車內容而 422。
-        $user = User::factory()->create(['is_active' => true]);
+        $user = User::factory()->admin()->create(['is_active' => true]);
         $customer = Customer::factory()->create(['name' => '原始姓名', 'phone' => '0911111111']);
         $idempotencyKey = (string) Str::uuid();
 
@@ -252,7 +252,7 @@ class VehicleCreateWithPurchasePaymentTest extends TestCase
 
     public function test_creating_a_vehicle_without_idempotency_key_fails_validation(): void
     {
-        $user = User::factory()->create(['is_active' => true]);
+        $user = User::factory()->admin()->create(['is_active' => true]);
 
         $response = $this->actingAs($user, 'web')->postJson('/api/vehicles', [
             'brand' => 'Toyota',
@@ -270,7 +270,7 @@ class VehicleCreateWithPurchasePaymentTest extends TestCase
         // 的鍵是 "{idempotency_key}:initial-payment"（衍生後綴 16 字元），因此
         // idempotency_key 本身上限必須是 84，否則衍生鍵會超出欄位長度，讓原本合法
         // 的建車請求在寫入付款時因資料庫例外而整筆回滾。
-        $user = User::factory()->create(['is_active' => true]);
+        $user = User::factory()->admin()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
 
         $response = $this->actingAs($user, 'web')->postJson('/api/vehicles', [
@@ -290,7 +290,7 @@ class VehicleCreateWithPurchasePaymentTest extends TestCase
 
     public function test_idempotency_key_at_the_derived_payment_key_limit_succeeds(): void
     {
-        $user = User::factory()->create(['is_active' => true]);
+        $user = User::factory()->admin()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
         $idempotencyKey = str_repeat('a', 84);
 
@@ -317,7 +317,7 @@ class VehicleCreateWithPurchasePaymentTest extends TestCase
         // 受 money_entries.idempotency_key 欄位長度限制的鍵。純建車（無
         // initial_purchase_payment）不會產生這把衍生鍵，不應該被連帶波及，
         // 沿用既有其他端點（reserve/final-payment）的 max:100 即可。
-        $user = User::factory()->create(['is_active' => true]);
+        $user = User::factory()->admin()->create(['is_active' => true]);
         $idempotencyKey = str_repeat('a', 100);
 
         $response = $this->actingAs($user, 'web')->postJson('/api/vehicles', [
@@ -337,7 +337,7 @@ class VehicleCreateWithPurchasePaymentTest extends TestCase
         // 純日期，重試比對會拿 money_entries.entry_date 存回的純日期字串對「原始
         // datetime 字串」，兩者永遠對不上，導致完全相同的重試被誤判成不同 payload
         // 而 422，即使第一次請求已經成功。
-        $user = User::factory()->create(['is_active' => true]);
+        $user = User::factory()->admin()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
         $idempotencyKey = (string) Str::uuid();
 
@@ -395,7 +395,7 @@ class VehicleCreateWithPurchasePaymentTest extends TestCase
 
     public function test_create_vehicle_retry_after_duplicate_key_error_from_same_connection_insert(): void
     {
-        $user = User::factory()->create(['is_active' => true]);
+        $user = User::factory()->admin()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
         $idempotencyKey = (string) Str::uuid();
 

@@ -14,7 +14,7 @@ class RoleAccessTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_sales_cannot_see_purchase_and_sold_price_but_can_see_sales_pricing_in_json(): void
+    public function test_sales_cannot_see_purchase_price_but_can_see_sales_pricing_and_sold_price_in_json(): void
     {
         $sales = User::factory()->sales()->create(['is_active' => true]);
         $vehicle = Vehicle::factory()->create([
@@ -28,10 +28,36 @@ class RoleAccessTest extends TestCase
 
         $response->assertOk();
         $response->assertJsonMissingPath('vehicle.purchase_price');
-        $response->assertJsonMissingPath('vehicle.sold_price');
         $response->assertJsonPath('vehicle.asking_price', 600000);
         $response->assertJsonPath('vehicle.floor_price', 550000);
+        $response->assertJsonPath('vehicle.sold_price', 580000);
         $response->assertJsonMissingPath('summary');
+        $response->assertJsonStructure(['sales_collection_summary' => [
+            'sold_price', 'approved_collection_total', 'pending_collection_total',
+            'approved_refund_total', 'pending_refund_total', 'net_recorded_collection_total', 'remaining_amount',
+        ]]);
+    }
+
+    public function test_unknown_role_cannot_see_sales_pricing_or_sold_price_in_json(): void
+    {
+        $unknownRoleUser = User::factory()->create(['is_active' => true, 'role' => 'future_role']);
+        $vehicle = Vehicle::factory()->create([
+            'purchase_price' => 500000,
+            'asking_price' => 600000,
+            'floor_price' => 550000,
+            'sold_price' => 580000,
+        ]);
+
+        $response = $this->actingAs($unknownRoleUser, 'web')->getJson("/api/vehicles/{$vehicle->id}");
+
+        $response->assertOk();
+        $response->assertJsonMissingPath('vehicle.purchase_price');
+        $response->assertJsonMissingPath('vehicle.asking_price');
+        $response->assertJsonMissingPath('vehicle.floor_price');
+        $response->assertJsonMissingPath('vehicle.sold_price');
+        $response->assertJsonMissingPath('summary');
+        $response->assertJsonMissingPath('sales_collection_summary');
+        $response->assertJsonPath('money_entries', []);
     }
 
     public function test_manager_can_see_vehicle_financial_fields_in_json(): void
@@ -73,7 +99,7 @@ class RoleAccessTest extends TestCase
         ])->assertStatus(403);
     }
 
-    public function test_sales_can_run_sales_flow_actions_but_amount_is_masked(): void
+    public function test_sales_can_run_sales_flow_actions_and_see_own_collection_amount_but_not_cash_account(): void
     {
         $sales = User::factory()->sales()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create();
@@ -86,13 +112,17 @@ class RoleAccessTest extends TestCase
         ]);
 
         $response->assertCreated();
-        $response->assertJsonMissingPath('data.amount');
+        // 訂金收入屬於銷售收款安全分類，sales 建立後可看到自己這筆金額與待審核狀態，
+        // 但資金帳戶一律不可見，避免洩漏帳戶配置。
+        $response->assertJsonPath('data.amount', 20000);
+        $response->assertJsonPath('data.approval_status', 'pending');
         $response->assertJsonMissingPath('data.cash_account_id');
         $response->assertJsonMissingPath('data.cash_account');
 
         $this->assertDatabaseHas('money_entries', [
             'vehicle_id' => $vehicle->id,
             'amount' => 20000,
+            'approval_status' => 'pending',
         ]);
     }
 
@@ -190,6 +220,56 @@ class RoleAccessTest extends TestCase
         $dashboardResponse->assertOk();
         $dashboardResponse->assertJsonMissingPath('cash_balance');
         $dashboardResponse->assertJsonMissingPath('monthly_income');
+    }
+
+    /**
+     * sales 在一般收支列表只能看到自己建立的申請，或訂金/尾款/退款等銷售收款安全紀錄
+     * （不論由誰建立），不應看到全公司所有成本紀錄的分類、對象、描述。
+     */
+    public function test_sales_money_entries_index_is_scoped_to_own_entries_and_sales_safe_collections(): void
+    {
+        $sales = User::factory()->sales()->create(['is_active' => true]);
+        $manager = User::factory()->manager()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'preparing']);
+
+        $ownGeneralEntry = MoneyEntry::factory()->create([
+            'cash_account_id' => $cashAccount->id,
+            'vehicle_id' => null,
+            'direction' => 'income',
+            'category' => '一般收入',
+            'source_type' => 'manual',
+            'approval_status' => 'pending',
+            'created_by' => $sales->id,
+        ]);
+
+        $othersCostEntry = MoneyEntry::factory()->create([
+            'cash_account_id' => $cashAccount->id,
+            'vehicle_id' => $vehicle->id,
+            'direction' => 'expense',
+            'category' => '維修支出',
+            'source_type' => 'vehicle_shortcut',
+            'approval_status' => 'pending',
+            'created_by' => $manager->id,
+        ]);
+
+        $salesSafeCollectionEntry = MoneyEntry::factory()->create([
+            'cash_account_id' => $cashAccount->id,
+            'vehicle_id' => $vehicle->id,
+            'direction' => 'income',
+            'category' => '訂金收入',
+            'source_type' => 'vehicle_workflow',
+            'approval_status' => 'approved',
+            'created_by' => $manager->id,
+        ]);
+
+        $response = $this->actingAs($sales, 'web')->getJson('/api/money-entries?per_page=100');
+
+        $response->assertOk();
+        $ids = collect($response->json('data'))->pluck('id');
+        $this->assertTrue($ids->contains($ownGeneralEntry->id));
+        $this->assertTrue($ids->contains($salesSafeCollectionEntry->id));
+        $this->assertFalse($ids->contains($othersCostEntry->id));
     }
 
     public function test_sales_can_fetch_cash_account_options_without_balances(): void

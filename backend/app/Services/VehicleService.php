@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\CashAccount;
 use App\Models\Customer;
 use App\Models\MoneyEntry;
+use App\Models\User;
 use App\Models\Vehicle;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\QueryException;
@@ -13,6 +14,19 @@ use Illuminate\Validation\ValidationException;
 
 class VehicleService
 {
+    /**
+     * 銷售收款安全摘要只計入訂金/尾款收入與退款，其他單車收入不在本輪保守範圍內
+     * （見 CLAUDE.md 銷售收款安全摘要規則）。
+     */
+    private const SALES_COLLECTION_CATEGORIES = ['訂金收入', '尾款收入'];
+
+    private const SALES_REFUND_CATEGORY = '退款';
+
+    /**
+     * sales 車輛詳情頁「自己上報紀錄」可見的車輛支出分類。
+     */
+    private const SALES_REPORTABLE_EXPENSE_CATEGORIES = ['維修支出', '美容支出', '代辦支出', '拍場支出', '其他支出'];
+
     /**
      * 建車冪等 payload 比對必須涵蓋的完整欄位集合。使用固定清單而非「這次請求帶了
      * 哪些欄位就比對哪些」，是因為重試若省略了某個 optional 欄位（無論是刻意送出
@@ -244,8 +258,9 @@ class VehicleService
             ]);
             $entry->created_by = $userId;
             $entry->updated_by = $userId;
-            // 車輛流程收支不進審核佇列，避免建車流程被卡住。
-            $entry->approval_status = MoneyEntry::APPROVAL_APPROVED;
+            // 老闆身兼會計：只有 admin 建車同步付款才直接 approved，manager 建車
+            // （sales 不可建車）上報的購車付款一律進 pending，待 admin 核准。
+            $entry->approval_status = $this->isCreatorAdmin($userId) ? MoneyEntry::APPROVAL_APPROVED : MoneyEntry::APPROVAL_PENDING;
 
             // Let a duplicate-key QueryException escape so DB::transaction rolls back
             // the vehicle insert too; it is caught and retried by the caller.
@@ -615,8 +630,10 @@ class VehicleService
         ]);
         $entry->created_by = $userId;
         $entry->updated_by = $userId;
-        // 車輛流程收支不進審核佇列，避免車輛狀態流程被卡住。
-        $entry->approval_status = MoneyEntry::APPROVAL_APPROVED;
+        // 老闆身兼會計：只有 admin 收訂金才直接 approved，manager/sales 收的訂金
+        // 一律進 pending，待 admin 核准後才計入正式餘額；成交結案需以 approved
+        // 收款達成交價為準（見 closeSale()）。
+        $entry->approval_status = $this->isCreatorAdmin($userId) ? MoneyEntry::APPROVAL_APPROVED : MoneyEntry::APPROVAL_PENDING;
 
         // Let a duplicate-key QueryException escape so DB::transaction rolls back;
         // it is caught and retried against a fresh transaction/snapshot by the caller.
@@ -845,8 +862,9 @@ class VehicleService
         ]);
         $entry->created_by = $userId;
         $entry->updated_by = $userId;
-        // 車輛流程收支不進審核佇列，避免車輛狀態流程被卡住。
-        $entry->approval_status = MoneyEntry::APPROVAL_APPROVED;
+        // 老闆身兼會計：只有 admin 收尾款才直接 approved，manager/sales 收的尾款
+        // 一律進 pending，待 admin 核准後才計入正式餘額。
+        $entry->approval_status = $this->isCreatorAdmin($userId) ? MoneyEntry::APPROVAL_APPROVED : MoneyEntry::APPROVAL_PENDING;
 
         // Let a duplicate-key QueryException escape so DB::transaction rolls back;
         // it is caught and retried against a fresh transaction/snapshot by the caller.
@@ -901,15 +919,28 @@ class VehicleService
                 ]);
             }
 
-            $hasIncome = MoneyEntry::query()
+            // 老闆身兼會計：sales/manager 收的訂金、尾款在 admin 核准前只是 pending，
+            // 不算正式已收，成交結案不可用 pending 金額關帳，必須等 admin 核准入帳
+            // 且 approved 收款總額達成交價才可放行。只計訂金/尾款這兩種實際收款分類，
+            // 並扣除 approved 退款——不可計入「其他單車收入」等與此次銷售收款無關的
+            // income entry，避免無關收入被拿來墊高已核准收款總額、繞過成交結案門檻。
+            $approvedCollectionTotal = (int) MoneyEntry::query()
                 ->approved()
                 ->where('vehicle_id', $lockedVehicle->id)
-                ->where('direction', 'income')
-                ->exists();
+                ->whereIn('category', self::SALES_COLLECTION_CATEGORIES)
+                ->sum('amount');
 
-            if (! $hasIncome) {
+            $approvedRefundTotal = (int) MoneyEntry::query()
+                ->approved()
+                ->where('vehicle_id', $lockedVehicle->id)
+                ->where('category', self::SALES_REFUND_CATEGORY)
+                ->sum('amount');
+
+            $approvedIncome = $approvedCollectionTotal - $approvedRefundTotal;
+
+            if ($approvedIncome < (int) $lockedVehicle->sold_price) {
                 throw ValidationException::withMessages([
-                    'sold_price' => ['成交結案前必須至少已有一筆訂金或尾款收入'],
+                    'sold_price' => ['成交結案前，訂金與尾款需先由老闆核准入帳，且已核准收款需達成交價'],
                 ]);
             }
 
@@ -927,6 +958,97 @@ class VehicleService
         if ($vehicle->status !== $expected) {
             throw ValidationException::withMessages(['status' => [$message]]);
         }
+    }
+
+    private function isCreatorAdmin(int $userId): bool
+    {
+        // role 是正式權限來源（見 CLAUDE.md 過渡期規則），不用 is_admin 判斷。
+        return User::query()->whereKey($userId)->value('role') === User::ROLE_ADMIN;
+    }
+
+    /**
+     * sales 車輛詳情頁的銷售收款安全摘要：只計入訂金/尾款收入與退款，不含購車付款、
+     * 整備成本等，避免洩漏成本與毛利。approved/pending 分開列出，是因為 sales 需要
+     * 知道「已經被老闆核准入帳」與「還在等老闆核准」的差異，rejected 不計入任何總額。
+     *
+     * @return array{sold_price: int|null, approved_collection_total: int, pending_collection_total: int, approved_refund_total: int, pending_refund_total: int, net_recorded_collection_total: int, remaining_amount: int|null}
+     */
+    public function salesCollectionSummary(Vehicle $vehicle): array
+    {
+        $approvedCollectionTotal = (int) MoneyEntry::query()
+            ->approved()
+            ->where('vehicle_id', $vehicle->id)
+            ->whereIn('category', self::SALES_COLLECTION_CATEGORIES)
+            ->sum('amount');
+
+        $pendingCollectionTotal = (int) MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('approval_status', MoneyEntry::APPROVAL_PENDING)
+            ->whereIn('category', self::SALES_COLLECTION_CATEGORIES)
+            ->sum('amount');
+
+        $approvedRefundTotal = (int) MoneyEntry::query()
+            ->approved()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', self::SALES_REFUND_CATEGORY)
+            ->sum('amount');
+
+        $pendingRefundTotal = (int) MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('approval_status', MoneyEntry::APPROVAL_PENDING)
+            ->where('category', self::SALES_REFUND_CATEGORY)
+            ->sum('amount');
+
+        $netRecordedCollectionTotal = $approvedCollectionTotal + $pendingCollectionTotal
+            - $approvedRefundTotal - $pendingRefundTotal;
+
+        $soldPrice = $vehicle->sold_price !== null ? (int) $vehicle->sold_price : null;
+
+        return [
+            'sold_price' => $soldPrice,
+            'approved_collection_total' => $approvedCollectionTotal,
+            'pending_collection_total' => $pendingCollectionTotal,
+            'approved_refund_total' => $approvedRefundTotal,
+            'pending_refund_total' => $pendingRefundTotal,
+            'net_recorded_collection_total' => $netRecordedCollectionTotal,
+            'remaining_amount' => $soldPrice !== null ? $soldPrice - $netRecordedCollectionTotal : null,
+        ];
+    }
+
+    /**
+     * sales 車輛詳情頁可見的收支列：訂金/尾款/退款等銷售收款安全紀錄（不論由誰建立），
+     * 加上自己上報的車輛支出申請（僅限維修/美容/代辦/拍場/其他支出）。不含購車付款、
+     * 他人上報的成本、資金帳戶欄位。
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function salesSafeMoneyEntries(Vehicle $vehicle, User $user): array
+    {
+        $collectionCategories = array_merge(self::SALES_COLLECTION_CATEGORIES, [self::SALES_REFUND_CATEGORY]);
+
+        $entries = MoneyEntry::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->where(function ($query) use ($collectionCategories, $user) {
+                $query->whereIn('category', $collectionCategories)
+                    ->orWhere(function ($ownReportQuery) use ($user) {
+                        $ownReportQuery->where('created_by', $user->id)
+                            ->whereIn('category', self::SALES_REPORTABLE_EXPENSE_CATEGORIES);
+                    });
+            })
+            ->orderByDesc('entry_date')
+            ->orderByDesc('id')
+            ->get();
+
+        return $entries->map(fn (MoneyEntry $entry) => [
+            'id' => $entry->id,
+            'entry_date' => $entry->entry_date?->toDateString(),
+            'direction' => $entry->direction,
+            'category' => $entry->category,
+            'amount' => $entry->amount,
+            'approval_status' => $entry->approval_status,
+            'counterparty_name' => $entry->counterparty_name,
+            'description' => $entry->description,
+        ])->all();
     }
 
     private function assertCashAccountActive(int $cashAccountId): void

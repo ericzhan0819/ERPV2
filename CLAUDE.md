@@ -99,8 +99,8 @@ v1.1 允許實作：
 
 * `users.role` 固定角色：`admin` / `manager` / `sales`
 * role-based middleware / policy / resource 遮蔽
-* sales 敏感金額遮蔽：收購價、成交價、毛利、資金餘額、完整收支金額（開價 / 底價為業務議價依據，sales 可見，不在遮蔽範圍內）
-* 一般收支審核：`manual` source 的一般收支由 manager / sales 建立時進 pending，admin 核准後才計入正式餘額
+* sales 敏感金額遮蔽：收購價、購車付款、完整整備成本、單車毛利、資金帳戶餘額、完整收支金額（開價 / 底價 / 成交價為業務議價與收款追蹤依據，sales 可見；訂金 / 尾款 / 退款等銷售收款金額 sales 也可見，但不含資金帳戶）
+* 一般收支審核（老闆身兼會計）：只要建立者不是 admin，任何會影響正式資金、成本、毛利的 MoneyEntry（`manual`、`vehicle_shortcut`、`vehicle_workflow`）一律進 pending，只有 admin 建立才直接 approved；只有 admin 可核准 / 駁回
 * Customer Module：客戶、賣方 / 買方關聯、車輛關聯摘要
 * 車輛入庫建檔欄位補強：排氣量、變速、燃料、停放位置、證件 / 備鑰 / 過戶 / 驗車檢核、貸款或車況備註
 * 建車同步購車付款：使用者明確勾選時，Vehicle 與 initial purchase payment 在同一 transaction 建立
@@ -163,34 +163,34 @@ sales    業務 / 銷售執行
 * 不可只靠前端隱藏，後端 JSON 必須真正遮蔽。
 * sales 不可看的欄位應不存在於 JSON，不可回傳 `0`、空字串或假值。
 * 測試需驗證原始 JSON 沒有敏感欄位。
-* sales 不可取得資金帳戶餘額、收購價、成交價、毛利、完整收支金額。
-* sales 可取得開價（asking_price）與底價（floor_price），因為這是業務跟客人談價錢的依據；不可因此推論 sales 也能看收購價、成交價、毛利、資金餘額或完整收支金額。
-* manager 可看營運金額，但不可管理使用者，也不可寫入 Cash Account。
-* admin 可看與操作全部 v1.1 範圍內功能。
+* sales 不可取得資金帳戶餘額、收購價、購車付款、完整整備成本、單車毛利、完整收支金額、他人上報的成本明細。
+* sales 可取得開價（asking_price）、底價（floor_price）、成交價（sold_price），因為這是業務跟客人談價錢、追蹤收款的依據；不可因此推論 sales 也能看收購價、完整成本、毛利或資金帳戶餘額。
+* sales 可取得訂金收入、尾款收入、退款等銷售收款金額（不論由誰建立），以及自己上報的車輛整備 / 維修 / 美容 / 代辦 / 拍場 / 其他支出申請與其審核狀態；但一律看不到資金帳戶（`cash_account_id` / `cash_account`）。
+* manager 可看完整營運金額與毛利，但不可管理使用者，不可寫入 Cash Account，也不可核准 / 駁回收支。
+* admin 是老闆兼會計，可看與操作全部 v1.1 範圍內功能，且只有 admin 可核准 / 駁回收支，核准後才正式計入餘額、成本與毛利。
 
 ---
 
 ## 一般收支審核邊界
 
-v1.1 的收支審核只針對一般收支 CRUD，也就是 `source_type=manual` 的一般營運收支。
+老闆身兼會計：只要建立者不是 admin，任何會影響正式資金、成本、毛利的 MoneyEntry 都必須是 pending；只有 admin 建立的 MoneyEntry 才可直接 approved。這個規則套用範圍涵蓋：
+
+* 一般收支 `manual`
+* 車輛快捷收支 `vehicle_shortcut`（購車付款、維修 / 美容 / 代辦 / 拍場 / 其他支出、訂金收入、退款）
+* 車輛流程收支 `vehicle_workflow`（建車同步購車付款、reserve 產生的訂金、final-payment 產生的尾款）
 
 規則：
 
-* admin 建立的 manual money entry：`approval_status=approved`
-* manager / sales 建立的 manual money entry：`approval_status=pending`
+* admin 建立的 money entry（不論 source_type）：`approval_status=approved`
+* manager / sales 建立的 money entry（不論 source_type）：`approval_status=pending`
 * pending / rejected 不得計入正式餘額、正式收入、正式支出、正式毛利或正式列印摘要
 * approved 後才計入正式彙總
 * approved / rejected 後不可改回 pending；若要修正，需建立新 entry
 * 前端不可傳入或偽造 `approval_status`、`approved_by`、`approved_at`
-
-不套用對象：
-
-* `vehicle_shortcut`
-* `vehicle_workflow`
-* 既有資料回填
-* 訂金、尾款、退款、購車付款等已由車輛流程產生的收支
-
-這些流程型收支預設為 approved，避免車輛狀態流程被審核狀態卡住。
+* approve / reject 只有 admin 可呼叫，manager 即使可看完整營運金額也不行；只有 `pending` 狀態可核准 / 駁回，狀態不可逆
+* 只有 `source_type=legacy_unknown`（來源未確認的既有資料）不可核准 / 駁回，需人工確認來源後再處理
+* 車輛成交結案（`closeSale`）只依 `approved` 收款判斷是否可關帳：`approved` 收款總額需達成交價，pending 收款不算正式已收，不可直接關帳
+* update / delete 規則仍保守：非 `manual` 原則上不得透過一般收支 CRUD 修改 / 刪除，不因為可核准而開放改刪流程收支
 
 ---
 

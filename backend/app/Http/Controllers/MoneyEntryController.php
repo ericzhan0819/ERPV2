@@ -18,7 +18,7 @@ class MoneyEntryController extends Controller
 
     public function index(IndexMoneyEntryRequest $request): AnonymousResourceCollection
     {
-        $entries = $this->moneyEntryService->listEntries($request->validated());
+        $entries = $this->moneyEntryService->listEntries($request->validated(), $request->user());
 
         return MoneyEntryResource::collection($entries);
     }

@@ -75,11 +75,21 @@ class User extends Authenticatable
     }
 
     /**
-     * 允許看到開價 / 底價的角色。這兩個欄位是業務跟客人議價的依據，
-     * 因此 sales 也需要看到，但收購價 / 成交價 / 毛利等仍只給 canViewFinancials()。
-     * 同樣採白名單：未知或未來新增角色預設看不到。
+     * 允許看到開價 / 底價 / 成交價的角色。這些欄位是業務跟客人議價、追蹤收款的依據，
+     * 因此 sales 也需要看到；但收購價、購車付款、完整成本、單車毛利、資金帳戶餘額
+     * 等仍只給 canViewFinancials()。同樣採白名單：未知或未來新增角色預設看不到。
      */
     public function canViewSalesPricing(): bool
+    {
+        return $this->hasAnyRole([self::ROLE_ADMIN, self::ROLE_MANAGER, self::ROLE_SALES]);
+    }
+
+    /**
+     * 允許看到訂金 / 尾款 / 退款等銷售收款安全金額的角色。刻意與 canViewSalesPricing()
+     * 分開命名，是因為兩者目前雖然是同一組角色，但語意不同：這個方法只授權「銷售收款
+     * 追蹤」需要的金額，不能被拿來當作開放成本、毛利、資金帳戶餘額等其他財務欄位的依據。
+     */
+    public function canViewSalesCollectionAmounts(): bool
     {
         return $this->hasAnyRole([self::ROLE_ADMIN, self::ROLE_MANAGER, self::ROLE_SALES]);
     }

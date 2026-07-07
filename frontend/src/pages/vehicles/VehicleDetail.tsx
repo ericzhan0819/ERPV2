@@ -2,16 +2,26 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { isAxiosError } from 'axios'
-import { closeSaleVehicle, getVehicle, listVehicleForSale, recordFinalPayment, reserveVehicle } from '../../api/vehicles'
+import {
+  closeSaleVehicle,
+  getVehicle,
+  listVehicleForSale,
+  recordFinalPayment,
+  recordVehicleExpense,
+  reserveVehicle,
+} from '../../api/vehicles'
 import { listCashAccountOptions } from '../../api/cashAccounts'
 import type { VehicleDetailResponse } from '../../types/vehicle'
 import type { CashAccountOption } from '../../types/cashAccount'
 import { generateIdempotencyKey } from '../../utils/idempotency'
 import { vehicleStatusLabels } from '../../utils/vehicleStatus'
 import { VehicleStatusBadge } from '../../components/VehicleStatusBadge'
+import { ApprovalStatusBadge } from '../../components/ApprovalStatusBadge'
 import { CustomerSelect } from '../../components/CustomerSelect'
 import { useAuth } from '../../hooks/useAuth'
 import { canManageVehicles, canRunSalesFlow, canViewFinancials, canViewSalesPricing } from '../../utils/permissions'
+
+const EXPENSE_CATEGORIES = ['維修支出', '美容支出', '代辦支出', '拍場支出', '其他支出'] as const
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
@@ -137,7 +147,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
   return fallback
 }
 
-type ActiveModal = 'list' | 'reserve' | 'final-payment' | 'close-sale' | null
+type ActiveModal = 'list' | 'reserve' | 'final-payment' | 'close-sale' | 'expense' | null
 
 export function VehicleDetail() {
   const { user } = useAuth()
@@ -145,6 +155,7 @@ export function VehicleDetail() {
   const canViewSalesPrice = canViewSalesPricing(user?.role)
   const canManage = canManageVehicles(user?.role)
   const canSell = canRunSalesFlow(user?.role)
+  const canReportExpense = canRunSalesFlow(user?.role)
   const { id } = useParams<{ id: string }>()
   const vehicleId = Number(id)
   const [detail, setDetail] = useState<VehicleDetailResponse | null>(null)
@@ -178,7 +189,7 @@ export function VehicleDetail() {
     return <p className="text-sm text-fg-muted">載入中...</p>
   }
 
-  const { vehicle, summary, money_entries: moneyEntries } = detail
+  const { vehicle, summary, sales_collection_summary: salesCollectionSummary, money_entries: moneyEntries } = detail
 
   function closeModal() {
     setActiveModal(null)
@@ -270,6 +281,36 @@ export function VehicleDetail() {
     }
   }
 
+  async function handleExpense(form: {
+    category: string
+    amount: string
+    cash_account_id: string
+    entry_date: string
+    counterparty_name: string
+    description: string
+    idempotency_key: string
+  }) {
+    setSubmitting(true)
+    setFormError(null)
+    try {
+      await recordVehicleExpense(vehicleId, {
+        category: form.category as (typeof EXPENSE_CATEGORIES)[number],
+        amount: Number(form.amount),
+        cash_account_id: Number(form.cash_account_id),
+        entry_date: form.entry_date || undefined,
+        counterparty_name: form.counterparty_name || undefined,
+        description: form.description || undefined,
+        idempotency_key: form.idempotency_key,
+      })
+      closeModal()
+      loadDetail()
+    } catch (err) {
+      setFormError(extractErrorMessage(err, '上報整備支出失敗，請稍後再試'))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
@@ -347,6 +388,14 @@ export function VehicleDetail() {
             </button>
           </>
         )}
+        {canReportExpense && !['sold', 'cancelled'].includes(vehicle.status) && (
+          <button
+            onClick={() => setActiveModal('expense')}
+            className="rounded-lg border border-border-strong px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
+          >
+            上報整備支出
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -387,7 +436,7 @@ export function VehicleDetail() {
         <Panel title="銷售資料">
           {canViewSalesPrice && <InfoRow label="開價" value={formatCurrency(vehicle.asking_price)} />}
           {canViewSalesPrice && <InfoRow label="底價" value={formatCurrency(vehicle.floor_price)} />}
-          {canViewFinance && <InfoRow label="成交價" value={formatCurrency(vehicle.sold_price)} />}
+          {canViewSalesPrice && <InfoRow label="成交價" value={formatCurrency(vehicle.sold_price)} />}
           <InfoRow label="買方姓名" value={vehicle.buyer_name ?? '-'} />
           <InfoRow label="買方電話" value={vehicle.buyer_phone ?? '-'} />
           <InfoRow label="成交日期" value={vehicle.sold_at ? vehicle.sold_at.slice(0, 10) : '-'} />
@@ -413,7 +462,52 @@ export function VehicleDetail() {
         </Panel>
       )}
 
-      <Panel title="單車收支明細">
+      {salesCollectionSummary && (
+        <Panel title="銷售收款摘要">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="rounded-xl bg-surface-2 p-4">
+              <p className="text-xs text-fg-muted">成交價</p>
+              <p className="mt-1 text-lg font-semibold text-fg tabular-nums">{formatCurrency(salesCollectionSummary.sold_price)}</p>
+            </div>
+            <div className="rounded-xl bg-surface-2 p-4">
+              <p className="text-xs text-fg-muted">已核准收款</p>
+              <p className="mt-1 text-lg font-semibold text-fg tabular-nums">
+                {formatCurrency(salesCollectionSummary.approved_collection_total)}
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface-2 p-4">
+              <p className="text-xs text-fg-muted">待老闆核准收款</p>
+              <p className="mt-1 text-lg font-semibold text-fg tabular-nums">
+                {formatCurrency(salesCollectionSummary.pending_collection_total)}
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface-2 p-4">
+              <p className="text-xs text-fg-muted">已核准退款</p>
+              <p className="mt-1 text-lg font-semibold text-fg tabular-nums">
+                {formatCurrency(salesCollectionSummary.approved_refund_total)}
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface-2 p-4">
+              <p className="text-xs text-fg-muted">待核准退款</p>
+              <p className="mt-1 text-lg font-semibold text-fg tabular-nums">
+                {formatCurrency(salesCollectionSummary.pending_refund_total)}
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface-2 p-4">
+              <p className="text-xs text-fg-muted">已記錄淨收款</p>
+              <p className="mt-1 text-lg font-semibold text-fg tabular-nums">
+                {formatCurrency(salesCollectionSummary.net_recorded_collection_total)}
+              </p>
+            </div>
+            <div className="rounded-xl bg-surface-2 p-4">
+              <p className="text-xs text-fg-muted">待收差額</p>
+              <p className="mt-1 text-lg font-semibold text-fg tabular-nums">{formatCurrency(salesCollectionSummary.remaining_amount)}</p>
+            </div>
+          </div>
+        </Panel>
+      )}
+
+      <Panel title={canViewFinance ? '單車收支明細' : '銷售 / 上報紀錄'}>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-border text-sm">
             <thead>
@@ -421,15 +515,16 @@ export function VehicleDetail() {
                 <th className="px-3 py-2 text-left font-medium text-fg-muted">日期</th>
                 <th className="px-3 py-2 text-left font-medium text-fg-muted">收支</th>
                 <th className="px-3 py-2 text-left font-medium text-fg-muted">分類</th>
-                {canViewFinance && <th className="px-3 py-2 text-left font-medium text-fg-muted">金額</th>}
+                <th className="px-3 py-2 text-left font-medium text-fg-muted">金額</th>
                 {canViewFinance && <th className="px-3 py-2 text-left font-medium text-fg-muted">資金帳戶</th>}
+                <th className="px-3 py-2 text-left font-medium text-fg-muted">審核狀態</th>
                 <th className="px-3 py-2 text-left font-medium text-fg-muted">說明</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {moneyEntries.length === 0 && (
                 <tr>
-                  <td colSpan={canViewFinance ? 6 : 4} className="px-3 py-4 text-center text-fg-muted">
+                  <td colSpan={canViewFinance ? 6 : 5} className="px-3 py-4 text-center text-fg-muted">
                     尚無收支紀錄
                   </td>
                 </tr>
@@ -439,8 +534,11 @@ export function VehicleDetail() {
                   <td className="px-3 py-2">{entry.entry_date}</td>
                   <td className="px-3 py-2">{entry.direction === 'income' ? '收入' : '支出'}</td>
                   <td className="px-3 py-2">{entry.category}</td>
-                  {canViewFinance && <td className="px-3 py-2 tabular-nums">{formatCurrency(entry.amount)}</td>}
+                  <td className="px-3 py-2 tabular-nums">{formatCurrency(entry.amount)}</td>
                   {canViewFinance && <td className="px-3 py-2">{entry.cash_account?.name ?? '-'}</td>}
+                  <td className="px-3 py-2">
+                    {entry.approval_status ? <ApprovalStatusBadge status={entry.approval_status} /> : '-'}
+                  </td>
                   <td className="px-3 py-2">{entry.description ?? '-'}</td>
                 </tr>
               ))}
@@ -472,6 +570,16 @@ export function VehicleDetail() {
       )}
       {activeModal === 'close-sale' && (
         <CloseSaleModal onClose={closeModal} onSubmit={handleCloseSale} error={formError} submitting={submitting} />
+      )}
+      {activeModal === 'expense' && (
+        <ExpenseModal
+          onClose={closeModal}
+          onSubmit={handleExpense}
+          error={formError}
+          submitting={submitting}
+          cashAccounts={cashAccounts}
+          isAdmin={user?.role === 'admin'}
+        />
       )}
     </div>
   )
@@ -671,6 +779,104 @@ function FinalPaymentModal({
           className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
         >
           {submitting ? '處理中...' : '確認收款'}
+        </button>
+      </form>
+    </Modal>
+  )
+}
+
+function ExpenseModal({
+  onClose,
+  onSubmit,
+  error,
+  submitting,
+  cashAccounts,
+  isAdmin,
+}: {
+  onClose: () => void
+  onSubmit: (form: {
+    category: string
+    amount: string
+    cash_account_id: string
+    entry_date: string
+    counterparty_name: string
+    description: string
+    idempotency_key: string
+  }) => void
+  error: string | null
+  submitting: boolean
+  cashAccounts: CashAccountOption[]
+  isAdmin: boolean
+}) {
+  const [category, setCategory] = useState<string>(EXPENSE_CATEGORIES[0])
+  const [amount, setAmount] = useState('')
+  const [cash_account_id, setCashAccountId] = useState('')
+  const [entry_date, setEntryDate] = useState('')
+  const [counterparty_name, setCounterpartyName] = useState('')
+  const [description, setDescription] = useState('')
+  const idempotencyKeyRef = useRef<string | null>(null)
+
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    let idempotencyKey = idempotencyKeyRef.current
+    if (!idempotencyKey) {
+      idempotencyKey = generateIdempotencyKey()
+      idempotencyKeyRef.current = idempotencyKey
+    }
+    onSubmit({
+      category,
+      amount,
+      cash_account_id,
+      entry_date,
+      counterparty_name,
+      description,
+      idempotency_key: idempotencyKey,
+    })
+  }
+
+  return (
+    <Modal title="上報整備支出" onClose={onClose}>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <div>
+          <label className="mb-1 block text-sm font-medium text-fg-muted">
+            分類<span className="text-error"> *</span>
+          </label>
+          <select
+            required
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+          >
+            {EXPENSE_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+        <Field label="金額" value={amount} onChange={setAmount} type="number" required />
+        <CashAccountField cashAccounts={cashAccounts} value={cash_account_id} onChange={setCashAccountId} />
+        <Field label="支出日期（預設今天）" value={entry_date} onChange={setEntryDate} type="date" />
+        <Field label="對象" value={counterparty_name} onChange={setCounterpartyName} />
+        <div>
+          <label className="mb-1 block text-sm font-medium text-fg-muted">說明</label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={2}
+            className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+          />
+        </div>
+        <p className="text-xs text-fg-muted">
+          {isAdmin ? '送出後直接計入正式支出。' : '送出後為待審核狀態，需老闆核准後才計入正式支出。'}
+        </p>
+        {error && <p className="text-sm text-error">{error}</p>}
+        <button
+          type="submit"
+          disabled={submitting}
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
+        >
+          {submitting ? '送出中...' : '送出申請'}
         </button>
       </form>
     </Modal>

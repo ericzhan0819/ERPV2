@@ -32,9 +32,9 @@ class CustomerController extends Controller
 
     public function show(Customer $customer, Request $request): JsonResponse
     {
-        $canSeeFinancials = $request->user()?->canViewFinancials() ?? false;
+        $canSeeSalesPricing = $request->user()?->canViewSalesPricing() ?? false;
 
-        $mapVehicle = function ($vehicle) use ($canSeeFinancials) {
+        $mapVehicle = function ($vehicle) use ($canSeeSalesPricing) {
             $row = [
                 'id' => $vehicle->id,
                 'stock_no' => $vehicle->stock_no,
@@ -44,7 +44,7 @@ class CustomerController extends Controller
                 'sold_at' => $vehicle->sold_at?->toISOString(),
             ];
 
-            if ($canSeeFinancials) {
+            if ($canSeeSalesPricing) {
                 $row['sold_price'] = $vehicle->sold_price;
             }
 

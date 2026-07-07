@@ -4,7 +4,7 @@ import { listVehicles } from '../../api/vehicles'
 import type { Vehicle, VehicleListMeta, VehicleStatus } from '../../types/vehicle'
 import { VehicleStatusBadge } from '../../components/VehicleStatusBadge'
 import { useAuth } from '../../hooks/useAuth'
-import { canManageVehicles, canViewFinancials, canViewSalesPricing } from '../../utils/permissions'
+import { canManageVehicles, canViewSalesPricing } from '../../utils/permissions'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
@@ -24,9 +24,8 @@ const statusOptions: { value: VehicleStatus | ''; label: string }[] = [
 export function VehicleList() {
   const { user } = useAuth()
   const canManage = canManageVehicles(user?.role)
-  const canViewFinance = canViewFinancials(user?.role)
   const canViewSalesPrice = canViewSalesPricing(user?.role)
-  const columnCount = 7 + (canViewSalesPrice ? 1 : 0) + (canViewFinance ? 1 : 0)
+  const columnCount = 7 + (canViewSalesPrice ? 2 : 0)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [meta, setMeta] = useState<VehicleListMeta | null>(null)
   const [search, setSearch] = useState('')
@@ -104,7 +103,7 @@ export function VehicleList() {
               <th className="px-4 py-3 text-left font-medium text-fg-muted">年式</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">車牌</th>
               {canViewSalesPrice && <th className="px-4 py-3 text-left font-medium text-fg-muted">開價</th>}
-              {canViewFinance && <th className="px-4 py-3 text-left font-medium text-fg-muted">成交價</th>}
+              {canViewSalesPrice && <th className="px-4 py-3 text-left font-medium text-fg-muted">成交價</th>}
               <th className="px-4 py-3 text-left font-medium text-fg-muted">建立日期</th>
             </tr>
           </thead>
@@ -162,7 +161,7 @@ export function VehicleList() {
                   <td className="px-4 py-3">{vehicle.year ?? '-'}</td>
                   <td className="px-4 py-3">{vehicle.license_plate ?? '-'}</td>
                   {canViewSalesPrice && <td className="px-4 py-3 tabular-nums">{formatCurrency(vehicle.asking_price)}</td>}
-                  {canViewFinance && <td className="px-4 py-3 tabular-nums">{formatCurrency(vehicle.sold_price)}</td>}
+                  {canViewSalesPrice && <td className="px-4 py-3 tabular-nums">{formatCurrency(vehicle.sold_price)}</td>}
                   <td className="px-4 py-3">{vehicle.created_at ? vehicle.created_at.slice(0, 10) : '-'}</td>
                 </tr>
               ))}

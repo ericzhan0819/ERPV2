@@ -8,11 +8,13 @@ import type {
   ReserveVehiclePayload,
   Vehicle,
   VehicleDetailResponse,
+  VehicleExpensePayload,
   VehicleListParams,
   VehicleListResponse,
   VehiclePrintClosingResponse,
   VehiclePrintIntakeResponse,
 } from '../types/vehicle'
+import type { MoneyEntry } from '../types/moneyEntry'
 
 export async function listVehicles(params: VehicleListParams): Promise<VehicleListResponse> {
   const { data } = await apiClient.get<VehicleListResponse>('/api/vehicles', { params })
@@ -46,6 +48,11 @@ export async function recordFinalPayment(id: number, payload: FinalPaymentPayloa
 
 export async function closeSaleVehicle(id: number, payload: CloseSalePayload): Promise<Vehicle> {
   const { data } = await apiClient.post<{ data: Vehicle }>(`/api/vehicles/${id}/close-sale`, payload)
+  return data.data
+}
+
+export async function recordVehicleExpense(id: number, payload: VehicleExpensePayload): Promise<MoneyEntry> {
+  const { data } = await apiClient.post<{ data: MoneyEntry }>(`/api/vehicles/${id}/expense`, payload)
   return data.data
 }
 

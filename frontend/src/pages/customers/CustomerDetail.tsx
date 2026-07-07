@@ -5,7 +5,7 @@ import { isAxiosError } from 'axios'
 import { deleteCustomer, getCustomer, updateCustomer } from '../../api/customers'
 import type { CustomerDetailResponse, CustomerRelatedVehicle, CustomerType } from '../../types/customer'
 import { useAuth } from '../../hooks/useAuth'
-import { canDeleteCustomer, canViewFinancials } from '../../utils/permissions'
+import { canDeleteCustomer, canViewSalesPricing } from '../../utils/permissions'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
@@ -41,7 +41,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
   return fallback
 }
 
-function VehicleTable({ vehicles, canViewFinance }: { vehicles: CustomerRelatedVehicle[]; canViewFinance: boolean }) {
+function VehicleTable({ vehicles, canViewSalesPrice }: { vehicles: CustomerRelatedVehicle[]; canViewSalesPrice: boolean }) {
   if (vehicles.length === 0) {
     return <p className="text-sm text-fg-muted">尚無相關車輛</p>
   }
@@ -54,7 +54,7 @@ function VehicleTable({ vehicles, canViewFinance }: { vehicles: CustomerRelatedV
             <th className="px-3 py-2 text-left font-medium text-fg-muted">庫存編號</th>
             <th className="px-3 py-2 text-left font-medium text-fg-muted">車輛</th>
             <th className="px-3 py-2 text-left font-medium text-fg-muted">狀態</th>
-            {canViewFinance && <th className="px-3 py-2 text-left font-medium text-fg-muted">成交價</th>}
+            {canViewSalesPrice && <th className="px-3 py-2 text-left font-medium text-fg-muted">成交價</th>}
             <th className="px-3 py-2 text-left font-medium text-fg-muted">成交日期</th>
           </tr>
         </thead>
@@ -70,7 +70,7 @@ function VehicleTable({ vehicles, canViewFinance }: { vehicles: CustomerRelatedV
                 {vehicle.brand} {vehicle.model}
               </td>
               <td className="px-3 py-2">{vehicle.status}</td>
-              {canViewFinance && <td className="px-3 py-2 tabular-nums">{formatCurrency(vehicle.sold_price)}</td>}
+              {canViewSalesPrice && <td className="px-3 py-2 tabular-nums">{formatCurrency(vehicle.sold_price)}</td>}
               <td className="px-3 py-2">{vehicle.sold_at ? vehicle.sold_at.slice(0, 10) : '-'}</td>
             </tr>
           ))}
@@ -82,7 +82,7 @@ function VehicleTable({ vehicles, canViewFinance }: { vehicles: CustomerRelatedV
 
 export function CustomerDetail() {
   const { user } = useAuth()
-  const canViewFinance = canViewFinancials(user?.role)
+  const canViewSalesPrice = canViewSalesPricing(user?.role)
   const canDelete = canDeleteCustomer(user?.role)
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
@@ -325,11 +325,11 @@ export function CustomerDetail() {
       )}
 
       <Panel title="作為賣方的車輛">
-        <VehicleTable vehicles={vehiclesAsSeller} canViewFinance={canViewFinance} />
+        <VehicleTable vehicles={vehiclesAsSeller} canViewSalesPrice={canViewSalesPrice} />
       </Panel>
 
       <Panel title="作為買方的車輛">
-        <VehicleTable vehicles={vehiclesAsBuyer} canViewFinance={canViewFinance} />
+        <VehicleTable vehicles={vehiclesAsBuyer} canViewSalesPrice={canViewSalesPrice} />
       </Panel>
     </div>
   )

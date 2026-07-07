@@ -7,6 +7,7 @@ use App\Models\MoneyEntry;
 use App\Models\User;
 use App\Models\Vehicle;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -261,6 +262,71 @@ class VehicleMoneyShortcutTest extends TestCase
             ->assertStatus(422);
 
         $this->assertDatabaseCount('money_entries', 0);
+    }
+
+    public function test_manager_purchase_payment_is_pending_admin_purchase_payment_is_approved(): void
+    {
+        $manager = User::factory()->manager()->create(['is_active' => true]);
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicleForManager = Vehicle::factory()->create(['status' => 'preparing']);
+        $vehicleForAdmin = Vehicle::factory()->create(['status' => 'preparing']);
+
+        Auth::forgetGuards();
+        $this->actingAs($manager, 'web')
+            ->postJson("/api/vehicles/{$vehicleForManager->id}/purchase-payment", [
+                'amount' => 300000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => (string) Str::uuid(),
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.approval_status', 'pending');
+
+        Auth::forgetGuards();
+        $this->actingAs($admin, 'web')
+            ->postJson("/api/vehicles/{$vehicleForAdmin->id}/purchase-payment", [
+                'amount' => 300000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => (string) Str::uuid(),
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.approval_status', 'approved');
+    }
+
+    public function test_sales_reported_expense_visible_to_self_but_not_other_sales_users_cost_amount(): void
+    {
+        $reporter = User::factory()->sales()->create(['is_active' => true]);
+        $otherSales = User::factory()->sales()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'preparing']);
+
+        Auth::forgetGuards();
+        $created = $this->actingAs($reporter, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/expense", [
+                'category' => '維修支出',
+                'amount' => 4500,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => (string) Str::uuid(),
+            ])
+            ->assertCreated();
+
+        // 上報者自己可在回應中看到金額與待審核狀態。
+        $created->assertJsonPath('data.amount', 4500);
+        $created->assertJsonPath('data.approval_status', 'pending');
+        $entryId = $created->json('data.id');
+
+        // 另一位 sales 透過一般收支列表看不到別人上報的成本金額（甚至看不到這筆紀錄，
+        // 因為既非自己建立，也不是訂金/尾款/退款等銷售收款安全分類）。
+        Auth::forgetGuards();
+        $listResponse = $this->actingAs($otherSales, 'web')->getJson('/api/money-entries');
+        $listResponse->assertOk();
+        $ids = collect($listResponse->json('data'))->pluck('id');
+        $this->assertFalse($ids->contains($entryId));
+
+        // 透過 show 端點直接查詢仍會遮蔽金額（非本人、非銷售收款安全分類）。
+        $showResponse = $this->actingAs($otherSales, 'web')->getJson("/api/money-entries/{$entryId}");
+        $showResponse->assertOk();
+        $showResponse->assertJsonMissingPath('data.amount');
     }
 
     public function test_vehicle_money_entries_endpoint_scopes_to_vehicle(): void

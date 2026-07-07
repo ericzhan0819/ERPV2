@@ -47,11 +47,11 @@
 
 ## 2. Role-based Policy / Middleware / Resource 遮蔽（對應 `企劃書_v1.1.md` §3, §5, §9）
 
-### 核心原則
+### 核心原則（本節下方「9. 老闆身兼會計」為最新修正，取代與本節衝突的舊敘述）
 - 敏感欄位**不可只靠前端隱藏**，後端 JSON 必須用 `when()`/`unless()` 真正不輸出
-- sales 不可見：`purchase_price`, `sold_price`、毛利、`amount`、`cash_account_id`、Dashboard 金額欄位
-- sales 可見：`asking_price`, `floor_price`（開價 / 底價，業務跟客人議價依據，不在上述禁止清單內）
-- sales 呼叫金額 endpoint（`/api/cash-accounts/balances`、`/api/money-entries` 等）應 **403**，不是遮蔽版本
+- sales 不可見：`purchase_price`（收購價）、購車付款、完整整備成本、單車毛利、資金帳戶餘額、完整收支金額
+- sales 可見：`asking_price`, `floor_price`, `sold_price`（開價 / 底價 / 成交價，業務跟客人議價與追蹤收款依據）；訂金 / 尾款 / 退款等銷售收款金額（不論由誰建立）；自己上報的車輛支出申請與審核狀態
+- sales 呼叫金額 endpoint（`/api/cash-accounts/balances` 等）應 **403**；`/api/money-entries` 則是 200 但依範圍遮蔽（自己的申請 + 銷售收款安全紀錄），不是整份 403
 - Dashboard 給 sales：只有 `vehicle_counts` 與 `monthly_sold_count`，無金額欄位
 
 ### Policy / Middleware
@@ -61,13 +61,13 @@
   - 使用者/現金帳戶寫入：`role:admin` only
   - Customer delete：`role:admin` only（待第 4 階段 Customer Module 建立）
   - Vehicle 新增/編輯/上架：`can:` middleware 綁定 VehiclePolicy（admin,manager）
-  - Vehicle 銷售流程（保留/收尾款/成交）：`can:` middleware 綁定 VehiclePolicy（admin,manager,sales）
-  - Money Entry CRUD：`role:admin,manager` only（sales 無法操作一般收支，見第 3 階段）
+  - Vehicle 銷售流程（保留/收尾款/成交/整備支出上報）：`can:` middleware 綁定 VehiclePolicy（admin,manager,sales）
+  - Money Entry CRUD：`role:admin,manager,sales`（sales 可建立一般收支申請，但一律 pending，見第 3 階段／第 9 節）
   - Cash Account balances：`role:admin,manager` only
 
 ### Resource 遮蔽
-- [x] VehicleResource：purchase_price, sold_price 依 `canViewFinancials()` `when()`；asking_price, floor_price 依 `canViewSalesPricing()`（admin/manager/sales）`when()`
-- [x] MoneyEntryResource：amount, cash_account_id 依角色 `when()`
+- [x] VehicleResource：purchase_price 依 `canViewFinancials()` `when()`；asking_price, floor_price, sold_price 依 `canViewSalesPricing()`（admin/manager/sales）`when()`
+- [x] MoneyEntryResource：cash_account_id 依 `canViewFinancials()`；amount 依「canViewFinancials() 或（sales 且自己建立或屬銷售收款安全分類）」
 - [x] DashboardController：sales 得到淨化版本（無金額欄位）
 
 ### 前端
@@ -86,11 +86,11 @@
 
 ## 3. 一般收支審核流程與 Approved-only 金額彙總（對應 `企劃書_v1.1.md` §8）
 
-### 邊界定義
-- `approval_status` **僅套 manual 收支**（source_type='manual'），不套 vehicle_workflow
-- 既有資料一律 `approved`（無論 source_type）
-- 車輛流程收支（訂金/尾款/購車付款）永遠 `approved`，不進審核佇列
+### 邊界定義（已由第 9 節「老闆身兼會計」修正，此處為最新版本）
+- `approval_status` 套用於 `manual`、`vehicle_shortcut`、`vehicle_workflow` 三種 source_type：只要建立者不是 admin 就是 pending，admin 建立才 approved
+- 既有回填資料（`legacy_unknown`）維持 `approved`，且不可核准/駁回
 - approved/rejected 單向不可逆，若要修正需建新 entry
+- 車輛成交結案（closeSale）只依 approved 收款判斷，approved 收款總額需達成交價才可關帳
 
 ### Schema
 - [x] Migration：money_entries 新增 `approval_status`（default 'approved', in:'approved','pending','rejected'）
@@ -119,12 +119,12 @@
 - [x] MoneyEntryList：新增「待審核」篩選器，admin 可核准/駁回
 
 ### 測試
-- [x] admin 建立 manual → approved，manager/sales 建立 manual → pending
-- [x] vehicle_workflow 產生 → 永遠 approved
+- [x] admin 建立 manual/vehicle_shortcut/vehicle_workflow → approved，manager/sales 建立 → pending
 - [x] pending 不影響 balanceForAccount/balanceForType/Dashboard/Vehicle summary
 - [x] approved 後影響，rejected 永不計入
 - [x] approved/rejected 後不可編輯/刪除（422），狀態不可逆
-- [x] manager/sales 無法呼叫 approve/reject（403）
+- [x] manager/sales 無法呼叫 approve/reject（403），legacy_unknown 不可核准/駁回
+- [x] sales 收訂金/尾款後、admin 核准前，closeSale 回 422；admin 核准足額後才可成交結案
 
 ---
 
@@ -259,3 +259,22 @@
 - [x] 前端 admin-only 稽核列表、篩選、分頁與異動前後值展開檢視
 - [x] 權限、敏感值、登入登出與 append-only 自動化測試
 - [x] API.md／README.md 文件更新
+
+---
+
+## 10. 使用者追加：老闆身兼會計 — 收斂核准流程與 sales 銷售收款可視範圍
+
+產品決策：老闆身兼會計，所有會影響正式資金餘額、正式成本、正式毛利的資料都可由員工上報，但只有 `admin` 核准後才正式計入。`manager` 可看完整營運與毛利，但不能核准/駁回收支。`sales` 可以執行銷售、記錄收款、上報整備支出，但不能看收購價、完整成本、毛利、資金帳戶餘額。
+
+- [x] `User::canViewSalesPricing()` 納入 `sold_price`；新增 `canViewSalesCollectionAmounts()` 語意方法
+- [x] `VehicleResource`：`sold_price` 改依 `canViewSalesPricing()`（原為 `canViewFinancials()`）
+- [x] `CustomerController@show`：`sold_price` 改依 `canViewSalesPricing()`
+- [x] `MoneyEntryService`：`recordVehicleShortcut()`（購車付款/單車支出/訂金/退款）與 `VehicleService` 的建車同步付款/reserve 訂金/final-payment 尾款，approval_status 一律改為「建立者是否為 admin」判斷，取代原本「快捷/流程收支永遠 approved」
+- [x] `MoneyEntryService::approve()`/`reject()`：允許 `manual`/`vehicle_shortcut`/`vehicle_workflow` 三種 source_type（原僅 `manual`），僅 `legacy_unknown` 不可核准/駁回；仍只有 admin 可呼叫
+- [x] `VehicleService::closeSale()`：改依 approved 收款總額是否達成交價判斷，取代原本「至少一筆 income」的寬鬆檢查
+- [x] `VehicleController@show`：依角色回傳不同 payload — admin/manager 維持完整 `summary`+完整 `money_entries`；sales 回傳 `sales_collection_summary`（訂金/尾款/退款安全摘要）+ sales-safe `money_entries`（銷售收款紀錄 + 自己上報的支出申請，不含資金帳戶）；未知角色 fail-closed
+- [x] `MoneyEntryResource`：`cash_account_id`/`cash_account` 一律只給 `canViewFinancials()`；`amount` 對 sales 開放「自己建立」或「銷售收款安全分類」
+- [x] `MoneyEntryService::listEntries()`：新增依角色範圍限制，sales 只看自己建立的申請與銷售收款安全紀錄
+- [x] 前端：`permissions.ts` 新增 `canViewSalesCollectionAmounts`/`canApproveMoneyEntries`；`VehicleDetail.tsx` 新增「銷售收款摘要」區塊與「上報整備支出」入口；`VehicleList.tsx`/`CustomerDetail.tsx` 的成交價欄位改依銷售定價權限；`MoneyEntryList.tsx` 金額欄位對 sales 依範圍開放
+- [x] 測試：`RoleAccessTest`／`MoneyEntryApprovalTest`／`VehicleWorkflowTest`／`VehicleMoneyShortcutTest` 補齊新規則覆蓋（見各檔案內對應測試方法）
+- [x] `CLAUDE.md`／`backend/API.md`／`README.md` 同步更新，移除「vehicle_shortcut/vehicle_workflow 不進審核」「快捷收支直接 approved」等舊描述

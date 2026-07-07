@@ -46,45 +46,53 @@ class VehicleController extends Controller
 
     public function show(Vehicle $vehicle, Request $request): JsonResponse
     {
-        $canSeeFinancials = $request->user()?->canViewFinancials() ?? false;
+        $user = $request->user();
+        $canSeeFinancials = $user?->canViewFinancials() ?? false;
 
-        $entries = $vehicle->moneyEntries()
-            ->with('cashAccount:id,name,type')
-            ->orderByDesc('entry_date')
-            ->orderByDesc('id')
-            ->get()
-            ->map(function ($entry) use ($canSeeFinancials) {
-                $row = [
+        if ($canSeeFinancials) {
+            $entries = $vehicle->moneyEntries()
+                ->with('cashAccount:id,name,type')
+                ->orderByDesc('entry_date')
+                ->orderByDesc('id')
+                ->get()
+                ->map(fn ($entry) => [
                     'id' => $entry->id,
                     'entry_date' => $entry->entry_date?->toDateString(),
                     'direction' => $entry->direction,
                     'category' => $entry->category,
                     'counterparty_name' => $entry->counterparty_name,
                     'description' => $entry->description,
-                ];
-
-                if ($canSeeFinancials) {
-                    $row['amount'] = $entry->amount;
-                    $row['cash_account'] = $entry->cashAccount ? [
+                    'amount' => $entry->amount,
+                    'approval_status' => $entry->approval_status,
+                    'cash_account' => $entry->cashAccount ? [
                         'id' => $entry->cashAccount->id,
                         'name' => $entry->cashAccount->name,
                         'type' => $entry->cashAccount->type,
-                    ] : null;
-                }
+                    ] : null,
+                ]);
 
-                return $row;
-            });
-
-        $payload = [
-            'vehicle' => new VehicleResource($vehicle),
-            'money_entries' => $entries,
-        ];
-
-        if ($canSeeFinancials) {
-            $payload['summary'] = $this->vehicleService->financialSummary($vehicle);
+            return response()->json([
+                'vehicle' => new VehicleResource($vehicle),
+                'money_entries' => $entries,
+                'summary' => $this->vehicleService->financialSummary($vehicle),
+            ]);
         }
 
-        return response()->json($payload);
+        // sales：不回傳管理用 summary/完整收支明細，改回傳銷售收款安全摘要與
+        // sales-safe 收支列（訂金/尾款/退款 + 自己上報的車輛支出申請）。
+        if ($user?->isSales()) {
+            return response()->json([
+                'vehicle' => new VehicleResource($vehicle),
+                'money_entries' => $this->vehicleService->salesSafeMoneyEntries($vehicle, $user),
+                'sales_collection_summary' => $this->vehicleService->salesCollectionSummary($vehicle),
+            ]);
+        }
+
+        // 未知角色：fail-closed，不回傳任何金額摘要或收支明細。
+        return response()->json([
+            'vehicle' => new VehicleResource($vehicle),
+            'money_entries' => [],
+        ]);
     }
 
     public function update(UpdateVehicleRequest $request, Vehicle $vehicle): VehicleResource
@@ -190,7 +198,7 @@ class VehicleController extends Controller
     {
         $filters = array_merge($request->validated(), ['vehicle_id' => $vehicle->id]);
 
-        return MoneyEntryResource::collection($this->moneyEntryService->listEntries($filters));
+        return MoneyEntryResource::collection($this->moneyEntryService->listEntries($filters, $request->user()));
     }
 
     public function printIntake(Vehicle $vehicle): JsonResponse

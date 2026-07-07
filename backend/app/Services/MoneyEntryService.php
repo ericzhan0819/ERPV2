@@ -56,6 +56,22 @@ class MoneyEntryService
      */
     private const LOCKED_VEHICLE_STATUSES = ['sold', 'cancelled'];
 
+    /**
+     * 老闆身兼會計：只有 admin 建立的收支（不論 manual/vehicle_shortcut/vehicle_workflow）
+     * 才直接 approved，manager/sales 建立一律 pending，待 admin 核准後才計入正式餘額。
+     */
+    public const APPROVABLE_SOURCE_TYPES = [
+        MoneyEntry::SOURCE_MANUAL,
+        MoneyEntry::SOURCE_VEHICLE_SHORTCUT,
+        MoneyEntry::SOURCE_VEHICLE_WORKFLOW,
+    ];
+
+    /**
+     * 銷售收款安全分類：訂金 / 尾款收入與退款，sales 可在一般收支列表看到金額
+     * （即使不是自己建立），但不可看到資金帳戶。
+     */
+    public const SALES_SAFE_COLLECTION_CATEGORIES = ['訂金收入', '尾款收入', '退款'];
+
     public static function categories(): array
     {
         return array_keys(self::CATEGORY_DIRECTIONS);
@@ -64,9 +80,18 @@ class MoneyEntryService
     /**
      * @param  array<string, mixed>  $filters
      */
-    public function listEntries(array $filters): LengthAwarePaginator
+    public function listEntries(array $filters, ?User $user = null): LengthAwarePaginator
     {
         $query = MoneyEntry::query()->with(['vehicle:id,stock_no,brand,model', 'cashAccount:id,name,type']);
+
+        // sales 不應在收支列表看到全公司所有成本紀錄的分類、對象、描述：只能看到
+        // 自己建立的收支申請，或訂金/尾款/退款等銷售收款安全紀錄（不論由誰建立）。
+        if ($user?->isSales()) {
+            $query->where(function ($q) use ($user) {
+                $q->where('created_by', $user->id)
+                    ->orWhereIn('category', self::SALES_SAFE_COLLECTION_CATEGORIES);
+            });
+        }
 
         if (! empty($filters['vehicle_id'])) {
             $query->where('vehicle_id', $filters['vehicle_id']);
@@ -251,7 +276,7 @@ class MoneyEntryService
         return DB::transaction(function () use ($entry, $approverId) {
             $lockedEntry = MoneyEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
 
-            $this->assertPendingManualEntry($lockedEntry, '核准');
+            $this->assertPendingApprovableEntry($lockedEntry, '核准');
 
             $lockedEntry->approval_status = MoneyEntry::APPROVAL_APPROVED;
             $lockedEntry->approved_by = $approverId;
@@ -267,7 +292,7 @@ class MoneyEntryService
         return DB::transaction(function () use ($entry, $approverId) {
             $lockedEntry = MoneyEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
 
-            $this->assertPendingManualEntry($lockedEntry, '駁回');
+            $this->assertPendingApprovableEntry($lockedEntry, '駁回');
 
             $lockedEntry->approval_status = MoneyEntry::APPROVAL_REJECTED;
             $lockedEntry->approved_by = $approverId;
@@ -278,11 +303,17 @@ class MoneyEntryService
         });
     }
 
-    private function assertPendingManualEntry(MoneyEntry $entry, string $action): void
+    /**
+     * 老闆身兼會計：manual、vehicle_shortcut、vehicle_workflow 建立時若非 admin 一律
+     * pending，因此這三種來源都可能出現待核准的收支，admin 都必須能核准/駁回；
+     * 只有 legacy_unknown（來源未確認的既有資料）不可核准/駁回，需人工確認後改派
+     * 正確的 source_type。
+     */
+    private function assertPendingApprovableEntry(MoneyEntry $entry, string $action): void
     {
-        if ($entry->source_type !== MoneyEntry::SOURCE_MANUAL) {
+        if (! in_array($entry->source_type, self::APPROVABLE_SOURCE_TYPES, true)) {
             throw ValidationException::withMessages([
-                'source_type' => ["流程、快捷或來源未確認的收支不需要{$action}"],
+                'source_type' => ["來源未確認的既有收支不可{$action}，需人工確認來源後再處理"],
             ]);
         }
 
@@ -291,6 +322,12 @@ class MoneyEntryService
                 'approval_status' => ["只有待審核的收支可以{$action}，狀態不可逆"],
             ]);
         }
+    }
+
+    private function isCreatorAdmin(int $userId): bool
+    {
+        // role 是正式權限來源（見 CLAUDE.md 過渡期規則），不用 is_admin 判斷。
+        return User::query()->whereKey($userId)->value('role') === User::ROLE_ADMIN;
     }
 
     /**
@@ -352,8 +389,9 @@ class MoneyEntryService
         ]);
         $entry->created_by = $userId;
         $entry->updated_by = $userId;
-        // 車輛快捷收支不進審核佇列，避免車輛狀態流程被卡住。
-        $entry->approval_status = MoneyEntry::APPROVAL_APPROVED;
+        // 老闆身兼會計：只有 admin 建立才直接 approved，manager/sales 上報的車輛快捷
+        // 收支（購車付款／單車支出／收訂金／退款）一律進 pending，待 admin 核准。
+        $entry->approval_status = $this->isCreatorAdmin($userId) ? MoneyEntry::APPROVAL_APPROVED : MoneyEntry::APPROVAL_PENDING;
 
         // Let a duplicate-key QueryException escape so DB::transaction rolls back;
         // it is caught and retried against a fresh transaction/snapshot by the caller.

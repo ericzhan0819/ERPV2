@@ -7,6 +7,7 @@ use App\Models\MoneyEntry;
 use App\Models\User;
 use App\Models\Vehicle;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -40,6 +41,7 @@ class MoneyEntryApprovalTest extends TestCase
         foreach (['manager', 'sales'] as $role) {
             $user = User::factory()->{$role}()->create(['is_active' => true]);
 
+            Auth::forgetGuards();
             $response = $this->actingAs($user, 'web')->postJson('/api/money-entries', [
                 'entry_date' => '2026-07-01',
                 'direction' => 'income',
@@ -54,13 +56,13 @@ class MoneyEntryApprovalTest extends TestCase
         }
     }
 
-    public function test_vehicle_workflow_entry_is_always_approved_regardless_of_creator_role(): void
+    public function test_vehicle_workflow_entry_created_by_admin_is_approved_immediately(): void
     {
-        $manager = User::factory()->manager()->create(['is_active' => true]);
+        $admin = User::factory()->admin()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
         $vehicle = Vehicle::factory()->create(['status' => 'listed']);
 
-        $this->actingAs($manager, 'web')->postJson("/api/vehicles/{$vehicle->id}/reserve", [
+        $this->actingAs($admin, 'web')->postJson("/api/vehicles/{$vehicle->id}/reserve", [
             'buyer_name' => '王小明',
             'sold_price' => 500000,
             'deposit_amount' => 100000,
@@ -74,6 +76,122 @@ class MoneyEntryApprovalTest extends TestCase
             'source_type' => 'vehicle_workflow',
             'approval_status' => 'approved',
         ]);
+    }
+
+    /**
+     * 老闆身兼會計：manager/sales 建立的車輛快捷（購車付款/單車支出/收訂金/退款）與
+     * 車輛流程（收訂金/收尾款）收支一律 pending，即使這些流程過去曾經直接 approved。
+     */
+    public function test_manager_and_sales_created_vehicle_workflow_deposit_is_pending(): void
+    {
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+
+        foreach (['manager', 'sales'] as $role) {
+            $vehicle = Vehicle::factory()->create(['status' => 'listed']);
+            $user = User::factory()->{$role}()->create(['is_active' => true]);
+
+            // Sanctum's RequestGuard caches the first resolved user for the lifetime of
+            // the test's container; switching actingAs() to a different real user within
+            // the same test method silently keeps the previous one unless guards are
+            // forgotten first (this never happens in production, where every request
+            // gets a fresh container).
+            Auth::forgetGuards();
+            $this->actingAs($user, 'web')->postJson("/api/vehicles/{$vehicle->id}/reserve", [
+                'buyer_name' => '王小明',
+                'sold_price' => 500000,
+                'deposit_amount' => 100000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => (string) Str::uuid(),
+            ])->assertSuccessful();
+
+            $this->assertDatabaseHas('money_entries', [
+                'vehicle_id' => $vehicle->id,
+                'category' => '訂金收入',
+                'source_type' => 'vehicle_workflow',
+                'approval_status' => 'pending',
+            ]);
+        }
+    }
+
+    public function test_manager_and_sales_created_vehicle_shortcut_expense_is_pending_admin_is_approved(): void
+    {
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+
+        foreach (['manager', 'sales'] as $role) {
+            $vehicle = Vehicle::factory()->create(['status' => 'preparing']);
+            $user = User::factory()->{$role}()->create(['is_active' => true]);
+
+            Auth::forgetGuards();
+            $this->actingAs($user, 'web')->postJson("/api/vehicles/{$vehicle->id}/expense", [
+                'category' => '維修支出',
+                'amount' => 1000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => (string) Str::uuid(),
+            ])->assertCreated()->assertJsonPath('data.approval_status', 'pending');
+        }
+
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'preparing']);
+
+        Auth::forgetGuards();
+        $this->actingAs($admin, 'web')->postJson("/api/vehicles/{$vehicle->id}/expense", [
+            'category' => '維修支出',
+            'amount' => 1000,
+            'cash_account_id' => $cashAccount->id,
+            'idempotency_key' => (string) Str::uuid(),
+        ])->assertCreated()->assertJsonPath('data.approval_status', 'approved');
+    }
+
+    public function test_admin_can_approve_and_reject_pending_vehicle_shortcut_and_workflow_entries(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $manager = User::factory()->manager()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicleForShortcut = Vehicle::factory()->create(['status' => 'preparing']);
+        $vehicleForWorkflow = Vehicle::factory()->create(['status' => 'listed']);
+
+        Auth::forgetGuards();
+        $shortcut = $this->actingAs($manager, 'web')->postJson("/api/vehicles/{$vehicleForShortcut->id}/expense", [
+            'category' => '維修支出',
+            'amount' => 1000,
+            'cash_account_id' => $cashAccount->id,
+            'idempotency_key' => (string) Str::uuid(),
+        ])->assertCreated();
+
+        $workflow = $this->actingAs($manager, 'web')->postJson("/api/vehicles/{$vehicleForWorkflow->id}/reserve", [
+            'buyer_name' => '王小明',
+            'sold_price' => 500000,
+            'deposit_amount' => 100000,
+            'cash_account_id' => $cashAccount->id,
+            'idempotency_key' => (string) Str::uuid(),
+        ])->assertSuccessful();
+
+        $workflowEntryId = MoneyEntry::query()->where('vehicle_id', $vehicleForWorkflow->id)->where('category', '訂金收入')->firstOrFail()->id;
+
+        Auth::forgetGuards();
+        $this->actingAs($admin, 'web')
+            ->patchJson("/api/money-entries/{$shortcut->json('data.id')}/approve")
+            ->assertSuccessful()
+            ->assertJsonPath('data.approval_status', 'approved');
+
+        $this->actingAs($admin, 'web')
+            ->patchJson("/api/money-entries/{$workflowEntryId}/reject")
+            ->assertSuccessful()
+            ->assertJsonPath('data.approval_status', 'rejected');
+    }
+
+    public function test_legacy_unknown_entry_cannot_be_approved_or_rejected(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $entry = MoneyEntry::factory()->create([
+            'cash_account_id' => $cashAccount->id,
+            'source_type' => 'legacy_unknown',
+            'approval_status' => 'pending',
+        ]);
+
+        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$entry->id}/approve")->assertStatus(422);
+        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$entry->id}/reject")->assertStatus(422);
     }
 
     public function test_pending_entry_excluded_from_balance_and_dashboard_and_vehicle_summary(): void

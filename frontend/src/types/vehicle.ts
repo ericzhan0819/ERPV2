@@ -1,3 +1,5 @@
+import type { MoneyEntryApprovalStatus } from './moneyEntry'
+
 export type VehicleStatus = 'preparing' | 'listed' | 'reserved' | 'sold' | 'cancelled'
 
 export interface Vehicle {
@@ -67,12 +69,25 @@ export interface VehicleFinancialSummary {
   gross_profit: number
 }
 
+// sales 車輛詳情頁的銷售收款安全摘要：只含訂金/尾款/退款，不含購車付款、整備成本、
+// 毛利、資金帳戶餘額，對齊後端 VehicleService::salesCollectionSummary()。
+export interface VehicleSalesCollectionSummary {
+  sold_price: number | null
+  approved_collection_total: number
+  pending_collection_total: number
+  approved_refund_total: number
+  pending_refund_total: number
+  net_recorded_collection_total: number
+  remaining_amount: number | null
+}
+
 export interface VehicleMoneyEntry {
   id: number
   entry_date: string
   direction: 'income' | 'expense'
   category: string
   amount?: number
+  approval_status?: MoneyEntryApprovalStatus
   counterparty_name: string | null
   description: string | null
   cash_account?: { id: number; name: string; type: string } | null
@@ -81,6 +96,7 @@ export interface VehicleMoneyEntry {
 export interface VehicleDetailResponse {
   vehicle: Vehicle
   summary?: VehicleFinancialSummary
+  sales_collection_summary?: VehicleSalesCollectionSummary
   money_entries: VehicleMoneyEntry[]
 }
 
@@ -137,6 +153,16 @@ export interface InitialPurchasePaymentPayload {
   cash_account_id: number
   entry_date?: string
   description?: string
+}
+
+export interface VehicleExpensePayload {
+  category: '維修支出' | '美容支出' | '代辦支出' | '拍場支出' | '其他支出'
+  amount: number
+  cash_account_id: number
+  entry_date?: string
+  counterparty_name?: string
+  description?: string
+  idempotency_key: string
 }
 
 export interface CreateVehiclePayload {

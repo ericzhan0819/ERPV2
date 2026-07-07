@@ -10,15 +10,18 @@ import type { Vehicle, VehicleListResponse } from '../../types/vehicle'
 import { categoriesForDirection, directionLabels } from '../../utils/moneyEntryCategory'
 import { MoneyDirectionBadge } from '../../components/MoneyDirectionBadge'
 import { ApprovalStatusBadge } from '../../components/ApprovalStatusBadge'
-import { canViewFinancials } from '../../utils/permissions'
+import { canApproveMoneyEntries, canViewFinancials } from '../../utils/permissions'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
 export function MoneyEntryList() {
   const { user } = useAuth()
-  const isAdmin = user?.role === 'admin'
+  const isAdmin = canApproveMoneyEntries(user?.role)
   const canViewFinance = canViewFinancials(user?.role)
-  const columnCount = 7 + (canViewFinance ? 2 : 0) + (isAdmin ? 1 : 0)
+  // sales 可以看到自己建立的申請與訂金/尾款/退款等銷售收款安全紀錄的金額（後端已
+  // 依角色遮蔽回傳內容），但資金帳戶一律只給 admin/manager。
+  const showAmountColumn = canViewFinance || user?.role === 'sales'
+  const columnCount = 7 + (showAmountColumn ? 1 : 0) + (canViewFinance ? 1 : 0) + (isAdmin ? 1 : 0)
 
   const [entries, setEntries] = useState<MoneyEntry[]>([])
   const [meta, setMeta] = useState<MoneyEntryListMeta | null>(null)
@@ -230,7 +233,7 @@ export function MoneyEntryList() {
               <th className="px-4 py-3 text-left font-medium text-fg-muted">日期</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">收入/支出</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">分類</th>
-              {canViewFinance && <th className="px-4 py-3 text-left font-medium text-fg-muted">金額</th>}
+              {showAmountColumn && <th className="px-4 py-3 text-left font-medium text-fg-muted">金額</th>}
               {canViewFinance && <th className="px-4 py-3 text-left font-medium text-fg-muted">資金帳戶</th>}
               <th className="px-4 py-3 text-left font-medium text-fg-muted">關聯車輛</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">對象</th>
@@ -290,7 +293,7 @@ export function MoneyEntryList() {
                     <MoneyDirectionBadge direction={entry.direction} />
                   </td>
                   <td className="px-4 py-3">{entry.category}</td>
-                  {canViewFinance && (
+                  {showAmountColumn && (
                     <td className="px-4 py-3 tabular-nums">
                       {entry.amount === undefined ? '-' : currencyFormatter.format(entry.amount)}
                     </td>
