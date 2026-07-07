@@ -277,6 +277,7 @@ class MoneyEntryService
             $lockedEntry = MoneyEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
 
             $this->assertPendingApprovableEntry($lockedEntry, '核准');
+            $this->assertApprovingCollectionEntryKeepsSoldVehicleInvariant($lockedEntry);
 
             $lockedEntry->approval_status = MoneyEntry::APPROVAL_APPROVED;
             $lockedEntry->approved_by = $approverId;
@@ -320,6 +321,37 @@ class MoneyEntryService
         if ($entry->approval_status !== MoneyEntry::APPROVAL_PENDING) {
             throw ValidationException::withMessages([
                 'approval_status' => ["只有待審核的收支可以{$action}，狀態不可逆"],
+            ]);
+        }
+    }
+
+    /**
+     * VehicleService::closeSale() 只在「結案當下」擋掉待審訂金/尾款/退款，防止結案後才
+     * 核准這類紀錄、事後改變已核准淨收款。但這個保護只涵蓋「未來」的結案動作：本次修正
+     * 部署前就已經結案、且當時仍留有待審訂金/尾款/退款的既有車輛，不會重新觸發那個檢查，
+     * approve() 若不獨立檢查，仍可能核准這類紀錄、把已售出車輛的已核准淨收款拉到成交價
+     * 以下，讓「已關帳＝已收足額」這個不變量在事後被打破。因此這裡直接鎖定車輛列（與
+     * closeSale() 使用同一把鎖，避免與結案動作競態）並拒絕核准，不論車輛是何時、以何種
+     * 方式進入 sold/cancelled 狀態。
+     */
+    private function assertApprovingCollectionEntryKeepsSoldVehicleInvariant(MoneyEntry $entry): void
+    {
+        if ($entry->vehicle_id === null) {
+            return;
+        }
+
+        if (! in_array($entry->category, self::SALES_SAFE_COLLECTION_CATEGORIES, true)) {
+            return;
+        }
+
+        $vehicleStatus = Vehicle::query()
+            ->whereKey($entry->vehicle_id)
+            ->lockForUpdate()
+            ->value('status');
+
+        if (in_array($vehicleStatus, ['sold', 'cancelled'], true)) {
+            throw ValidationException::withMessages([
+                'vehicle_id' => ['車輛已成交結案或取消，此筆訂金/尾款/退款不可再核准，如需修正請聯絡系統管理員手動處理'],
             ]);
         }
     }

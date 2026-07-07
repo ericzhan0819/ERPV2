@@ -248,6 +248,45 @@ class VehicleWorkflowTest extends TestCase
             ->assertJsonPath('data.status', 'sold');
     }
 
+    /**
+     * closeSale() 的待審檢查只擋得住「未來」的結案動作。這裡模擬本次修正部署前就已經
+     * 結案、但當時仍留有一筆待審退款的既有車輛（直接用 factory 造出 sold 狀態車輛 +
+     * pending 退款，繞過 closeSale 本身），驗證 approve() 本身也會獨立擋下核准，
+     * 不依賴「結案當下有沒有檢查過」。
+     */
+    public function test_admin_cannot_approve_a_pending_refund_left_over_on_an_already_sold_vehicle(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create([
+            'status' => 'sold',
+            'sold_price' => 480000,
+            'buyer_name' => '王小明',
+            'sold_at' => now(),
+        ]);
+        $pendingRefund = MoneyEntry::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'cash_account_id' => $cashAccount->id,
+            'direction' => 'expense',
+            'category' => '退款',
+            'amount' => 50000,
+            'source_type' => 'vehicle_shortcut',
+            'approval_status' => 'pending',
+        ]);
+
+        $this->actingAs($admin, 'web')
+            ->patchJson("/api/money-entries/{$pendingRefund->id}/approve")
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('money_entries', ['id' => $pendingRefund->id, 'approval_status' => 'pending']);
+
+        // 駁回不受影響：駁回不會移動任何金額，車輛狀態不需再檢查。
+        $this->actingAs($admin, 'web')
+            ->patchJson("/api/money-entries/{$pendingRefund->id}/reject")
+            ->assertSuccessful()
+            ->assertJsonPath('data.approval_status', 'rejected');
+    }
+
     public function test_final_payment_mismatch_returns_warning_but_still_succeeds(): void
     {
         $user = User::factory()->admin()->create(['is_active' => true]);
