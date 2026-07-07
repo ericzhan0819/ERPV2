@@ -195,6 +195,59 @@ class VehicleWorkflowTest extends TestCase
         $this->assertDatabaseHas('vehicles', ['id' => $vehicle->id, 'status' => 'reserved']);
     }
 
+    /**
+     * closeSale 必須擋掉「已核准收款達成交價，但還有一筆待審退款」的情況：若放行關帳，
+     * 這筆 pending 退款日後被 admin 核准時就沒有任何檢查點會擋下它，會讓一台已標記
+     * sold 的車輛事後淨收款低於成交價，破壞「已關帳 = 已收足額」這個不變量。
+     */
+    public function test_close_sale_is_blocked_while_a_pending_refund_exists_even_if_approved_total_already_meets_sold_price(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'reserved', 'sold_price' => 480000, 'buyer_name' => '王小明']);
+
+        MoneyEntry::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'cash_account_id' => $cashAccount->id,
+            'direction' => 'income',
+            'category' => '訂金收入',
+            'amount' => 100000,
+            'source_type' => 'vehicle_workflow',
+            'approval_status' => 'approved',
+        ]);
+        MoneyEntry::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'cash_account_id' => $cashAccount->id,
+            'direction' => 'income',
+            'category' => '尾款收入',
+            'amount' => 380000,
+            'source_type' => 'vehicle_workflow',
+            'approval_status' => 'approved',
+        ]);
+        $pendingRefund = MoneyEntry::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'cash_account_id' => $cashAccount->id,
+            'direction' => 'expense',
+            'category' => '退款',
+            'amount' => 50000,
+            'source_type' => 'vehicle_shortcut',
+            'approval_status' => 'pending',
+        ]);
+
+        // approved 收款總額（480000）已達成交價，但仍有一筆待審退款尚未定案，必須擋下關帳。
+        $this->actingAs($admin, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/close-sale", [])
+            ->assertStatus(422);
+        $this->assertDatabaseHas('vehicles', ['id' => $vehicle->id, 'status' => 'reserved']);
+
+        // 駁回待審退款後，關帳即可成功。
+        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$pendingRefund->id}/reject")->assertSuccessful();
+        $this->actingAs($admin, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/close-sale", [])
+            ->assertSuccessful()
+            ->assertJsonPath('data.status', 'sold');
+    }
+
     public function test_final_payment_mismatch_returns_warning_but_still_succeeds(): void
     {
         $user = User::factory()->admin()->create(['is_active' => true]);

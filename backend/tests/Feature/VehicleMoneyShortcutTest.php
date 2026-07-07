@@ -323,10 +323,11 @@ class VehicleMoneyShortcutTest extends TestCase
         $ids = collect($listResponse->json('data'))->pluck('id');
         $this->assertFalse($ids->contains($entryId));
 
-        // 透過 show 端點直接查詢仍會遮蔽金額（非本人、非銷售收款安全分類）。
+        // 透過 show 端點直接以連號 id 查詢，非本人、非銷售收款安全分類的紀錄整筆拒絕
+        // 存取（403），而不是回 200 再靠 Resource 遮蔽金額——否則 sales 仍可用連號 id
+        // 枚舉出分類、對象、描述等 Resource 不會遮蔽的欄位。
         $showResponse = $this->actingAs($otherSales, 'web')->getJson("/api/money-entries/{$entryId}");
-        $showResponse->assertOk();
-        $showResponse->assertJsonMissingPath('data.amount');
+        $showResponse->assertStatus(403);
     }
 
     public function test_vehicle_money_entries_endpoint_scopes_to_vehicle(): void

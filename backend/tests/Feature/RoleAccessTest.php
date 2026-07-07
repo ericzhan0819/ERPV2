@@ -270,6 +270,12 @@ class RoleAccessTest extends TestCase
         $this->assertTrue($ids->contains($ownGeneralEntry->id));
         $this->assertTrue($ids->contains($salesSafeCollectionEntry->id));
         $this->assertFalse($ids->contains($othersCostEntry->id));
+
+        // 單筆查詢（GET /api/money-entries/{id}）必須套用同一套範圍限制，否則 sales
+        // 可用連號 id 逐一枚舉出列表本該遮蔽的紀錄。
+        $this->actingAs($sales, 'web')->getJson("/api/money-entries/{$ownGeneralEntry->id}")->assertOk();
+        $this->actingAs($sales, 'web')->getJson("/api/money-entries/{$salesSafeCollectionEntry->id}")->assertOk();
+        $this->actingAs($sales, 'web')->getJson("/api/money-entries/{$othersCostEntry->id}")->assertStatus(403);
     }
 
     public function test_sales_can_fetch_cash_account_options_without_balances(): void

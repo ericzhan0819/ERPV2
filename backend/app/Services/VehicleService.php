@@ -919,6 +919,24 @@ class VehicleService
                 ]);
             }
 
+            // 關帳後不可再讓車輛的已核准收款總額被追加變動：assertVehicleMutable 已擋掉
+            // 已售出車輛「新增」訂金/尾款/退款，但既有、關帳前就存在的 pending 退款仍可能
+            // 在關帳後才被 admin 核准，這會在事後把已核准淨收款拉到成交價以下，讓「已關帳
+            // = 已收足額」這個不變量失效。因此關帳前必須先擋下：只要還有待審核的訂金/尾款/
+            // 退款，一律不可關帳，逼這些待審項目先被核准或駁回，關帳後才不會再有懸而未決、
+            // 足以改變金額的項目。
+            $hasPendingCollectionOrRefund = MoneyEntry::query()
+                ->where('vehicle_id', $lockedVehicle->id)
+                ->where('approval_status', MoneyEntry::APPROVAL_PENDING)
+                ->whereIn('category', array_merge(self::SALES_COLLECTION_CATEGORIES, [self::SALES_REFUND_CATEGORY]))
+                ->exists();
+
+            if ($hasPendingCollectionOrRefund) {
+                throw ValidationException::withMessages([
+                    'sold_price' => ['成交結案前，尚有待老闆核准的訂金/尾款/退款紀錄，請先核准或駁回後再結案'],
+                ]);
+            }
+
             // 老闆身兼會計：sales/manager 收的訂金、尾款在 admin 核准前只是 pending，
             // 不算正式已收，成交結案不可用 pending 金額關帳，必須等 admin 核准入帳
             // 且 approved 收款總額達成交價才可放行。只計訂金/尾款這兩種實際收款分類，

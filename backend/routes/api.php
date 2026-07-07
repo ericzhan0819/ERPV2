@@ -62,10 +62,13 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         ->middleware('can:refund,vehicle');
 
     // 一般收支 CRUD：admin/manager/sales 皆可送出，manager/sales 建立進 pending 待審核。
-    // update/destroy 額外綁定 MoneyEntryPolicy：manager/sales 只能異動自己送出、尚未核准的收支，
-    // 不得竄改或刪除其他 manager/sales 送出的待審收支。
+    // show/update/destroy 額外綁定 MoneyEntryPolicy：sales 只能查詢自己送出的申請或訂金/
+    // 尾款/退款等銷售收款安全紀錄（與列表 MoneyEntryService::listEntries() 同一套範圍），
+    // 不得用連號 id 枚舉出其他人上報的成本紀錄；manager/sales 只能異動自己送出、尚未核准
+    // 的收支，不得竄改或刪除其他 manager/sales 送出的待審收支。
     Route::apiResource('money-entries', MoneyEntryController::class)
         ->middleware('role:admin,manager,sales')
+        ->middlewareFor('show', 'can:view,money_entry')
         ->middlewareFor('update', 'can:update,money_entry')
         ->middlewareFor('destroy', 'can:delete,money_entry');
 
