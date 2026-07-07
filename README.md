@@ -1,6 +1,6 @@
 # 中古車行內部營運系統（1.0 + v1.1）
 
-小型中古車行內部使用的前後端分離營運管理系統。v1.1 新增角色（`admin`／`manager`／`sales`）、敏感金額遮蔽、一般收支審核、客戶模組與建車入庫欄位補強，另依使用者需求追加管理員稽核紀錄，詳見 `backend/API.md`、`PLAN_v1.1.md`。
+小型中古車行內部使用的前後端分離營運管理系統。v1.1 新增角色（`admin`／`manager`／`sales`）、敏感金額遮蔽、一般收支審核、客戶模組與建車入庫欄位補強，另依使用者需求追加管理員稽核紀錄。v1.1 已完成 smoke，封版狀態詳見 `docs/current-state.md`、`docs/v1.1-smoke-report.md`，API 與計畫細節見 `backend/API.md`、`PLAN_v1.1.md`。
 
 ## 環境需求
 

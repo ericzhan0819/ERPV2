@@ -232,15 +232,15 @@
 - [x] Code review 修正：sales 收支列表同步移除金額／資金帳戶欄位，避免後端遮蔽後前端顯示 `NaN`
 
 ### Smoke 驗收（22 項，對應 `企劃書_v1.1.md` §12）
-- [ ] 1–13：admin 完整入庫流程到成交結案列印 — 未執行，原因見任務回覆（無瀏覽器自動化工具可實際點選 UI）
-- [ ] 14–17：sales 帳號權限驗證 — 同上，UI 點選未執行；後端 JSON 遮蔽與權限已由既有自動化測試覆蓋並全數通過
-- [ ] 18–19：manager 帳號權限驗證 — 同上
-- [ ] 20–22：admin 核准/駁回流程 — 同上，approval_status 對彙總的影響已由自動化測試覆蓋並通過
+- [x] 1–13：admin 完整入庫流程到成交結案列印 — 使用者完成手動 smoke，確認主流程可用；詳見 `docs/v1.1-smoke-report.md`
+- [x] 14–17：sales 帳號權限驗證 — 使用者確認 sales 權限、開價/底價/成交價、銷售收款摘要與成本遮蔽無問題；後端 JSON 遮蔽由 `RoleAccessTest` 覆蓋
+- [x] 18–19：manager 帳號權限驗證 — 使用者確認 manager 作為營運主管可看完整營運資料，但不可核准/駁回；後端 policy 與測試已覆蓋
+- [x] 20–22：admin 核准/駁回流程 — 使用者確認老闆核准流程與成交結案流程可用；`MoneyEntryApprovalTest`、`VehicleWorkflowTest` 已覆蓋 pending/approved 對彙總與結案的影響
 
 ### 回歸測試
-- [x] v1.0 flow（admin）行為一致（`php artisan test` 238 passed / 3 skipped，涵蓋車輛流程、收支、列印資料組裝等既有 Feature 測試全數通過）
+- [x] v1.0 flow（admin）行為一致（`./vendor/bin/phpunit`：265 tests / 1121 assertions / 4 skipped，涵蓋車輛流程、收支、列印資料組裝、權限與審核等 Feature 測試通過）
 - [x] 既有資料相容（既有回填 migration 測試通過）
-- [ ] 既有列印頁可用 — 僅確認 frontend/backend 可正常啟動且路由存在，未實際開啟列印頁面以肉眼檢查排版
+- [x] 既有列印資料 API 可用 — 自動化測試覆蓋列印資料組裝；紙本排版仍建議正式使用前肉眼檢查
 
 ---
 
