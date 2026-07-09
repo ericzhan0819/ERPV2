@@ -85,6 +85,11 @@ class Vehicle extends Model
         return $this->hasMany(MoneyEntry::class);
     }
 
+    public function photos(): HasMany
+    {
+        return $this->hasMany(VehiclePhoto::class)->orderBy('sort_order');
+    }
+
     public function sellerCustomer(): BelongsTo
     {
         return $this->belongsTo(Customer::class, 'seller_customer_id');
