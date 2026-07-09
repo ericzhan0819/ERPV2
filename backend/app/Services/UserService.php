@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\MoneyEntry;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Models\VehiclePhoto;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\QueryException;
@@ -173,7 +174,8 @@ class UserService
             // and the delete below would then fail on the FK constraint with an
             // unhandled 500 instead of this graceful 422.
             $hasRelatedRecords = Vehicle::query()->where('created_by', $user->id)->orWhere('updated_by', $user->id)->lockForUpdate()->exists()
-                || MoneyEntry::query()->where('created_by', $user->id)->orWhere('updated_by', $user->id)->lockForUpdate()->exists();
+                || MoneyEntry::query()->where('created_by', $user->id)->orWhere('updated_by', $user->id)->lockForUpdate()->exists()
+                || VehiclePhoto::query()->where('uploaded_by', $user->id)->lockForUpdate()->exists();
 
             if ($hasRelatedRecords) {
                 throw ValidationException::withMessages([

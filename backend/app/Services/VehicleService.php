@@ -7,6 +7,7 @@ use App\Models\Customer;
 use App\Models\MoneyEntry;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Models\VehiclePhoto;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -498,6 +499,16 @@ class VehicleService
             if ($hasMoneyEntries) {
                 throw ValidationException::withMessages([
                     'status' => ['已有收支紀錄的車輛不得刪除，請改用取消/退車流程'],
+                ]);
+            }
+
+            $hasPhotos = VehiclePhoto::query()
+                ->where('vehicle_id', $lockedVehicle->id)
+                ->exists();
+
+            if ($hasPhotos) {
+                throw ValidationException::withMessages([
+                    'status' => ['已有照片的車輛不得刪除，請先移除照片或改用取消/退車流程'],
                 ]);
             }
 
