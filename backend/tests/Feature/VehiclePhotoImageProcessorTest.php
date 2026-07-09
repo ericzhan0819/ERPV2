@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Services\VehiclePhotoImageProcessor;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -113,6 +114,37 @@ class VehiclePhotoImageProcessorTest extends TestCase
 
         $this->expectException(ValidationException::class);
         $processor->process($this->fakeJpegUploadedFile(6200, 4000), vehicleId: 42);
+    }
+
+    public function test_process_rejects_when_another_upload_is_already_processing(): void
+    {
+        Storage::fake('public');
+
+        // 模擬另一個請求正在處理照片（持有全域 lock），驗證這個「同時間只解碼/編碼
+        // 一張圖」的保證真的有生效，而不是只有註解說有。wait 設 0 秒讓測試不用真的等。
+        config(['vehicle_photos.processing_lock_wait_seconds' => 0]);
+
+        $heldByOtherRequest = Cache::lock('vehicle_photo_image_processing', 5);
+        $this->assertTrue($heldByOtherRequest->get());
+
+        try {
+            $processor = app(VehiclePhotoImageProcessor::class);
+
+            $this->expectException(ValidationException::class);
+            $processor->process($this->fakeJpegUploadedFile(800, 600), vehicleId: 42);
+        } finally {
+            $heldByOtherRequest->release();
+        }
+    }
+
+    public function test_process_succeeds_once_lock_is_free_again(): void
+    {
+        Storage::fake('public');
+
+        $processor = app(VehiclePhotoImageProcessor::class);
+        $result = $processor->process($this->fakeJpegUploadedFile(800, 600), vehicleId: 42);
+
+        Storage::disk('public')->assertExists($result['path']);
     }
 
     public function test_delete_is_idempotent_when_files_already_missing(): void

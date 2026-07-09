@@ -48,17 +48,28 @@ return [
     //   24MP     → 335.0MB RSS
     //   40MP     → 522.9MB RSS（Codex 在自己環境量到約 553MB，同量級）
     //
-    // 這個上傳端點只開放 admin / manager 使用（見企劃書_v1.2.md 第 7 節權限表），不是
-    // 任何人都能打的公開端點，同時間會真的觸發上傳的使用者數量非常少（小型中古車行
-    // 內部員工），因此不需要假設「大量並發請求同時打滿 40MP」這種公開服務等級的威脅
-    // 模型；真正要擋的是單一請求的尖峰記憶體不要離譜（decompression bomb），而不是把
-    // 正常業務會用到的高畫素照片也一起擋掉。
+    // 這個上傳端點只開放 admin / manager 使用（見企劃書_v1.2.md 第 7 節權限表），
+    // 真正會觸發上傳的使用者數量本來就很少。但「使用者少所以不會同時上傳」只是假設，
+    // 不是程式碼裡真的有的保證（Codex adversarial review 第四輪指出：這個像素上限
+    // 擋得住單一請求離譜到不合理的圖片，擋不住好幾個 admin/manager 剛好同時上傳、
+    // 各自都在門檻內卻疊加起來一樣把 worker 記憶體吃光的並發情境）。因此下面
+    // `processing_lock_*` 用全域 lock 把「同時間只解碼/編碼一張圖」變成強制保證，
+    // 這個像素上限只需要負責擋住「單一請求」的尖峰記憶體，不用再兼顧並發疊加。
     //
     // 預設值選 24MP：涵蓋目前主流手機/相機的一般直出解析度，單檔尖峰約 335MB，對一台
     // 有數百 MB 到 1GB+ 可用記憶體的內部系統伺服器是可接受的量級。可用
-    // VEHICLE_PHOTOS_MAX_MEGAPIXELS env 依實際部署環境的 worker 記憶體預算調整
-    // （調整前應先用同樣的量測方法重新量測，不要只憑感覺調數字）。
+    // VEHICLE_PHOTOS_MAX_MEGAPIXELS env 依實際部署環境的記憶體預算調整（調整前應先用
+    // 同樣的量測方法重新量測，不要只憑感覺調數字）。
     'max_megapixels' => (float) env('VEHICLE_PHOTOS_MAX_MEGAPIXELS', 24),
+
+    // VehiclePhotoImageProcessor 用這把全域 lock 確保任何時刻最多只有一個請求在做
+    // decode/encode（真正吃記憶體的部分），避免多個 admin/manager 同時上傳時，各自
+    // 合法的解碼疊加成好幾倍尖峰記憶體。lock 依賴 CACHE_STORE 支援 atomic lock
+    // （本專案預設 database driver 已支援，見 config/cache.php）。
+    'processing_lock_ttl_seconds' => (int) env('VEHICLE_PHOTOS_LOCK_TTL_SECONDS', 60),
+
+    // 等不到 lock 就直接回錯誤，不讓 HTTP worker 無限期卡住等待。
+    'processing_lock_wait_seconds' => (int) env('VEHICLE_PHOTOS_LOCK_WAIT_SECONDS', 30),
 
     'max_files_per_upload' => 20, // 一次上傳最多 20 張
 

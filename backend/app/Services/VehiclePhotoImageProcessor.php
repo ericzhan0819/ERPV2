@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -33,6 +35,36 @@ class VehiclePhotoImageProcessor
     {
         $this->assertValidImage($file);
 
+        $config = config('vehicle_photos');
+
+        // decode → clone → scaleDown → 兩次 toWebp 編碼是整個流程裡真正吃記憶體的部分
+        // （單張最壞情況已知可達數百 MB RSS，見 config/vehicle_photos.php 的量測數據），
+        // 且 GD 的像素緩衝區是原生記憶體配置、不受 PHP memory_limit 限制。固定像素上限
+        // 只能擋單一請求離譜到不合理的圖片，擋不住「多個 admin/manager 同時上傳」這種
+        // 把好幾個合法尺寸的解碼疊加在一起、一樣可能把 worker 記憶體吃光的並發情境
+        // （Codex adversarial review 指出）。因此這段用全域 lock 把「同時間只解碼/編碼
+        // 一張圖」這件事直接變成程式碼保證，而不是「內部使用者不多、應該不會同時上傳」
+        // 這種無法強制執行的假設。等待逾時就直接回錯誤，不讓 HTTP worker 無限期卡住。
+        try {
+            return Cache::lock('vehicle_photo_image_processing', $config['processing_lock_ttl_seconds'])
+                ->block(
+                    $config['processing_lock_wait_seconds'],
+                    fn () => $this->decodeAndStore($file, $vehicleId, $config)
+                );
+        } catch (LockTimeoutException) {
+            throw ValidationException::withMessages([
+                'photos' => '系統目前正在處理其他照片，請稍後再試一次。',
+            ]);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     * @return array{disk: string, path: string, thumbnail_path: string, original_filename: string,
+     *     mime_type: string, size: int, width: int, height: int}
+     */
+    private function decodeAndStore(UploadedFile $file, int $vehicleId, array $config): array
+    {
         try {
             $source = $this->manager->read($file->getRealPath());
         } catch (DecoderException) {
@@ -41,7 +73,6 @@ class VehiclePhotoImageProcessor
             ]);
         }
 
-        $config = config('vehicle_photos');
         $disk = $config['disk'];
         $uuid = (string) Str::uuid();
         $path = "vehicles/{$vehicleId}/{$uuid}.webp";
