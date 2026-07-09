@@ -27,6 +27,12 @@ return [
 
     'max_file_size_kb' => 8192, // 單張最大 8MB
 
+    // 檔案大小在 8MB 以內仍可能宣告超大像素尺寸（例如極端壓縮的 PNG），這類圖片全解碼
+    // 進記憶體的成本與像素數成正比，屬於 decompression bomb 風險，因此在解碼前先用
+    // getimagesize() 讀檔頭檢查像素數，超過就直接拒絕。40 megapixels 遠高於一般手機
+    // 拍照（多數在 12~50MP 感光元件，但實際輸出多半在 12~24MP 之間），留有餘裕。
+    'max_megapixels' => 40,
+
     'max_files_per_upload' => 20, // 一次上傳最多 20 張
 
     'max_photos_per_vehicle' => 60, // 每台車最多 60 張

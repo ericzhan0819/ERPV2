@@ -151,5 +151,24 @@ class VehiclePhotoImageProcessor
                 'photos' => '照片格式僅接受 jpg、jpeg、png、webp。',
             ]);
         }
+
+        // 只用 getimagesize() 讀檔頭取得像素尺寸，不會像 ImageManager::read() 一樣把整張圖
+        // 解碼進記憶體。8MB 以內的檔案仍可能宣告超大像素尺寸（例如極端壓縮的 PNG），若不在
+        // 解碼前擋下，read() 會先把整張圖展開進記憶體才輪到 fitWithin() 縮小，等於任何請求都
+        // 能透過一張合法但像素超大的圖片吃光 worker 記憶體/CPU（decompression bomb）。
+        $dimensions = @getimagesize($file->getRealPath());
+        if ($dimensions === false) {
+            throw ValidationException::withMessages([
+                'photos' => '圖片檔案無法讀取或已損毀。',
+            ]);
+        }
+
+        [$width, $height] = $dimensions;
+        $megapixels = ($width * $height) / 1_000_000;
+        if ($megapixels > $config['max_megapixels']) {
+            throw ValidationException::withMessages([
+                'photos' => '照片像素尺寸過大，請使用較小尺寸的圖片。',
+            ]);
+        }
     }
 }

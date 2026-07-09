@@ -63,6 +63,20 @@ class VehiclePhotoImageProcessorTest extends TestCase
         $processor->process($file, vehicleId: 42);
     }
 
+    public function test_process_rejects_images_over_configured_megapixel_limit(): void
+    {
+        Storage::fake('public');
+
+        // 用小張測試圖 + 調低門檻來驗證「解碼前依像素數擋下」的邏輯，
+        // 不需要真的產生超大圖片（那樣做本身就有測試環境資源風險）。
+        config(['vehicle_photos.max_megapixels' => 0.1]);
+
+        $processor = app(VehiclePhotoImageProcessor::class);
+
+        $this->expectException(ValidationException::class);
+        $processor->process($this->fakeJpegUploadedFile(800, 600), vehicleId: 42);
+    }
+
     public function test_delete_is_idempotent_when_files_already_missing(): void
     {
         Storage::fake('public');
