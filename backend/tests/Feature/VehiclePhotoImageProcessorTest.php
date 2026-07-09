@@ -7,7 +7,9 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
+use Intervention\Image\ImageManager;
 use Tests\TestCase;
+use WeakReference;
 
 /**
  * v1.2 Part 2（Storage / 圖片處理）建構元件的基礎驗證。完整的上傳流程權限、
@@ -169,6 +171,28 @@ class VehiclePhotoImageProcessorTest extends TestCase
 
         $this->expectException(ValidationException::class);
         $assertLockStillHeld->invoke($processor, $lock, $config);
+    }
+
+    public function test_intervention_image_objects_are_actually_freed_when_unset(): void
+    {
+        // VehiclePhotoImageProcessor::decodeAndStore() 在編碼完成、進入 storage I/O 前
+        // 會 unset 掉解碼用的 Image 物件，理由是讓底層 GD 原生記憶體立刻釋放，不要在
+        // 可能卡住的 I/O 期間繼續占著（Codex adversarial review 第七輪指出：不這樣做
+        // 的話，lock lease 過期時還是可能跟另一個請求同時持有原生 GD buffer）。這個
+        // 優化成立的前提是「unset 之後這個物件真的沒有其他地方持有參照、會被釋放」，
+        // 不是被 Intervention/Image 內部某個靜態 registry 或快取偷偷留著。這裡直接用
+        // WeakReference 驗證這個前提，避免以後升級套件版本，這個假設不知不覺失效。
+        $file = $this->fakeJpegUploadedFile(800, 600);
+        $manager = ImageManager::gd();
+        $image = $manager->read($file->getRealPath());
+
+        $ref = WeakReference::create($image);
+        $this->assertNotNull($ref->get());
+
+        unset($image);
+        gc_collect_cycles();
+
+        $this->assertNull($ref->get());
     }
 
     public function test_delete_is_idempotent_when_files_already_missing(): void

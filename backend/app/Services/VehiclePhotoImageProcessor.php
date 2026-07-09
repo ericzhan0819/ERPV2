@@ -99,16 +99,34 @@ class VehiclePhotoImageProcessor
         $thumbnailPath = "vehicles/{$vehicleId}/{$uuid}_thumb.webp";
 
         $display = $this->fitWithin(clone $source, $config['display']['max_width'], $config['display']['max_height']);
-        $displayEncoded = $display->toWebp(quality: $config['display']['quality'], strip: true);
+        $displayEncoded = (string) $display->toWebp(quality: $config['display']['quality'], strip: true);
+        $width = $display->width();
+        $height = $display->height();
 
         $this->assertLockStillHeld($lock, $config);
 
         $thumbnail = $this->fitWithin($source, $config['thumbnail']['max_width'], $config['thumbnail']['max_height']);
-        $thumbnailEncoded = $thumbnail->toWebp(quality: $config['thumbnail']['quality'], strip: true);
+        $thumbnailEncoded = (string) $thumbnail->toWebp(quality: $config['thumbnail']['quality'], strip: true);
+
+        // 到這裡兩張圖都已經編碼成 webp bytes，後面只需要這兩個字串，不再需要 GD 原生
+        // 解碼緩衝區（$source / $display / $thumbnail 可能是同一顆 GdImage 底層物件的
+        // 不同參照，視 fitWithin() 是否真的觸發 scaleDown 而定）。putOrCleanup() 接下來
+        // 要進行的 storage I/O 可能是慢的（尤其未來搬到 Cloudflare R2 走網路），如果讓
+        // 這些原生緩衝區在 I/O 期間繼續活著，一旦 I/O 卡住超過 lock TTL，就會回到跟
+        // 「兩個請求同時持有原生 GD buffer」一樣的並發疊加風險，前面幾輪加的並發保護
+        // 等於白做（Codex adversarial review 第七輪指出）。因此在進入 I/O 前明確
+        // unset，讓 refcount 歸零、原生記憶體立刻釋放，I/O 期間只留著小很多的編碼後
+        // 字串。
+        //
+        // 用 /proc/self/status 的 VmRSS 實測過效果（memory_get_usage() 量不到 GD 的
+        // 原生記憶體，見 config/vehicle_photos.php 的量測方法說明）：24MP 圖片在這行
+        // unset 之前 RSS 約 335MB，unset 後降到約 138MB，等於卡在 storage I/O 期間
+        // 少留著約 197MB 的原生緩衝區。
+        unset($source, $display, $thumbnail);
 
         $this->assertLockStillHeld($lock, $config);
 
-        $this->putOrCleanup($disk, $path, (string) $displayEncoded, $thumbnailPath, (string) $thumbnailEncoded);
+        $this->putOrCleanup($disk, $path, $displayEncoded, $thumbnailPath, $thumbnailEncoded);
 
         return [
             'disk' => $disk,
@@ -116,9 +134,9 @@ class VehiclePhotoImageProcessor
             'thumbnail_path' => $thumbnailPath,
             'original_filename' => $file->getClientOriginalName(),
             'mime_type' => 'image/webp',
-            'size' => strlen((string) $displayEncoded),
-            'width' => $display->width(),
-            'height' => $display->height(),
+            'size' => strlen($displayEncoded),
+            'width' => $width,
+            'height' => $height,
         ];
     }
 
