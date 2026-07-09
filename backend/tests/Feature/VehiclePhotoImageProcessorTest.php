@@ -147,6 +147,30 @@ class VehiclePhotoImageProcessorTest extends TestCase
         Storage::disk('public')->assertExists($result['path']);
     }
 
+    public function test_processing_aborts_if_lock_lease_is_lost_mid_flight(): void
+    {
+        Storage::fake('public');
+
+        $processor = app(VehiclePhotoImageProcessor::class);
+        $config = config('vehicle_photos');
+
+        $lock = Cache::lock('vehicle_photo_image_processing', 60);
+        $this->assertTrue($lock->get());
+
+        // 模擬「lease 在處理途中真的過期、被搶走或被清掉」：直接讓底層 row 消失，
+        // 使 refresh() 因為找不到符合 owner 的 row 而回傳 false。驗證的是：處理途中
+        // 一旦偵測到已經失去獨佔權，一定要立刻中止，不能假裝還擁有獨佔權繼續把檔案
+        // 寫進 storage（Codex adversarial review 指出：固定 TTL 沒有續約機制的話，
+        // 處理變慢時第二個請求可能誤以為自己也拿到了獨佔權）。
+        $lock->forceRelease();
+
+        $assertLockStillHeld = new \ReflectionMethod($processor, 'assertLockStillHeld');
+        $assertLockStillHeld->setAccessible(true);
+
+        $this->expectException(ValidationException::class);
+        $assertLockStillHeld->invoke($processor, $lock, $config);
+    }
+
     public function test_delete_is_idempotent_when_files_already_missing(): void
     {
         Storage::fake('public');

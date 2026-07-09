@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Cache\Lock;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
@@ -45,12 +46,29 @@ class VehiclePhotoImageProcessor
         // （Codex adversarial review 指出）。因此這段用全域 lock 把「同時間只解碼/編碼
         // 一張圖」這件事直接變成程式碼保證，而不是「內部使用者不多、應該不會同時上傳」
         // 這種無法強制執行的假設。等待逾時就直接回錯誤，不讓 HTTP worker 無限期卡住。
+        //
+        // lock 的固定 TTL 本身不能單靠它保證獨佔：如果解碼/編碼/寫檔剛好在主機負載
+        // 很高（例如正好在搶救記憶體、觸發 swap）時變慢、超過 TTL，Laravel 的
+        // database lock 會把過期的 row 視為可再被別人搶走，導致第二個請求以為自己
+        // 獨佔、其實跟第一個請求同時持有原生 GD buffer——這正是這把 lock 原本要防的
+        // 情況（Codex adversarial review 指出）。因此 decodeAndStore() 會在每個重量級
+        // 步驟「之間」呼叫 $lock->refresh() 續約，讓「當下還沒完成處理」持續換到新的
+        // TTL 窗口；萬一某次 refresh() 失敗（代表已經真的過期、鎖被搶走），立刻中止並
+        // 丟例外，不能假裝還擁有獨佔權繼續把檔案寫進 storage。
+        //
+        // 但這個續約只能發生在步驟「之間」：單一個 decode / toWebp() 呼叫本身是一次
+        // 不可中斷的 GD 原生函式呼叫，執行中沒有機會插入程式碼續約，所以如果單一步驟
+        // 本身就跑得比 TTL 還久，續約機制救不到（Codex 第六輪指出）。真正兜底的是
+        // config/vehicle_photos.php 裡 processing_lock_ttl_seconds 用遠大於實測單一
+        // 步驟耗時的安全係數換算出來的 TTL，不是這個續約機制本身——這裡沒辦法做到
+        // 100% 杜絕，這是 lease-based lock 的已知理論限制。
+        $lock = Cache::lock('vehicle_photo_image_processing', $config['processing_lock_ttl_seconds']);
+
         try {
-            return Cache::lock('vehicle_photo_image_processing', $config['processing_lock_ttl_seconds'])
-                ->block(
-                    $config['processing_lock_wait_seconds'],
-                    fn () => $this->decodeAndStore($file, $vehicleId, $config)
-                );
+            return $lock->block(
+                $config['processing_lock_wait_seconds'],
+                fn () => $this->decodeAndStore($file, $vehicleId, $config, $lock)
+            );
         } catch (LockTimeoutException) {
             throw ValidationException::withMessages([
                 'photos' => '系統目前正在處理其他照片，請稍後再試一次。',
@@ -63,7 +81,7 @@ class VehiclePhotoImageProcessor
      * @return array{disk: string, path: string, thumbnail_path: string, original_filename: string,
      *     mime_type: string, size: int, width: int, height: int}
      */
-    private function decodeAndStore(UploadedFile $file, int $vehicleId, array $config): array
+    private function decodeAndStore(UploadedFile $file, int $vehicleId, array $config, Lock $lock): array
     {
         try {
             $source = $this->manager->read($file->getRealPath());
@@ -73,6 +91,8 @@ class VehiclePhotoImageProcessor
             ]);
         }
 
+        $this->assertLockStillHeld($lock, $config);
+
         $disk = $config['disk'];
         $uuid = (string) Str::uuid();
         $path = "vehicles/{$vehicleId}/{$uuid}.webp";
@@ -81,8 +101,12 @@ class VehiclePhotoImageProcessor
         $display = $this->fitWithin(clone $source, $config['display']['max_width'], $config['display']['max_height']);
         $displayEncoded = $display->toWebp(quality: $config['display']['quality'], strip: true);
 
+        $this->assertLockStillHeld($lock, $config);
+
         $thumbnail = $this->fitWithin($source, $config['thumbnail']['max_width'], $config['thumbnail']['max_height']);
         $thumbnailEncoded = $thumbnail->toWebp(quality: $config['thumbnail']['quality'], strip: true);
+
+        $this->assertLockStillHeld($lock, $config);
 
         $this->putOrCleanup($disk, $path, (string) $displayEncoded, $thumbnailPath, (string) $thumbnailEncoded);
 
@@ -96,6 +120,18 @@ class VehiclePhotoImageProcessor
             'width' => $display->width(),
             'height' => $display->height(),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     */
+    private function assertLockStillHeld(Lock $lock, array $config): void
+    {
+        if (! $lock->refresh($config['processing_lock_ttl_seconds'])) {
+            throw ValidationException::withMessages([
+                'photos' => '照片處理逾時，請重新上傳。',
+            ]);
+        }
     }
 
     /**

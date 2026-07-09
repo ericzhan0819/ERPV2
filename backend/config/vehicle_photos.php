@@ -1,5 +1,9 @@
 <?php
 
+// max_megapixels 提前算出來，讓下面 processing_lock_ttl_seconds 的預設值可以依實際
+// 上限比例縮放，不會變成一個跟像素上限脫鉤、之後改了上限卻忘記一起調整的固定數字。
+$maxMegapixels = (float) env('VEHICLE_PHOTOS_MAX_MEGAPIXELS', 24);
+
 return [
 
     /*
@@ -60,13 +64,30 @@ return [
     // 有數百 MB 到 1GB+ 可用記憶體的內部系統伺服器是可接受的量級。可用
     // VEHICLE_PHOTOS_MAX_MEGAPIXELS env 依實際部署環境的記憶體預算調整（調整前應先用
     // 同樣的量測方法重新量測，不要只憑感覺調數字）。
-    'max_megapixels' => (float) env('VEHICLE_PHOTOS_MAX_MEGAPIXELS', 24),
+    'max_megapixels' => $maxMegapixels,
 
     // VehiclePhotoImageProcessor 用這把全域 lock 確保任何時刻最多只有一個請求在做
     // decode/encode（真正吃記憶體的部分），避免多個 admin/manager 同時上傳時，各自
     // 合法的解碼疊加成好幾倍尖峰記憶體。lock 依賴 CACHE_STORE 支援 atomic lock
     // （本專案預設 database driver 已支援，見 config/cache.php）。
-    'processing_lock_ttl_seconds' => (int) env('VEHICLE_PHOTOS_LOCK_TTL_SECONDS', 60),
+    //
+    // decodeAndStore() 會在每個重量級步驟「之間」呼叫 $lock->refresh() 續約，但續約
+    // 沒辦法發生在單一步驟「執行中」——PHP 呼叫 GD 的 decode/toWebp() 是一次不可中斷
+    // 的原生函式呼叫，中途沒有機會插入程式碼去續約（Codex adversarial review 第六輪
+    // 指出：如果某一個步驟本身就跑得比 TTL 還久，lease 一樣會在那個步驟執行中過期，
+    // 續約機制救不到）。這是 lease-based lock 的已知理論限制，沒有 fencing token 或
+    // 換成 queue + 單一 worker 架構的話無法 100% 杜絕，這兩者都超出 v1.2 同步上傳的
+    // 最小範圍。
+    //
+    // 因此改用「TTL 遠大於實測單一步驟最長耗時」來把風險壓到可接受範圍，而不是假裝
+    // 完全杜絕：24MP 上限下實測最長單一步驟（展示圖 toWebp 編碼）約 976ms，即使主機
+    // 嚴重降速到平常的 100 倍，單一步驟也還在 100 秒內。TTL 依 max_megapixels 等比例
+    // 抓「每 MP 5 秒」（約 100 倍安全係數），並設 120 秒下限，這樣以後如果調高
+    // VEHICLE_PHOTOS_MAX_MEGAPIXELS，這個安全網會跟著等比例放大，不會變成脫鉤、忘記
+    // 同步調整的固定數字。真的頂到這個 TTL 代表主機已經退化到「一張在上限內的照片、
+    // 單一個編碼步驟」都要跑超過 100 秒等級，那種狀況下 OS 通常會先介入（swap 崩潰、
+    // OOM killer），已經不是這把 lock 能單獨解決的問題。
+    'processing_lock_ttl_seconds' => (int) env('VEHICLE_PHOTOS_LOCK_TTL_SECONDS', max(120, (int) ceil($maxMegapixels * 5))),
 
     // 等不到 lock 就直接回錯誤，不讓 HTTP worker 無限期卡住等待。
     'processing_lock_wait_seconds' => (int) env('VEHICLE_PHOTOS_LOCK_WAIT_SECONDS', 30),
