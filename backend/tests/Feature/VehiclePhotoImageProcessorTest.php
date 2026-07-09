@@ -77,6 +77,31 @@ class VehiclePhotoImageProcessorTest extends TestCase
         $processor->process($this->fakeJpegUploadedFile(800, 600), vehicleId: 42);
     }
 
+    public function test_default_cap_accepts_common_phone_resolution(): void
+    {
+        Storage::fake('public');
+
+        // 不覆寫 config，直接用正式預設值驗證：4032x3024 是 iPhone 常見預設拍照解析度
+        // （約 12.19MP），也是 config 註解裡拿來當門檻依據的實測案例本身，必須真的能
+        // 通過正式門檻，不能只是「差不多接近」。
+        $processor = app(VehiclePhotoImageProcessor::class);
+        $result = $processor->process($this->fakeJpegUploadedFile(4032, 3024), vehicleId: 42);
+
+        Storage::disk('public')->assertExists($result['path']);
+    }
+
+    public function test_default_cap_rejects_image_above_measured_safe_threshold(): void
+    {
+        Storage::fake('public');
+
+        // 不覆寫 config，用超過正式 13MP 門檻的壓縮圖片（4200x3100 ≈ 13.02MP）驗證
+        // 生產設定值真的會擋下，而不是只在單元測試裡人為調低門檻才擋得住。
+        $processor = app(VehiclePhotoImageProcessor::class);
+
+        $this->expectException(ValidationException::class);
+        $processor->process($this->fakeJpegUploadedFile(4200, 3100), vehicleId: 42);
+    }
+
     public function test_delete_is_idempotent_when_files_already_missing(): void
     {
         Storage::fake('public');
