@@ -10,7 +10,8 @@
 
 ```text
 1.0：工程 MVP 已完成，核心 CRUD、車輛流程、收支、資金帳戶、列印與文件已可運作。
-v1.1：進入實務工作流補強階段，目標是補足內部真實操作需要的角色、遮蔽、審核、客戶與建車付款流程。
+v1.1：實務工作流補強已完成 smoke，並以 v1.1-smoke-passed tag 封版。
+v1.2：進入車輛圖片與官網公開車輛資料前置階段，目標是補上車輛照片管理與安全 public vehicle API。
 ```
 
 核心目標不是擴張成完整 ERP，而是讓中古車行日常營運能穩定落地：車輛進來、建檔、整備、上架、保留、收款、成交、列印收支明細與查看營運摘要。
@@ -34,10 +35,22 @@ v1.1 任務必須閱讀：
 
 1. `企劃書_v1.1.md`
 2. `PLAN_v1.1.md`
-3. `UI.md`
-4. 相關 backend / frontend 既有程式碼
+3. `docs/current-state.md`
+4. `docs/v1.1-smoke-report.md`
+5. `UI.md`
+6. 相關 backend / frontend 既有程式碼
 
-目前 repo 只有 `PLAN_v1.1.md`，沒有 `PLAN_v1.2.md`。不要自行建立 v1.2 計畫檔。
+### v1.2 車輛圖片與官網前置文件
+
+v1.2 任務必須閱讀：
+
+1. `企劃書_v1.2.md`
+2. `PLAN_v1.2.md`
+3. `docs/current-state.md`
+4. `docs/v1.1-smoke-report.md`
+5. `backend/API.md`
+6. `UI.md`
+7. 相關 backend / frontend 既有程式碼
 
 不得只看單一檔案就直接大量改碼。實作前必須先檢查既有目錄、路由、Service、Request、Resource、測試與前端 API 型別。
 
@@ -108,6 +121,26 @@ v1.1 允許實作：
 
 v1.1 不代表重新打開正式會計、稅務、發票或 SaaS 功能。
 
+v1.1 已封版。除非使用者明確要求修補 v1.1 文件或 hotfix，否則新功能不得繼續塞入 v1.1。
+
+---
+
+## v1.2 實作範圍
+
+v1.2 只做 `企劃書_v1.2.md` 與 `PLAN_v1.2.md` 明確列出的車輛圖片與官網前置基礎。
+
+v1.2 允許實作：
+
+* 車輛照片資料模型 `vehicle_photos`
+* 車輛照片上傳、縮圖、刪除、排序、封面照
+* 車輛詳情頁照片管理 UI
+* admin / manager 管理照片，sales 只能查看
+* public vehicles read-only API，只公開已上架車輛與公開照片
+* storage disk + path 設計，先用 Laravel public storage，預留未來 Cloudflare R2
+* API 文件、README、current-state 與 smoke 文件更新
+
+v1.2 不代表直接實作完整官網、CMS、SEO 後台、線上付款、預約試乘或通用附件系統。
+
 ---
 
 ## 禁止實作
@@ -125,7 +158,7 @@ v1.1 不代表重新打開正式會計、稅務、發票或 SaaS 功能。
 * 多公司
 * 多分店
 * OCR
-* 附件上傳
+* 通用附件上傳（v1.2 僅允許 `vehicle_photos` 車輛照片，不開放一般附件系統）
 * QR Code
 * 自動稅務申報
 * 記帳士交接包
