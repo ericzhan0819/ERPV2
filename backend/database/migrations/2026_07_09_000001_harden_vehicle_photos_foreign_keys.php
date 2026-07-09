@@ -12,14 +12,17 @@ use Illuminate\Support\Facades\Schema;
 // delete could erase photo upload attribution). Both are hardened to RESTRICT, matching
 // the app-level guards added in VehicleService::deleteVehicle() and UserService::deleteUser().
 //
-// Each column's fix (drop the old FK, adjust nullability if needed, add the new FK)
-// is issued as ONE combined ALTER TABLE statement, not a sequence of separate
-// statements. A single ALTER TABLE statement is atomic in InnoDB — it either fully
-// applies or fully rolls back — so there is never a window where a column's old FK
-// has been dropped but the new one hasn't landed yet: that failure mode is
-// structurally impossible here, not just guarded against. Verified directly: forcing
-// a combined statement to fail (e.g. a duplicate constraint name) left the column's
-// original FK completely untouched.
+// Whichever columns need fixing (drop the old FK, adjust nullability if needed,
+// add the new FK) are all issued together as ONE combined ALTER TABLE statement
+// per up()/down() call — not one statement per column, and not a sequence of
+// separate statements. A single ALTER TABLE statement is atomic in InnoDB — it
+// either fully applies or fully rolls back — so there is never a window where a
+// column's old FK has been dropped but the new one hasn't landed yet, AND there is
+// no second DDL statement whose safety would depend on a lock surviving between
+// two ALTERs: in the common case (both columns need hardening on first run),
+// there is exactly one ALTER TABLE for the whole method. Verified directly:
+// forcing a combined statement to fail (e.g. a duplicate constraint name) left
+// every column's original FK completely untouched.
 //
 // MariaDB will not let a single statement DROP and ADD a FOREIGN KEY under the same
 // constraint name (errno 121, duplicate key), so the RESTRICT-hardened constraint
@@ -69,11 +72,10 @@ return new class extends Migration
             // Fail fast: validate every precondition for BOTH columns that need
             // fixing before performing DDL for either one. Without this, a run
             // that's already doomed to fail on known-bad uploaded_by data would
-            // still apply a real, unrelated fix to vehicle_id first (its ALTER
-            // TABLE statement being atomic doesn't prevent that — atomicity is
-            // per-column, not across columns), only to abort on uploaded_by
-            // afterwards: a needless partial application of a migration that
-            // could never have fully succeeded in the first place.
+            // still apply a real, unrelated fix to vehicle_id first, only to
+            // abort on uploaded_by afterwards: a needless partial application of
+            // a migration that could never have fully succeeded in the first
+            // place.
             if ($vehicleIdNeedsFix) {
                 $this->assertNoOrphanedForeignKeyValues('vehicle_id', 'vehicles');
             }
@@ -83,24 +85,33 @@ return new class extends Migration
                 $this->assertNoOrphanedForeignKeyValues('uploaded_by', 'users');
             }
 
+            $fixes = [];
+
             if ($vehicleIdNeedsFix) {
-                $this->replaceForeignKeyAtomically(
-                    column: 'vehicle_id',
-                    referencedTable: 'vehicles',
-                    newConstraintName: 'vehicle_photos_vehicle_id_foreign_restrict',
-                    onDeleteClause: 'ON DELETE RESTRICT',
-                );
+                $fixes[] = [
+                    'column' => 'vehicle_id',
+                    'referencedTable' => 'vehicles',
+                    'newConstraintName' => 'vehicle_photos_vehicle_id_foreign_restrict',
+                    'onDeleteClause' => 'ON DELETE RESTRICT',
+                ];
             }
 
             if ($uploadedByNeedsFix) {
-                $this->replaceForeignKeyAtomically(
-                    column: 'uploaded_by',
-                    referencedTable: 'users',
-                    newConstraintName: 'vehicle_photos_uploaded_by_foreign_restrict',
-                    onDeleteClause: 'ON DELETE RESTRICT',
-                    modifyColumnClause: 'MODIFY `uploaded_by` BIGINT UNSIGNED NOT NULL',
-                );
+                $fixes[] = [
+                    'column' => 'uploaded_by',
+                    'referencedTable' => 'users',
+                    'newConstraintName' => 'vehicle_photos_uploaded_by_foreign_restrict',
+                    'onDeleteClause' => 'ON DELETE RESTRICT',
+                    'modifyColumnClause' => 'MODIFY `uploaded_by` BIGINT UNSIGNED NOT NULL',
+                ];
             }
+
+            // Both fixes (when both are needed, the common first-run case) are
+            // issued as ONE combined ALTER TABLE statement, not two sequential
+            // ones — see replaceForeignKeysAtomically(). This removes any
+            // dependency on a table lock surviving across multiple DDL
+            // statements: there is at most one ALTER TABLE for the whole method.
+            $this->replaceForeignKeysAtomically($fixes);
         });
     }
 
@@ -135,24 +146,30 @@ return new class extends Migration
                 $this->assertNoOrphanedForeignKeyValues('uploaded_by', 'users');
             }
 
+            $fixes = [];
+
             if ($vehicleIdNeedsFix) {
-                $this->replaceForeignKeyAtomically(
-                    column: 'vehicle_id',
-                    referencedTable: 'vehicles',
-                    newConstraintName: 'vehicle_photos_vehicle_id_foreign',
-                    onDeleteClause: 'ON DELETE CASCADE',
-                );
+                $fixes[] = [
+                    'column' => 'vehicle_id',
+                    'referencedTable' => 'vehicles',
+                    'newConstraintName' => 'vehicle_photos_vehicle_id_foreign',
+                    'onDeleteClause' => 'ON DELETE CASCADE',
+                ];
             }
 
             if ($uploadedByNeedsFix) {
-                $this->replaceForeignKeyAtomically(
-                    column: 'uploaded_by',
-                    referencedTable: 'users',
-                    newConstraintName: 'vehicle_photos_uploaded_by_foreign',
-                    onDeleteClause: 'ON DELETE SET NULL',
-                    modifyColumnClause: 'MODIFY `uploaded_by` BIGINT UNSIGNED NULL',
-                );
+                $fixes[] = [
+                    'column' => 'uploaded_by',
+                    'referencedTable' => 'users',
+                    'newConstraintName' => 'vehicle_photos_uploaded_by_foreign',
+                    'onDeleteClause' => 'ON DELETE SET NULL',
+                    'modifyColumnClause' => 'MODIFY `uploaded_by` BIGINT UNSIGNED NULL',
+                ];
             }
+
+            // Same single-combined-statement discipline as up(): at most one
+            // ALTER TABLE for the whole rollback.
+            $this->replaceForeignKeysAtomically($fixes);
         });
     }
 
@@ -166,21 +183,17 @@ return new class extends Migration
      * $callback. Defense in depth only (see class-level comment): reduces spurious
      * failures under real concurrent load by serializing writes around the
      * check-then-alter sequence, but the core "never left without adequate FK
-     * protection" guarantee comes from replaceForeignKeyAtomically()'s use of a
-     * single atomic ALTER TABLE statement, not from this lock.
+     * protection" guarantee comes from replaceForeignKeysAtomically()'s use of a
+     * single atomic ALTER TABLE statement per call, not from this lock — and
+     * because that method combines every column that needs fixing into that one
+     * statement, up()/down() never issue more than one ALTER TABLE each, so there
+     * is no second DDL statement whose safety would depend on this lock spanning
+     * multiple ALTERs in the first place.
      *
      * Verified against a live MariaDB 10.11.18 server (this project's actual DB):
      * a second connection's INSERT into vehicle_photos blocks while this lock is
-     * held and hits lock_wait_timeout. Specifically re-verified for the case where
-     * up()/down() call this once and issue TWO sequential ALTER TABLE statements
-     * inside it (one per column, both via replaceForeignKeyAtomically()): a
-     * diagnostic run of the exact same statements with an artificial multi-second
-     * pause inserted between the vehicle_id ALTER and the uploaded_by ALTER, with a
-     * second process hammering INSERT INTO vehicle_photos throughout, showed writes
-     * blocked continuously — including attempts that landed squarely inside that
-     * pause, nowhere near either ALTER statement — until UNLOCK TABLES ran after
-     * the second ALTER completed. The lock is held once for the whole callback and
-     * is not released or re-acquired between the two ALTERs.
+     * held and hits lock_wait_timeout, for the duration of a combined multi-column
+     * ALTER TABLE statement.
      */
     private function withTableLock(\Closure $callback): void
     {
@@ -203,49 +216,60 @@ return new class extends Migration
     }
 
     /**
-     * Replace whatever FK currently exists on $column (if any) with a new one, in a
-     * single ALTER TABLE statement combining DROP FOREIGN KEY, an optional column
-     * nullability change, and ADD CONSTRAINT. InnoDB executes this as one atomic
-     * operation: it cannot leave the column with the old FK dropped and the new one
-     * not yet added, because from the database's point of view there is no
-     * intermediate state to observe — the statement either fully lands or fully
-     * fails, leaving $column exactly as it was before.
+     * Replace whatever FK currently exists on each fixed column (if any) with a new
+     * one, all in a SINGLE ALTER TABLE statement combining every column's DROP
+     * FOREIGN KEY, optional nullability change, and ADD CONSTRAINT clause. This is
+     * what actually removes the "does the table lock survive across multiple ALTER
+     * TABLE statements" question for the common case where both vehicle_id and
+     * uploaded_by need fixing: there is only ever at most one ALTER TABLE per
+     * up()/down() call, so there's no second statement for a released lock (were
+     * it ever released, which separate testing shows it isn't) to matter for.
      *
-     * $newConstraintName is a fixed, deliberately-chosen name per call site, but the
-     * CURRENT constraint's actual name isn't guaranteed to differ from it: earlier
-     * revisions of this same migration (and the SQLite code path above, which lets
-     * Laravel's Blueprint pick its own default name) hardened columns using
-     * Laravel's plain default naming convention rather than this file's current
-     * suffixed names. If an environment's column was hardened by one of those, its
-     * current name can collide with $newConstraintName here. MariaDB rejects a
-     * single statement that DROPs and ADDs a FOREIGN KEY under the identical name
-     * (errno 121, duplicate key) — so detect that collision and disambiguate the
-     * new name at runtime rather than assuming it never happens.
+     * InnoDB executes one ALTER TABLE statement, however many clauses it has, as
+     * one atomic operation: it either fully lands or fully rolls back, leaving
+     * every listed column exactly as it was before if anything in it fails —
+     * there's no partial-application state where some columns' fixes landed and
+     * others didn't.
+     *
+     * Each $fixes entry is ['column', 'referencedTable', 'newConstraintName',
+     * 'onDeleteClause', 'modifyColumnClause'? ]. newConstraintName is a fixed,
+     * deliberately-chosen name per call site, but the CURRENT constraint's actual
+     * name isn't guaranteed to differ from it: earlier revisions of this same
+     * migration (and the SQLite code path above, which lets Laravel's Blueprint
+     * pick its own default name) hardened columns using Laravel's plain default
+     * naming convention rather than this file's current suffixed names. If an
+     * environment's column was hardened by one of those, its current name can
+     * collide with the desired new name. MariaDB rejects a single statement that
+     * DROPs and ADDs a FOREIGN KEY under the identical name (errno 121, duplicate
+     * key) — so detect that collision per column and disambiguate at runtime
+     * rather than assuming it never happens.
      */
-    private function replaceForeignKeyAtomically(
-        string $column,
-        string $referencedTable,
-        string $newConstraintName,
-        string $onDeleteClause,
-        ?string $modifyColumnClause = null,
-    ): void {
-        $current = $this->currentForeignKey($column);
-
-        if ($current && $current->CONSTRAINT_NAME === $newConstraintName) {
-            $newConstraintName .= '_'.substr(md5(uniqid((string) mt_rand(), true)), 0, 8);
+    private function replaceForeignKeysAtomically(array $fixes): void
+    {
+        if ($fixes === []) {
+            return;
         }
 
         $clauses = [];
 
-        if ($current) {
-            $clauses[] = 'DROP FOREIGN KEY `'.$current->CONSTRAINT_NAME.'`';
-        }
+        foreach ($fixes as $fix) {
+            $current = $this->currentForeignKey($fix['column']);
+            $newConstraintName = $fix['newConstraintName'];
 
-        if ($modifyColumnClause) {
-            $clauses[] = $modifyColumnClause;
-        }
+            if ($current && $current->CONSTRAINT_NAME === $newConstraintName) {
+                $newConstraintName .= '_'.substr(md5(uniqid((string) mt_rand(), true)), 0, 8);
+            }
 
-        $clauses[] = "ADD CONSTRAINT `{$newConstraintName}` FOREIGN KEY (`{$column}`) REFERENCES `{$referencedTable}` (`id`) {$onDeleteClause}";
+            if ($current) {
+                $clauses[] = 'DROP FOREIGN KEY `'.$current->CONSTRAINT_NAME.'`';
+            }
+
+            if (! empty($fix['modifyColumnClause'])) {
+                $clauses[] = $fix['modifyColumnClause'];
+            }
+
+            $clauses[] = "ADD CONSTRAINT `{$newConstraintName}` FOREIGN KEY (`{$fix['column']}`) REFERENCES `{$fix['referencedTable']}` (`id`) {$fix['onDeleteClause']}";
+        }
 
         DB::statement('ALTER TABLE `'.self::TABLE.'` '.implode(', ', $clauses));
     }
