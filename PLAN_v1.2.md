@@ -193,8 +193,14 @@ Resource 原則：
 - [ ] 不回傳 preparing / reserved / sold / cancelled
 - [ ] 不回傳 purchase_price / floor_price / sold_price
 - [ ] 不回傳 buyer / seller / customer / money_entries / cost / gross_profit / cash_account
-- [ ] 建議加基本 pagination
+- [ ] 實作 pagination，建議用 `page` / `per_page` 參數（例如 `?page=1&per_page=20`）
 - [ ] 若未來官網與後台不同 domain，需確認 CORS 設定
+
+### 4.3 Public API 安全
+
+- [ ] 公開 API 錯誤回應應只回傳必要訊息，不洩漏內部細節
+- [ ] 例如 404 Not Found 時只回傳 `{"message":"Vehicle not found"}`，不回傳敏感的 database / SQL 訊息
+- [ ] 禁止在公開 API 回傳任何 internal notes、approval_status、idempotency_key
 
 ---
 
@@ -259,13 +265,16 @@ Resource 原則：
 
 ### 7.1 VehiclePhotoTest
 
+基礎功能與權限測試（單序列執行）：
+
 - [ ] admin 可上傳照片
 - [ ] manager 可上傳照片
 - [ ] sales 不可上傳照片
 - [ ] 未登入不可上傳照片
 - [ ] sales 可讀照片列表
 - [ ] 第一張照片自動成為封面
-- [ ] 設封面會取消同車其他封面
+- [ ] 第二張、第三張上傳不會成為封面
+- [ ] 手動設定封面會取消同車其他封面
 - [ ] 刪除封面會自動補封面
 - [ ] 可重新排序照片
 - [ ] 跨車輛 photo id reorder 被拒絕
@@ -286,6 +295,12 @@ Resource 原則：
 - [ ] public API 不回傳 money_entries
 - [ ] public API 不回傳 gross_profit / cost summary / cash_account
 - [ ] public API 可未登入讀取
+
+### 7.2.5 MySQL 並發測試（可選，v1.2.x 再補）
+
+**v1.2 簡化版本說明**：
+
+同車輛的 `is_cover=true` 唯一性由 database unique constraint 或 trigger 保護，簡單測試驗證即可。真實並發測試（參考 `VehicleCreateMysqlConcurrencyTest` 的 `pcntl_fork` 模式）可留到後續版本或實務碰到問題時補充。
 
 ### 7.3 Regression
 
@@ -357,6 +372,7 @@ v1.2 不做：
 - [ ] 直接導入 Cloudflare R2 作為必做項
 - [ ] 通用附件系統
 - [ ] OCR
+- [ ] Sales 上傳照片（暫不開放，避免初期資料治理混亂；未來若需要，建議設計為待審核模式再開放）
 
 ---
 
