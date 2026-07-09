@@ -90,16 +90,29 @@ class VehiclePhotoImageProcessorTest extends TestCase
         Storage::disk('public')->assertExists($result['path']);
     }
 
+    public function test_default_cap_accepts_high_resolution_camera_output(): void
+    {
+        Storage::fake('public');
+
+        // 不覆寫 config，用 6000x4000（剛好 24MP，也是 config 註解裡拿來當門檻依據的
+        // 實測案例本身）驗證正式門檻真的涵蓋一般相機/高階手機的直出解析度，而不是
+        // 連帶把設計目的（縮小存放高畫素照片）本身也擋掉。
+        $processor = app(VehiclePhotoImageProcessor::class);
+        $result = $processor->process($this->fakeJpegUploadedFile(6000, 4000), vehicleId: 42);
+
+        Storage::disk('public')->assertExists($result['path']);
+    }
+
     public function test_default_cap_rejects_image_above_measured_safe_threshold(): void
     {
         Storage::fake('public');
 
-        // 不覆寫 config，用超過正式 13MP 門檻的壓縮圖片（4200x3100 ≈ 13.02MP）驗證
+        // 不覆寫 config，用超過正式 24MP 門檻的壓縮圖片（6200x4000 = 24.8MP）驗證
         // 生產設定值真的會擋下，而不是只在單元測試裡人為調低門檻才擋得住。
         $processor = app(VehiclePhotoImageProcessor::class);
 
         $this->expectException(ValidationException::class);
-        $processor->process($this->fakeJpegUploadedFile(4200, 3100), vehicleId: 42);
+        $processor->process($this->fakeJpegUploadedFile(6200, 4000), vehicleId: 42);
     }
 
     public function test_delete_is_idempotent_when_files_already_missing(): void
