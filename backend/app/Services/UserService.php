@@ -173,9 +173,18 @@ class UserService
             // a vehicle/money entry that referenced this user and committed afterward -
             // and the delete below would then fail on the FK constraint with an
             // unhandled 500 instead of this graceful 422.
+            // VehiclePhoto::withTrashed()：VehiclePhoto 有 SoftDeletes（見
+            // VehiclePhotoService::deletePhoto() 的 tombstone 設計），一筆照片被刪除
+            // 後，storage 清理完成前仍可能以 soft-deleted tombstone row 的型態留著，
+            // 物理上仍持有指向這個使用者、ON DELETE RESTRICT 的 uploaded_by 外鍵。
+            // 若這裡只查一般 scope（自動排除 soft-deleted），tombstone 存在時會誤判
+            // 為「沒有相關紀錄」而放行，讓下面 delete() 才在外鍵限制上失敗（Codex
+            // adversarial review 指出）。下面雖然已有 QueryException 防線把這種失敗
+            // 轉成友善 422，但這裡先用 withTrashed() 照到 tombstone，能更準確、更早
+            // 給出正確訊息，而不是依賴防線兜底。
             $hasRelatedRecords = Vehicle::query()->where('created_by', $user->id)->orWhere('updated_by', $user->id)->lockForUpdate()->exists()
                 || MoneyEntry::query()->where('created_by', $user->id)->orWhere('updated_by', $user->id)->lockForUpdate()->exists()
-                || VehiclePhoto::query()->where('uploaded_by', $user->id)->lockForUpdate()->exists();
+                || VehiclePhoto::withTrashed()->where('uploaded_by', $user->id)->lockForUpdate()->exists();
 
             if ($hasRelatedRecords) {
                 throw ValidationException::withMessages([
@@ -242,7 +251,7 @@ class UserService
         // that's fine to skip, since a row that no longer exists can't count
         // toward "remaining admins" either way. Only the target row missing is
         // an actual error for this operation.
-        $locked = new Collection();
+        $locked = new Collection;
         foreach ($candidateIds as $id) {
             $lockedUser = User::query()->lockForUpdate()->find($id);
 

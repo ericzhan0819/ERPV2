@@ -8,6 +8,7 @@ use App\Models\VehiclePhoto;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class VehiclePhotoService
@@ -152,14 +153,29 @@ class VehiclePhotoService
             }
         });
 
-        // 已經在上面的 transaction 內對外隱藏，這裡的 storage 清理即使失敗或中斷，
-        // 都不會讓已刪除的照片重新變成可公開存取，也不會讓 DB 落入不一致的狀態；
-        // 只是這個 tombstone row 會繼續保留。「之後可以安全重試」必須有實際會被
-        // 呼叫到的程式碼才算數，不能只是註解說說——soft-deleted row 預設會被
-        // Eloquent 的 global scope 排除在一般查詢與 route model binding 之外，
-        // 沒有任何其他程式路徑會再摸到它，若沒有 purgeTrashedPhotos() 主動掃描
-        // 並重試，這個 tombstone 就會永遠卡住（Codex adversarial review 指出）。
-        $this->finalizePhysicalDeletion($photo);
+        // 對使用者而言，「刪除」這個動作在上面的 transaction commit 那一刻就已經
+        // 真正、永久生效：這張照片從此不會出現在任何查詢、任何 API 回應中。這裡的
+        // storage 實體清理只是收尾動作，失敗時不能讓呼叫端看到「刪除失敗」——因為
+        // 那是一句謊言：邏輯刪除早已成功且不可逆，使用者能觀察到的所有行為都已經
+        // 是「這張照片不存在了」。若把這裡的例外往外拋，呼叫端唯一能做的「重試」
+        // 就是再打一次同樣的 DELETE API，但 route model binding 預設排除
+        // soft-deleted row，那個請求只會拿到 404，永遠無法真的完成清理，等於把一個
+        // 已經成功的操作包裝成一個無法透過正常 API 重試修復的失敗（Codex
+        // adversarial review 指出）。因此這裡吞下例外：storage 清理失敗只留下
+        // tombstone row，交由 purgeTrashedPhotos()（vehicle-photos:purge-trashed
+        // 指令）之後重試，不影響這次刪除請求本身回報成功。
+        try {
+            $this->finalizePhysicalDeletion($photo);
+        } catch (\Throwable $e) {
+            // 不往外拋（見上方註解），但仍記錄下來，避免 tombstone 累積卻完全沒人
+            // 知道，需要靠人工執行 vehicle-photos:purge-trashed 才會發現。
+            Log::warning('車輛照片 storage 清理失敗，留下 tombstone 待重試', [
+                'vehicle_photo_id' => $photo->id,
+                'disk' => $photo->disk,
+                'path' => $photo->path,
+                'exception' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

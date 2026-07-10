@@ -10,6 +10,8 @@ use App\Models\Vehicle;
 use App\Models\VehiclePhoto;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -43,6 +45,8 @@ class VehicleService
         'seller_name', 'seller_phone', 'seller_customer_id',
         'purchase_price', 'asking_price', 'floor_price', 'sales_note', 'notes',
     ];
+
+    private const MYSQL_ERROR_FOREIGN_KEY_CONSTRAINT_FAILS = 1451;
 
     private const BOOLEAN_VEHICLE_FIELDS = [
         'has_registration_document',
@@ -149,6 +153,7 @@ class VehicleService
 
             if (in_array($field, self::BOOLEAN_VEHICLE_FIELDS, true)) {
                 $comparable[$field] = array_key_exists($field, $vehicleData) ? (bool) $vehicleData[$field] : false;
+
                 continue;
             }
 
@@ -184,7 +189,7 @@ class VehicleService
 
         foreach (['purchase_date', 'listing_date'] as $field) {
             if (array_key_exists($field, $data) && $data[$field] !== null) {
-                $data[$field] = \Illuminate\Support\Carbon::parse($data[$field])->toDateString();
+                $data[$field] = Carbon::parse($data[$field])->toDateString();
             }
         }
 
@@ -208,7 +213,7 @@ class VehicleService
         // 原始輸入不做正規化，重試比對時會拿「date 欄位存回的純日期」對「原始 datetime
         // 字串」，兩者永遠對不上，導致完全相同的重試被誤判成不同 payload 而 422。
         $entryDate = $entryDateWasSupplied
-            ? \Illuminate\Support\Carbon::parse($paymentInput['entry_date'])->toDateString()
+            ? Carbon::parse($paymentInput['entry_date'])->toDateString()
             : now()->toDateString();
 
         return [
@@ -502,7 +507,16 @@ class VehicleService
                 ]);
             }
 
-            $hasPhotos = VehiclePhoto::query()
+            // withTrashed()：VehiclePhoto 有 SoftDeletes（見
+            // VehiclePhotoService::deletePhoto() 的 tombstone 設計），一筆照片被
+            // 使用者「刪除」後，storage 清理完成前仍可能以 soft-deleted tombstone
+            // row 的型態留在資料表裡，物理上仍持有指向這台車、ON DELETE RESTRICT
+            // 的外鍵。若這裡只查一般 scope（自動排除 soft-deleted），tombstone 存在
+            // 時這個檢查會誤判為「沒有照片」而放行，讓下面 $lockedVehicle->delete()
+            // 直接撞上外鍵限制、噴出未被攔截的 QueryException（Codex adversarial
+            // review 指出）。改用 withTrashed() 讓這個檢查照到 tombstone row，才能
+            // 準確且提前給出友善錯誤訊息。
+            $hasPhotos = VehiclePhoto::withTrashed()
                 ->where('vehicle_id', $lockedVehicle->id)
                 ->exists();
 
@@ -512,7 +526,22 @@ class VehicleService
                 ]);
             }
 
-            $lockedVehicle->delete();
+            // 上面的 hasPhotos 檢查理論上已經涵蓋所有情況，這裡加一層防線：萬一還是
+            // 有檢查沒想到的殘留外鍵參照（例如未來新增其他指向 vehicles 的 RESTRICT
+            // 外鍵、卻忘了在這裡一併檢查），把原始外鍵錯誤轉成同樣的友善 422，而不是
+            // 讓未攔截的 QueryException 變成未處理的 500（比照 UserService::deleteUser()
+            // 既有的防線寫法）。
+            try {
+                $lockedVehicle->delete();
+            } catch (QueryException $e) {
+                if ((int) ($e->errorInfo[1] ?? 0) === self::MYSQL_ERROR_FOREIGN_KEY_CONSTRAINT_FAILS) {
+                    throw ValidationException::withMessages([
+                        'status' => ['此車輛仍有相關紀錄，不得刪除'],
+                    ]);
+                }
+
+                throw $e;
+            }
         });
     }
 
@@ -1206,7 +1235,7 @@ class VehicleService
     }
 
     /**
-     * @return array{printed_at: string, vehicle: Vehicle, summary: array{income_total: int, expense_total: int, gross_profit: int}, money_entries: \Illuminate\Support\Collection<int, MoneyEntry>}
+     * @return array{printed_at: string, vehicle: Vehicle, summary: array{income_total: int, expense_total: int, gross_profit: int}, money_entries: Collection<int, MoneyEntry>}
      */
     public function printClosingData(Vehicle $vehicle): array
     {
