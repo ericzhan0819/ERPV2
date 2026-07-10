@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'idempotency_key',
     'idempotency_payload',
     'photo_ids',
+    'processing_lease_expires_at',
 ])]
 class VehiclePhotoUploadBatch extends Model
 {
@@ -18,6 +19,7 @@ class VehiclePhotoUploadBatch extends Model
     {
         return [
             'photo_ids' => 'array',
+            'processing_lease_expires_at' => 'datetime',
         ];
     }
 

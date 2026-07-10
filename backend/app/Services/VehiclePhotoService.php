@@ -41,44 +41,54 @@ class VehiclePhotoService
         // 一次上傳會建立多張照片，無法讓多筆 vehicle_photos row 共用同一個 unique
         // idempotency_key（沿用 vehicles/money_entries 既有的「unique key + payload
         // 快照比對」模式，但用獨立的 vehicle_photo_upload_batches 記錄表記這次請求的
-        // 檔案內容快照）。網路逾時、瀏覽器重複送出或 proxy 重試帶著同一把 key 重打這個
-        // 端點時，內容相同就直接回傳當初建立的照片、不重複建立；內容不同則拒絕（Codex
-        // adversarial review 指出先前完全沒有這層保護，重試會不斷疊加重複照片並吃掉
-        // 每台車 60 張上限）。
+        // 檔案內容快照與目前已完成的 photo_ids）。網路逾時、瀏覽器重複送出或 proxy
+        // 重試帶著同一把 key 重打這個端點時，內容相同就直接回傳當初建立的照片、不
+        // 重複建立；內容不同則拒絕（Codex adversarial review 指出先前完全沒有這層
+        // 保護，重試會不斷疊加重複照片並吃掉每台車 60 張上限）。
         $payload = $this->buildUploadPayload($vehicle, $files);
-        ['batch' => $batch, 'isNew' => $isNew] = $this->beginUploadBatch($vehicle, $idempotencyKey, $payload);
+        $begin = $this->beginUploadBatch($vehicle, $idempotencyKey, $payload);
+        $batch = $begin['batch'];
 
-        if (! $isNew) {
-            return VehiclePhoto::query()
-                ->whereIn('id', $batch->photo_ids ?? [])
-                ->orderBy('sort_order')
-                ->get();
+        if ($begin['mode'] === 'replay') {
+            return $this->photosInOrder($batch->photo_ids ?? []);
         }
 
-        $created = [];
+        // 'new' 模式從頭開始（$alreadyDoneIds 為空）；'resume' 模式是續傳一批 TTL 過期、
+        // 前一次處理程序已放棄的批次，$alreadyDoneIds 是它上次成功處理到的檔案清單
+        // （依 payload 的檔案順序），只需要接著處理剩下的檔案，不重做已經真的建立過
+        // 照片的部分（Codex adversarial review 第三輪指出：先前版本回收逾時批次時會
+        // 整批重新處理，對已經部分完成的批次而言等於系統性重複建立照片）。
+        $alreadyDoneIds = $batch->photo_ids ?? [];
+        $alreadyDonePhotos = $this->photosInOrder($alreadyDoneIds)->all();
+        $filesToProcess = array_slice($files, count($alreadyDoneIds));
+
+        $created = $alreadyDonePhotos;
+        $newlyCreatedThisCall = [];
 
         // 圖片解碼/編碼（process()）刻意放在 DB transaction 之外執行：
         // VehiclePhotoImageProcessor 內部已用全域 lock 保護並發記憶體風險，若整段
         // 包進單一 DB transaction，會讓資料庫連線在漫長的圖片處理期間被佔用。每個
         // 檔案各自 process → create，任一步驟失敗都會清理「這個檔案自己」寫入的
-        // storage 檔案，並回溯刪除本次請求中先前已成功建立的照片與檔案，確保不會
-        // 留下沒有 DB row 的孤兒檔案（PLAN v1.2 第 2.5 節：檔案寫入失敗時不可留下
-        // DB row，DB 寫入失敗時要有檔案清理策略）。
+        // storage 檔案（PLAN v1.2 第 2.5 節：檔案寫入失敗時不可留下 DB row，DB 寫入
+        // 失敗時要有檔案清理策略）。
         //
-        // 每張照片的「每台車照片上限 / 封面 / sort_order」計算與寫入都包在同一個
-        // transaction 內，並先用 lockForUpdate() 鎖住該車輛的 row：若不鎖，兩個
-        // 使用者同時對同一台車上傳照片時，各自讀到的既有照片數 / 封面狀態 /
+        // 每張照片的「每台車照片上限 / 封面 / sort_order / 寫回 batch.photo_ids」都
+        // 包在同一個 transaction 內，並先用 lockForUpdate() 鎖住該車輛的 row：若不鎖，
+        // 兩個使用者同時對同一台車上傳照片時，各自讀到的既有照片數 / 封面狀態 /
         // 最大 sort_order 都可能是同一份舊快照，導致兩者都以為自己是第一張封面、
         // sort_order 互撞，或兩者各自檢查上限都通過但疊加起來超過
         // max_photos_per_vehicle（Codex adversarial review 指出）。用同一台車的
-        // row lock 把「檢查上限 + 決定封面 + 決定 sort_order + 寫入」序列化，
-        // 確保並發請求看到的一定是彼此的最新結果。
+        // row lock 把「檢查上限 + 決定封面 + 決定 sort_order + 寫入 + 更新
+        // batch.photo_ids」序列化，確保並發請求看到的一定是彼此的最新結果，也確保
+        // 每張照片一旦 commit，這次上傳的進度就同時、原子性地反映在 batch 上——不會
+        // 出現「照片已建立、但 batch.photo_ids 還沒更新」的中間狀態，之後不管是續傳
+        // 還是回放都一定看得到跟實際 DB 一致的進度。
         try {
-            foreach ($files as $file) {
+            foreach ($filesToProcess as $file) {
                 $data = $this->processor->process($file, $vehicle->id);
 
                 try {
-                    $photo = DB::transaction(function () use ($vehicle, $user, $data, $config) {
+                    $photo = DB::transaction(function () use ($vehicle, $user, $data, $config, $batch) {
                         Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
 
                         $currentCount = VehiclePhoto::where('vehicle_id', $vehicle->id)->count();
@@ -91,13 +101,17 @@ class VehiclePhotoService
                         $hasCover = VehiclePhoto::where('vehicle_id', $vehicle->id)->where('is_cover', true)->exists();
                         $nextSortOrder = (int) (VehiclePhoto::where('vehicle_id', $vehicle->id)->max('sort_order') ?? -1) + 1;
 
-                        return VehiclePhoto::create([
+                        $photo = VehiclePhoto::create([
                             ...$data,
                             'vehicle_id' => $vehicle->id,
                             'sort_order' => $nextSortOrder,
                             'is_cover' => ! $hasCover,
                             'uploaded_by' => $user->id,
                         ]);
+
+                        $batch->update(['photo_ids' => [...($batch->photo_ids ?? []), $photo->id]]);
+
+                        return $photo;
                     });
                 } catch (\Throwable $e) {
                     $this->processor->delete($data['disk'], $data['path'], $data['thumbnail_path']);
@@ -106,62 +120,92 @@ class VehiclePhotoService
                 }
 
                 $created[] = $photo;
+                $newlyCreatedThisCall[] = $photo;
             }
         } catch (\Throwable $e) {
-            foreach ($created as $photo) {
-                // 這些照片從未在任何 transaction 外被讀取過（整批上傳都還沒成功
-                // 回應），沒有「已經被其他人看到、需要先隱藏」的顧慮，直接
-                // finalizePhysicalDeletion() 清 storage + forceDelete()，避免留下
-                // 用不到的 soft-delete tombstone row。
+            foreach ($newlyCreatedThisCall as $photo) {
+                // 維持既有的「單次請求整批要嘛全部成功、要嘛全部不算數」語意：只要
+                // 這批檔案裡有任何一個失敗，這次呼叫自己建立的照片全部回滾刪除，不
+                // 留下「5 張只成功 2 張」這種讓使用者困惑的半成品。$alreadyDonePhotos
+                // 是續傳一批「先前某次呼叫」已經真的成功建立、且原本就記錄在
+                // batch.photo_ids 的照片，不屬於這次失敗、不能被牽連刪除。這些
+                // 剛建立的照片從未在任何 transaction 外被讀取過，沒有「已經被其他人
+                // 看到、需要先隱藏」的顧慮，直接 finalizePhysicalDeletion() 清
+                // storage + forceDelete()，避免留下用不到的 soft-delete tombstone row。
                 $this->finalizePhysicalDeletion($photo);
             }
 
-            // 這批上傳整體失敗，$batch 的 photo_ids 會永遠是 null。刪除這筆 reservation
-            // row，讓使用者用同一把 idempotency_key 重新送出時，能被當成全新的第一次
-            // 嘗試乾淨地重試，而不是永遠卡在「payload 相同、但 photo_ids 一直是 null」
-            // 的半殘狀態、被 beginUploadBatch() 誤判成「仍在處理中」而拒絕重試。
-            $batch->delete();
+            // 上面已經把這次呼叫自己建立的照片全部刪除，batch.photo_ids 也必須跟著
+            // 復原回這次呼叫開始前的進度（$alreadyDoneIds），不能繼續指向剛剛已經
+            // forceDelete() 的 id——否則之後的回放/續傳會拿著一批不存在的 photo id
+            // 去查詢，得到殘缺結果。同時清空 processing_lease_expires_at：這裡的例外
+            // 是我們自己的 PHP 呼叫堆疊在拋出、一定會被這個 catch 接住，代表這次請求
+            // 已經確定結束（不是 worker 被殺、fatal error 這種完全跳過 catch 的情境），
+            // 可以確定沒有其他人還在使用這個 batch，安全地讓下一個帶著同一把 key 的
+            // 請求不需要等到租約自然到期，就能立刻從 $alreadyDoneIds 續傳。
+            try {
+                $batch->update([
+                    'photo_ids' => $alreadyDoneIds,
+                    'processing_lease_expires_at' => null,
+                ]);
+            } catch (\Throwable $updateException) {
+                // 只是收尾動作失敗，不影響已經確定要往外拋的原始例外；最壞情況只是
+                // 下一次同把 key 的請求要多等到租約自然過期才能續傳，不會遺失任何
+                // 已經建立的照片，記錄下來即可。
+                Log::warning('車輛照片上傳批次失敗後復原進度失敗', [
+                    'vehicle_id' => $vehicle->id,
+                    'idempotency_key' => $batch->idempotency_key,
+                    'exception' => $updateException->getMessage(),
+                ]);
+            }
 
             throw $e;
         }
 
-        // 所有照片都已經在各自的 transaction 內成功 commit——對使用者而言這次上傳已經
-        // 真正成功了，接下來只是把 photo_ids 寫回 reservation row 供未來 replay 使用的
-        // 收尾動作。如果這個 update() 本身失敗（例如當下 DB 連線短暫抖動），不能讓例外
-        // 往外拋：那會讓呼叫端看到「上傳失敗」的假訊息，但照片其實已經建立成功，且
-        // catch 區塊只會清理「這次呼叫自己建立」的照片，反而會產生「回報失敗、但照片
-        // 其實留著」的不一致。更嚴重的是，若放著 $batch 不管，它會永遠卡在
-        // payload 相符、但 photo_ids 仍是 null 的狀態，之後任何用同一把
-        // idempotency_key 的重試都會被 beginUploadBatch() 誤判成「仍在處理中」而永遠
-        // 卡死，沒有任何後續請求能修復——這比單純的重複建立照片更糟，因為它讓這把
-        // key 完全無法再使用。因此這裡吞下例外，盡力刪除這筆 reservation row：刪除
-        // 成功的話，之後用同一把 key 重試會被當成全新的第一次嘗試（在這個極罕見的
-        // 雙重失敗窗口內，代價是可能重複建立這批照片，而不是永久卡死），仍然遠優於
-        // 讓 key 永久失效。
-        try {
-            $batch->update(['photo_ids' => array_map(fn (VehiclePhoto $photo) => $photo->id, $created)]);
-        } catch (\Throwable $e) {
-            Log::warning('車輛照片批次記錄收尾失敗，嘗試清除 reservation row 避免 idempotency_key 永久卡死', [
-                'vehicle_id' => $vehicle->id,
-                'idempotency_key' => $batch->idempotency_key,
-                'photo_ids' => array_map(fn (VehiclePhoto $photo) => $photo->id, $created),
-                'exception' => $e->getMessage(),
-            ]);
-
-            try {
-                $batch->delete();
-            } catch (\Throwable $deleteException) {
-                // 連刪除都失敗代表 DB 當下真的不可用，這種狀況下這把 key 仍可能卡死，
-                // 但已經超出這次請求能自行修復的範圍，只能留下明確的 log 供人工排查。
-                Log::warning('車輛照片批次 reservation row 清除失敗，idempotency_key 可能暫時無法重試', [
-                    'vehicle_id' => $vehicle->id,
-                    'idempotency_key' => $batch->idempotency_key,
-                    'exception' => $deleteException->getMessage(),
-                ]);
-            }
-        }
+        // 全部檔案都處理完成：batch.photo_ids 已經跟著每個檔案同步更新到位，長度會
+        // 剛好等於這次請求的檔案總數，之後 beginUploadBatch() 會依此判斷為「已完成」
+        // 直接回放，不需要另外標記完成狀態或再做一次收尾寫入。順手清空租約，避免
+        // 已完成的 row 留著一個之後不會再被檢查、但語意上已經沒有意義的到期時間。
+        $this->clearProcessingLease($batch);
 
         return new Collection($created);
+    }
+
+    /**
+     * @param  array<int, int>  $photoIds
+     * @return Collection<int, VehiclePhoto>
+     */
+    private function photosInOrder(array $photoIds): Collection
+    {
+        if ($photoIds === []) {
+            return new Collection([]);
+        }
+
+        $photosById = VehiclePhoto::query()->whereIn('id', $photoIds)->get()->keyBy('id');
+
+        // 依 photo_ids 記錄的順序回傳，而不是資料庫預設順序，讓回放/續傳的結果跟
+        // 原本上傳的檔案順序一致。理論上這些照片不應該消失（車輛照片刪除是使用者
+        // 明確操作，不是這個機制的正常路徑），但仍用 filter 排除任何已經不存在的
+        // id，避免對已刪除的照片假造結果。
+        return new Collection(array_values(array_filter(
+            array_map(fn (int $id) => $photosById->get($id), $photoIds)
+        )));
+    }
+
+    private function clearProcessingLease(VehiclePhotoUploadBatch $batch): void
+    {
+        try {
+            $batch->update(['processing_lease_expires_at' => null]);
+        } catch (\Throwable $e) {
+            // 只是收尾的衛生動作（見呼叫端註解），失敗不影響這次請求本身的結果：
+            // 最壞情況只是下一次同把 key 的請求要多等到租約自然到期，不會遺失任何
+            // 已經建立的照片或 batch 進度，記錄下來即可，不需要往外拋。
+            Log::warning('車輛照片上傳批次清空 processing lease 失敗', [
+                'vehicle_id' => $batch->vehicle_id,
+                'idempotency_key' => $batch->idempotency_key,
+                'exception' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -182,18 +226,22 @@ class VehiclePhotoService
 
     /**
      * @param  array<string, mixed>  $payload
-     * @return array{batch: VehiclePhotoUploadBatch, isNew: bool}
+     * @return array{batch: VehiclePhotoUploadBatch, mode: 'new'|'resume'|'replay'}
      */
     private function beginUploadBatch(Vehicle $vehicle, string $idempotencyKey, array $payload): array
     {
+        $leaseSeconds = (int) config('vehicle_photos.upload_batch_pending_ttl_seconds');
+
         try {
             $batch = DB::transaction(fn () => VehiclePhotoUploadBatch::create([
                 'vehicle_id' => $vehicle->id,
                 'idempotency_key' => $idempotencyKey,
                 'idempotency_payload' => json_encode($payload, JSON_THROW_ON_ERROR),
+                'photo_ids' => [],
+                'processing_lease_expires_at' => now()->addSeconds($leaseSeconds),
             ]));
 
-            return ['batch' => $batch, 'isNew' => true];
+            return ['batch' => $batch, 'mode' => 'new'];
         } catch (QueryException $e) {
             if (! $this->isIdempotencyKeyUniqueViolation($e)) {
                 throw $e;
@@ -202,7 +250,7 @@ class VehiclePhotoService
             // 沿用 VehicleService 既有的 race pattern：unique 違反後 rollback，開新
             // transaction 並 lockForUpdate 重新讀取真正贏得這把 key 的 row，避免在同一個
             // 已經失敗的 transaction 裡繼續讀取。
-            return DB::transaction(function () use ($e, $idempotencyKey, $payload) {
+            return DB::transaction(function () use ($e, $vehicle, $idempotencyKey, $payload, $leaseSeconds) {
                 $existing = VehiclePhotoUploadBatch::query()
                     ->where('idempotency_key', $idempotencyKey)
                     ->lockForUpdate()
@@ -213,22 +261,70 @@ class VehiclePhotoService
                 }
 
                 $storedPayload = json_decode((string) $existing->idempotency_payload, true);
-                if (! is_array($storedPayload) || $storedPayload !== $payload) {
+                $payloadMatches = is_array($storedPayload) && $storedPayload === $payload;
+
+                if (! $payloadMatches) {
+                    // 內容不同一律拒絕：即使這把 key 目前還沒完成、甚至根本還沒開始
+                    // 處理，也不能被拿來冒用成另一批完全不同的檔案。
                     throw ValidationException::withMessages([
                         'idempotency_key' => '此 idempotency_key 已用於內容不同的照片上傳請求。',
                     ]);
                 }
 
-                if ($existing->photo_ids === null) {
-                    // 極短暫的合法競態窗口：兩個帶著同一把 key 的請求幾乎同時抵達，
-                    // 第一個已經贏得 reservation row 但檔案處理尚未完成。這裡不能假裝
-                    // 已完成而回傳空結果，也不能卡住等待，直接請使用者稍後重試。
+                $doneCount = count($existing->photo_ids ?? []);
+                $totalCount = count($payload['files']);
+
+                if ($doneCount >= $totalCount) {
+                    // 已完成的批次（photo_ids 長度已達檔案總數）：直接回放。
+                    return ['batch' => $existing, 'mode' => 'replay'];
+                }
+
+                // 尚未完成，可能是 (a) 真的還在處理中（另一個幾乎同時抵達的相同請求，
+                // 或同一個請求自己還沒跑完），也可能是 (b) 前一次處理程序被中止（worker
+                // 被強制中止、fatal error、伺服器重啟）留下的殘留租約，永遠不會有人把
+                // 它跑完（Codex adversarial review 指出：若不處理 (b)，這把 key 會
+                // 永久卡死，需要人工介入資料庫才能恢復）。用 processing_lease_expires_at
+                // 是否仍在未來區分兩者：租約有效一律保守視為 (a) 拒絕；租約已過期（或
+                // 從未設定）才視為 (b) 放棄的殘留，予以續傳認領。
+                //
+                // 租約只在「我們自己的 PHP 呼叫確定結束」時才會被明確清空（見
+                // uploadPhotos() 成功/失敗兩條路徑的 clearProcessingLease()），因此
+                // 「租約已過期」精準對應「前一個擁有者已經真的不在了」，不會誤判成
+                // 「還在跑、只是剛好快超時」——那種情況下租約仍在未來，會落在下面的
+                // else 分支被保守拒絕。
+                $leaseExpired = $existing->processing_lease_expires_at === null
+                    || $existing->processing_lease_expires_at->isPast();
+
+                if (! $leaseExpired) {
                     throw ValidationException::withMessages([
                         'idempotency_key' => '此照片上傳仍在處理中，請稍後再試一次。',
                     ]);
                 }
 
-                return ['batch' => $existing, 'isNew' => false];
+                Log::warning('車輛照片上傳批次租約已過期，視為前一次處理程序已放棄並續傳認領', [
+                    'vehicle_id' => $vehicle->id,
+                    'idempotency_key' => $idempotencyKey,
+                    'batch_id' => $existing->id,
+                    'done_count' => $doneCount,
+                    'total_count' => $totalCount,
+                    'previous_lease_expires_at' => $existing->processing_lease_expires_at?->toISOString(),
+                ]);
+
+                // 續傳認領：只重新核發租約，photo_ids／idempotency_payload 完全不動，
+                // 讓 uploadPhotos() 從 $doneCount 之後接著處理剩下的檔案，不重做已經
+                // 真的建立過照片的部分。
+                //
+                // 殘留風險：若前一次處理程序其實只是跑得比租約久、尚未真正放棄（例如
+                // 主機嚴重過載導致還在處理中的請求遲遲無法呼叫 clearProcessingLease()），
+                // 這裡的續傳認領可能與它同時處理同一批剩餘檔案，兩者各自對「同一個
+                // 缺口」建立照片，造成該區間重複。這是 lease-based 回收機制沒有
+                // fencing token 就無法 100% 杜絕的已知理論限制，與
+                // VehiclePhotoImageProcessor 的圖片處理 lock 屬同一類殘留風險。租約
+                // 時長已設得遠大於實際批次處理所需時間，把這個窗口壓到可接受範圍，
+                // 遠優於讓 key 永久卡死、需要人工清資料庫。
+                $existing->update(['processing_lease_expires_at' => now()->addSeconds($leaseSeconds)]);
+
+                return ['batch' => $existing, 'mode' => 'resume'];
             });
         }
     }

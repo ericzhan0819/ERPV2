@@ -946,6 +946,12 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
   const [loadError, setLoadError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [canRetryUpload, setCanRetryUpload] = useState(false)
+  // 保留失敗嘗試的 idempotency_key 與 File 物件，讓「重試上傳」能用同一把 key 重送
+  // 同一批檔案。若不保留、逼使用者透過檔案選擇器重新選檔，會產生新的 key：若上一次
+  // 請求其實已經在伺服器端成功（例如只是客戶端逾時），新的 key 會被後端當成全新的
+  // 一次上傳，重複建立照片（Codex adversarial review 指出）。
+  const pendingUploadRef = useRef<{ key: string; files: File[] } | null>(null)
   const [busyPhotoId, setBusyPhotoId] = useState<number | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -987,24 +993,44 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
     vehicleIdRef.current = vehicleId
     setPhotos([])
     setLoadError(null)
+    setUploadError(null)
+    setCanRetryUpload(false)
+    pendingUploadRef.current = null
     loadPhotos(vehicleId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vehicleId])
+
+  async function runUpload(idempotencyKey: string, files: File[]) {
+    setUploading(true)
+    setUploadError(null)
+    try {
+      await uploadVehiclePhotos(vehicleId, files, idempotencyKey)
+      pendingUploadRef.current = null
+      setCanRetryUpload(false)
+      loadPhotos(vehicleId)
+    } catch (err) {
+      // 失敗時保留這次的 key 與檔案供「重試上傳」使用（見上方 pendingUploadRef 註解），
+      // 不清除、不重新產生 key。
+      pendingUploadRef.current = { key: idempotencyKey, files }
+      setCanRetryUpload(true)
+      setUploadError(extractErrorMessage(err, '上傳照片失敗，請稍後再試'))
+    } finally {
+      setUploading(false)
+    }
+  }
 
   async function handleFilesSelected(event: React.ChangeEvent<HTMLInputElement>) {
     const files = event.target.files ? Array.from(event.target.files) : []
     event.target.value = ''
     if (files.length === 0) return
-    setUploading(true)
-    setUploadError(null)
-    try {
-      await uploadVehiclePhotos(vehicleId, files, generateIdempotencyKey())
-      loadPhotos(vehicleId)
-    } catch (err) {
-      setUploadError(extractErrorMessage(err, '上傳照片失敗，請稍後再試'))
-    } finally {
-      setUploading(false)
-    }
+    // 使用者透過檔案選擇器主動選了新的一批檔案，視為全新的上傳嘗試（產生新的
+    // idempotency_key），先前失敗、尚未成功的批次即視為放棄，不再保留其重試狀態。
+    await runUpload(generateIdempotencyKey(), files)
+  }
+
+  function handleRetryUpload() {
+    if (!pendingUploadRef.current) return
+    void runUpload(pendingUploadRef.current.key, pendingUploadRef.current.files)
   }
 
   async function handleDelete(photo: VehiclePhoto) {
@@ -1077,7 +1103,21 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
           >
             {uploading ? '上傳中...' : '上傳照片'}
           </button>
-          {uploadError && <p className="text-sm text-error">{uploadError}</p>}
+          {uploadError && (
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-error">{uploadError}</p>
+              {canRetryUpload && (
+                <button
+                  type="button"
+                  disabled={uploading}
+                  onClick={handleRetryUpload}
+                  className="text-sm font-medium text-primary hover:underline disabled:opacity-50"
+                >
+                  重試上傳
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
 

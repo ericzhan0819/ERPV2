@@ -4,6 +4,11 @@
 // 上限比例縮放，不會變成一個跟像素上限脫鉤、之後改了上限卻忘記一起調整的固定數字。
 $maxMegapixels = (float) env('VEHICLE_PHOTOS_MAX_MEGAPIXELS', 24);
 
+// 同樣提前算出來，讓下面 upload_batch_pending_ttl_seconds 的預設值可以依實際單檔
+// 處理 TTL × 單次最多檔案數等比例縮放（見該欄位註解）。
+$processingLockTtlSeconds = (int) env('VEHICLE_PHOTOS_LOCK_TTL_SECONDS', max(120, (int) ceil($maxMegapixels * 5)));
+$maxFilesPerUpload = 20;
+
 return [
 
     /*
@@ -87,14 +92,50 @@ return [
     // 同步調整的固定數字。真的頂到這個 TTL 代表主機已經退化到「一張在上限內的照片、
     // 單一個編碼步驟」都要跑超過 100 秒等級，那種狀況下 OS 通常會先介入（swap 崩潰、
     // OOM killer），已經不是這把 lock 能單獨解決的問題。
-    'processing_lock_ttl_seconds' => (int) env('VEHICLE_PHOTOS_LOCK_TTL_SECONDS', max(120, (int) ceil($maxMegapixels * 5))),
+    'processing_lock_ttl_seconds' => $processingLockTtlSeconds,
 
     // 等不到 lock 就直接回錯誤，不讓 HTTP worker 無限期卡住等待。
     'processing_lock_wait_seconds' => (int) env('VEHICLE_PHOTOS_LOCK_WAIT_SECONDS', 30),
 
-    'max_files_per_upload' => 20, // 一次上傳最多 20 張
+    'max_files_per_upload' => $maxFilesPerUpload, // 一次上傳最多 20 張
 
     'max_photos_per_vehicle' => 60, // 每台車最多 60 張
+
+    // VehiclePhotoService::uploadPhotos() 在建立 vehicle_photo_upload_batches
+    // reservation row 後逐檔處理圖片，每個檔案成功建立照片時都會在同一個 transaction
+    // 內同步把該檔案的進度寫回 batch.photo_ids。若 worker 在處理過程中被強制中止、
+    // 遇到 fatal error，或伺服器重啟，這筆 row 會停在「還沒處理完全部檔案」的狀態，
+    // 需要有辦法讓之後帶著同一把 idempotency_key 的請求安全接手，否則這把 key 會
+    // 永久卡死，需要人工介入資料庫才能恢復（Codex adversarial review 指出：這比單純
+    // 重複建立照片更糟）。
+    //
+    // 解法是給每次「認領」這筆 batch 的處理程序核發一個有時效的租約
+    // （processing_lease_expires_at，見 VehiclePhotoService::beginUploadBatch()）：
+    // 租約仍在未來，代表可能真的還有人在處理，保守拒絕；租約已過期（或從未設定），
+    // 代表前一個擁有者已經放棄，允許下一個帶著同一把 key 的請求續傳認領，只接著處理
+    // batch.photo_ids 裡還沒做完的檔案，不重做已經真的建立過照片的部分。租約在
+    // uploadPhotos() 自己的成功／失敗路徑都會被明確清空，讓「我們自己的 PHP 呼叫確定
+    // 結束」的情況可以立即被下一個請求接手，不需要空等這個 TTL；只有「完全沒有機會
+    // 執行到 catch」的情境（worker 被殺、fatal error）才會讓租約撐到自然過期。
+    //
+    // 這個 TTL 值本身是租約的時長，抓「單檔最長處理時間（processing_lock_ttl_seconds）
+    // × 單次最多檔案數（max_files_per_upload）」，涵蓋「20 個檔案完全序列化排隊等同一把
+    // 全域圖片處理 lock」的最壞情況，並設 900 秒（15 分鐘）下限，避免像素上限調得很低
+    // 時算出過短的 TTL。這樣以後調高 VEHICLE_PHOTOS_MAX_MEGAPIXELS 或
+    // VEHICLE_PHOTOS_LOCK_TTL_SECONDS，這個回收窗口會自動跟著等比例放大，不會變成
+    // 脫鉤的固定數字。
+    //
+    // 這是 lease-based 機制的已知理論限制（與 processing_lock_ttl_seconds 同一類，沒有
+    // fencing token 無法 100% 杜絕）：若前一次處理程序其實只是跑得比租約久、尚未真正
+    // 放棄（例如卡在清空租約那一步之前主機就嚴重過載），這裡的續傳認領可能與它同時
+    // 處理同一批剩餘檔案，兩者各自對同一個缺口建立照片，造成該區間重複。租約時長已
+    // 設得遠大於實際批次處理所需時間，把這個窗口壓到可接受範圍；這個殘留風險遠優於
+    // 「key 永久卡死、需要人工清資料庫」，也遠優於先前版本「回收就整批重新處理」對
+    // 部分完成批次一定會重複的問題。
+    'upload_batch_pending_ttl_seconds' => (int) env(
+        'VEHICLE_PHOTOS_UPLOAD_BATCH_PENDING_TTL_SECONDS',
+        max(900, $processingLockTtlSeconds * $maxFilesPerUpload)
+    ),
 
     /*
     |--------------------------------------------------------------------------
