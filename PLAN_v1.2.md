@@ -202,6 +202,7 @@ Resource 原則：
 - [x] 公開 API 錯誤回應應只回傳必要訊息，不洩漏內部細節
 - [x] 例如 404 Not Found 時只回傳 `{"message":"Vehicle not found"}`，不回傳敏感的 database / SQL 訊息（`PublicVehicleController::show()` 刻意不用 implicit route model binding，自行查詢並丟出固定訊息的 `NotFoundHttpException`，避免預設 `ModelNotFoundException` 洩漏 model 類別名稱）
 - [x] 禁止在公開 API 回傳任何 internal notes、approval_status、idempotency_key（`PublicVehicleResource` / `PublicVehiclePhotoResource` 皆為獨立白名單 Resource）
+- [x] 匿名放大攻擊防護（Codex adversarial review 指出）：`GET /api/public/vehicles` 原本 eager load 每台車完整 photos（單車最多 60 張），`per_page=100` 時單一未登入請求可換取約 6000 筆照片序列化與對應 DB 讀取。已改用獨立的 `PublicVehicleListResource`，列表只回傳 `cover_photo`（eager load 時以 `where('is_cover', true)` 限定只撈封面），完整 `photos` 陣列只保留給 `show()` 詳情頁的 `PublicVehicleResource`；並在 `Route::prefix('public')` 群組加上 `throttle:60,1`（每 IP 每分鐘 60 次），超過回 429。
 
 ---
 

@@ -21,8 +21,10 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/logout', [AuthController::class, 'logout']);
 
 // 官網公開唯讀車輛資料：不需登入，只回傳 status=listed 車輛與公開安全欄位
-// （企劃書_v1.2.md 第 10 節）。獨立於 auth:sanctum 群組之外。
-Route::prefix('public')->group(function () {
+// （企劃書_v1.2.md 第 10 節）。獨立於 auth:sanctum 群組之外。未登入代表無法用
+// 帳號區分濫用來源，加上 IP-based throttle 避免匿名重複打大量列表/詳情請求
+// 造成 DB 讀取與 JSON 序列化放大（Codex adversarial review 指出）。
+Route::prefix('public')->middleware('throttle:60,1')->group(function () {
     Route::get('vehicles', [PublicVehicleController::class, 'index']);
     Route::get('vehicles/{id}', [PublicVehicleController::class, 'show'])->whereNumber('id');
 });
