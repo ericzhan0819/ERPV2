@@ -6,8 +6,10 @@ use App\Http\Controllers\CashAccountController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MoneyEntryController;
+use App\Http\Controllers\PublicVehicleController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VehicleController;
+use App\Http\Controllers\VehiclePhotoController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login']);
@@ -17,6 +19,13 @@ Route::post('/login', [AuthController::class, 'login']);
 // rejected with 401 just because the first attempt already invalidated the
 // session. CSRF and session handling still apply via statefulApi().
 Route::post('/logout', [AuthController::class, 'logout']);
+
+// 官網公開唯讀車輛資料：不需登入，只回傳 status=listed 車輛與公開安全欄位
+// （企劃書_v1.2.md 第 10 節）。獨立於 auth:sanctum 群組之外。
+Route::prefix('public')->group(function () {
+    Route::get('vehicles', [PublicVehicleController::class, 'index']);
+    Route::get('vehicles/{id}', [PublicVehicleController::class, 'show'])->whereNumber('id');
+});
 
 Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
@@ -30,6 +39,18 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         ->middleware('can:view,vehicle');
     Route::get('vehicles/{vehicle}/money-entries', [VehicleController::class, 'moneyEntries'])
         ->middleware('can:viewMoneyEntries,vehicle');
+
+    // 車輛照片：admin/manager/sales 皆可讀，僅 admin/manager 可上傳、排序、設封面、刪除
+    Route::get('vehicles/{vehicle}/photos', [VehiclePhotoController::class, 'index'])
+        ->middleware('can:viewPhotos,vehicle');
+    Route::post('vehicles/{vehicle}/photos', [VehiclePhotoController::class, 'store'])
+        ->middleware('can:managePhotos,vehicle');
+    Route::patch('vehicles/{vehicle}/photos/reorder', [VehiclePhotoController::class, 'reorder'])
+        ->middleware('can:managePhotos,vehicle');
+    Route::patch('vehicles/{vehicle}/photos/{photo}/cover', [VehiclePhotoController::class, 'setCover'])
+        ->middleware('can:managePhotos,vehicle');
+    Route::delete('vehicles/{vehicle}/photos/{photo}', [VehiclePhotoController::class, 'destroy'])
+        ->middleware('can:managePhotos,vehicle');
 
     // 新增 / 編輯 / 上架 / 建車付款 / 列印：僅 admin、manager
     Route::post('vehicles', [VehicleController::class, 'store'])

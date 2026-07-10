@@ -134,8 +134,8 @@ Service 必須處理：
 - [x] admin / manager 可排序（同上）
 - [x] admin / manager 可設封面（同上）
 - [x] sales 可讀內部照片（`VehiclePolicy::viewPhotos()` 對所有角色回傳 true）
-- [ ] 未登入不可讀內部照片 API（需第 4 節接上 `auth:sanctum` middleware 才生效）
-- [ ] public API 走獨立公開查詢與 Resource（Resource 已備妥，查詢邏輯屬第 4 節 Controller）
+- [x] 未登入不可讀內部照片 API（第 4 節已接上 `auth:sanctum` + `active` middleware）
+- [x] public API 走獨立公開查詢與 Resource（第 4 節 `PublicVehicleController` 已完成查詢邏輯）
 
 ### 3.3 Form Request
 
@@ -167,41 +167,41 @@ Resource 原則：
 
 新增：
 
-- [ ] `GET /api/vehicles/{vehicle}/photos`
-- [ ] `POST /api/vehicles/{vehicle}/photos`
-- [ ] `PATCH /api/vehicles/{vehicle}/photos/reorder`
-- [ ] `PATCH /api/vehicles/{vehicle}/photos/{photo}/cover`
-- [ ] `DELETE /api/vehicles/{vehicle}/photos/{photo}`
+- [x] `GET /api/vehicles/{vehicle}/photos`
+- [x] `POST /api/vehicles/{vehicle}/photos`
+- [x] `PATCH /api/vehicles/{vehicle}/photos/reorder`
+- [x] `PATCH /api/vehicles/{vehicle}/photos/{photo}/cover`
+- [x] `DELETE /api/vehicles/{vehicle}/photos/{photo}`
 
 要求：
 
-- [ ] 全部 internal routes 需 auth:sanctum
-- [ ] upload / delete / reorder / cover 需 admin / manager
-- [ ] list 允許 admin / manager / sales
-- [ ] route model binding 不可讓 photo 跨 vehicle 操作成功
+- [x] 全部 internal routes 需 auth:sanctum（`routes/api.php` 全數放在 `auth:sanctum` + `active` 群組內）
+- [x] upload / delete / reorder / cover 需 admin / manager（`can:managePhotos,vehicle`）
+- [x] list 允許 admin / manager / sales（`can:viewPhotos,vehicle`）
+- [x] route model binding 不可讓 photo 跨 vehicle 操作成功（`VehiclePhotoService::assertBelongsToVehicle()` 於 setCover/deletePhoto 內擋下，跨車輛回 422；已補臨時測試驗證後移除）
 
 ### 4.2 Public routes
 
 新增：
 
-- [ ] `GET /api/public/vehicles`
-- [ ] `GET /api/public/vehicles/{vehicle}`
+- [x] `GET /api/public/vehicles`
+- [x] `GET /api/public/vehicles/{vehicle}`
 
 要求：
 
-- [ ] 不需登入
-- [ ] 只回傳 `status=listed` 車輛
-- [ ] 不回傳 preparing / reserved / sold / cancelled
-- [ ] 不回傳 purchase_price / floor_price / sold_price
-- [ ] 不回傳 buyer / seller / customer / money_entries / cost / gross_profit / cash_account
-- [ ] 實作 pagination，建議用 `page` / `per_page` 參數（例如 `?page=1&per_page=20`）
-- [ ] 若未來官網與後台不同 domain，需確認 CORS 設定
+- [x] 不需登入（獨立於 `auth:sanctum` 群組之外，`Route::prefix('public')`）
+- [x] 只回傳 `status=listed` 車輛（`Vehicle::query()->where('status', 'listed')`）
+- [x] 不回傳 preparing / reserved / sold / cancelled（非 listed 一律回 404，不洩漏存在與否）
+- [x] 不回傳 purchase_price / floor_price / sold_price（`PublicVehicleResource` 白名單欄位，第 3.4 節已完成）
+- [x] 不回傳 buyer / seller / customer / money_entries / cost / gross_profit / cash_account（同上）
+- [x] 實作 pagination，用 `page` / `per_page` 參數（`PublicIndexVehicleRequest` + `paginate()`）
+- [x] CORS：`config/cors.php` 的 `paths` 已是 `api/*` 萬用字元，`api/public/*` 已涵蓋，不需額外設定
 
 ### 4.3 Public API 安全
 
-- [ ] 公開 API 錯誤回應應只回傳必要訊息，不洩漏內部細節
-- [ ] 例如 404 Not Found 時只回傳 `{"message":"Vehicle not found"}`，不回傳敏感的 database / SQL 訊息
-- [ ] 禁止在公開 API 回傳任何 internal notes、approval_status、idempotency_key
+- [x] 公開 API 錯誤回應應只回傳必要訊息，不洩漏內部細節
+- [x] 例如 404 Not Found 時只回傳 `{"message":"Vehicle not found"}`，不回傳敏感的 database / SQL 訊息（`PublicVehicleController::show()` 刻意不用 implicit route model binding，自行查詢並丟出固定訊息的 `NotFoundHttpException`，避免預設 `ModelNotFoundException` 洩漏 model 類別名稱）
+- [x] 禁止在公開 API 回傳任何 internal notes、approval_status、idempotency_key（`PublicVehicleResource` / `PublicVehiclePhotoResource` 皆為獨立白名單 Resource）
 
 ---
 
