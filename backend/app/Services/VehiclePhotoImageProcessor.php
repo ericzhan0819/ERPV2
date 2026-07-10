@@ -154,17 +154,23 @@ class VehiclePhotoImageProcessor
 
     /**
      * 刪除照片檔案，缺檔視為已完成（idempotent），不因檔案早已不存在而報錯。
+     *
+     * 呼叫端（VehiclePhotoService::deletePhoto()）依賴這個方法在真正刪除失敗時
+     * 拋出例外：只有 storage 確定清乾淨，才會繼續刪除 DB row。若 Storage::delete()
+     * 回傳 false 卻被當成靜默成功，DB row 會在檔案其實還留著或刪除失敗的情況下
+     * 被移除，讓「已刪除」的照片可能仍可透過舊網址公開存取（Codex adversarial
+     * review 指出），因此這裡必須檢查回傳值並拋錯，不能只呼叫了事。
      */
     public function delete(string $disk, string $path, ?string $thumbnailPath): void
     {
         $storage = Storage::disk($disk);
 
-        if ($storage->exists($path)) {
-            $storage->delete($path);
+        if ($storage->exists($path) && ! $storage->delete($path)) {
+            throw new \RuntimeException('車輛照片主圖刪除失敗。');
         }
 
-        if ($thumbnailPath !== null && $storage->exists($thumbnailPath)) {
-            $storage->delete($thumbnailPath);
+        if ($thumbnailPath !== null && $storage->exists($thumbnailPath) && ! $storage->delete($thumbnailPath)) {
+            throw new \RuntimeException('車輛照片縮圖刪除失敗。');
         }
     }
 

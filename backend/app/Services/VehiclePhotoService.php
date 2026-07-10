@@ -103,6 +103,15 @@ class VehiclePhotoService
     {
         $this->assertBelongsToVehicle($vehicle, $photo);
 
+        // storage 檔案必須在 DB row 真正刪除「之前」處理完成：若先刪 DB row 再刪
+        // storage，一旦 storage 刪除失敗（或該次請求在兩步之間中斷），已經沒有任何
+        // DB row 指向這些檔案，代表系統會永久遺失「這張照片其實還沒真的刪除」的
+        // 紀錄，公開網址仍可能繼續存取一張使用者以為已經刪除的照片（Codex
+        // adversarial review 指出：deletion-before-storage-cleanup 會讓「已刪除」的
+        // 照片仍可公開存取）。改成先刪 storage，刪除失敗就直接拋例外、DB 完全不動，
+        // 之後可以安全重試整個刪除；只有 storage 確定清乾淨後才進入 DB transaction。
+        $this->processor->delete($photo->disk, $photo->path, $photo->thumbnail_path);
+
         DB::transaction(function () use ($vehicle, $photo) {
             Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
 
@@ -110,7 +119,9 @@ class VehiclePhotoService
             // 與「拿到 lock」之間有另一個並發請求呼叫 setCover() 把封面換成這張照片，
             // 這裡的 $photo->is_cover 會是過期的 false，導致以為刪除的不是封面、
             // 不去補封面，讓車輛最終沒有任何封面照（Codex adversarial review 指出）。
-            // 拿到 lock 後必須重新從 DB 讀一次目前真正的 is_cover 狀態。
+            // 拿到 lock 後必須重新從 DB 讀一次目前真正的 is_cover 狀態。若照片在拿到
+            // lock 前已被另一個並發請求刪除，refresh() 會直接拋 ModelNotFoundException，
+            // 不會誤判成「不是封面」而靜默略過補封面。
             $photo->refresh();
             $wasCover = $photo->is_cover;
 
@@ -124,27 +135,33 @@ class VehiclePhotoService
                 }
             }
         });
-
-        $this->processor->delete($photo->disk, $photo->path, $photo->thumbnail_path);
     }
 
     public function setCover(Vehicle $vehicle, VehiclePhoto $photo): VehiclePhoto
     {
         $this->assertBelongsToVehicle($vehicle, $photo);
 
-        DB::transaction(function () use ($vehicle, $photo) {
+        return DB::transaction(function () use ($vehicle, $photo) {
             Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
+
+            // 拿到 lock 前載入的 $photo 可能已經過期：如果這張照片在「載入」與「拿到
+            // lock」之間被另一個並發請求刪除，直接對 stale instance 呼叫 save() 只會
+            // 靜默更新 0 筆（Eloquent 不會拋錯），導致其他封面已被清空、卻沒有任何
+            // 照片被設為新封面，車輛最終沒有封面（Codex adversarial review 指出）。
+            // 改成從 vehicle 關聯以 firstOrFail() 重新載入目標照片，確定它此刻仍存在
+            // 且屬於這台車，才進行封面切換。
+            $freshPhoto = $vehicle->photos()->whereKey($photo->id)->firstOrFail();
 
             $vehicle->photos()
                 ->where('is_cover', true)
-                ->where('id', '!=', $photo->id)
+                ->where('id', '!=', $freshPhoto->id)
                 ->update(['is_cover' => false]);
 
-            $photo->is_cover = true;
-            $photo->save();
-        });
+            $freshPhoto->is_cover = true;
+            $freshPhoto->save();
 
-        return $photo->refresh();
+            return $freshPhoto;
+        });
     }
 
     /**
@@ -152,23 +169,35 @@ class VehiclePhotoService
      */
     public function reorder(Vehicle $vehicle, array $photoIds): Collection
     {
-        $photos = $vehicle->photos()->whereIn('id', $photoIds)->get()->keyBy('id');
-
-        if ($photos->count() !== count($photoIds) || $photos->count() !== count(array_unique($photoIds))) {
-            throw ValidationException::withMessages([
-                'photo_ids' => '排序清單包含不屬於此車輛或重複的照片。',
-            ]);
-        }
-
-        DB::transaction(function () use ($vehicle, $photoIds, $photos) {
+        return DB::transaction(function () use ($vehicle, $photoIds) {
             Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
 
-            foreach ($photoIds as $index => $photoId) {
-                $photos[$photoId]->update(['sort_order' => $index]);
-            }
-        });
+            // 鎖定車輛 row 之後才在 transaction 內重新讀取「此刻」這台車的完整照片
+            // 清單，並要求提交的 photo_ids 剛好等於這個完整清單（不多不少、不重複），
+            // 而不是只驗證「提交的 id 都屬於這台車」。只驗證子集合會讓只送一兩張
+            // 照片 id 的請求把這幾筆 sort_order 重寫成從 0 開始，卻不動其餘照片原本
+            // 的 sort_order，造成同車輛出現重複的 sort_order、透過 Vehicle::photos()
+            // 排序結果變得不確定（Codex adversarial review 指出）。在鎖定後才讀取
+            // 目前清單，也避免用 lock 之前、可能已過期的照片集合做驗證。
+            $currentPhotos = $vehicle->photos()->get()->keyBy('id');
+            $submittedIds = array_map('intval', $photoIds);
 
-        return $vehicle->photos()->get();
+            $isExactSet = count($submittedIds) === count(array_unique($submittedIds))
+                && count($submittedIds) === $currentPhotos->count()
+                && array_diff($submittedIds, $currentPhotos->keys()->all()) === [];
+
+            if (! $isExactSet) {
+                throw ValidationException::withMessages([
+                    'photo_ids' => '排序清單必須包含此車輛目前所有照片，且不可重複或包含其他車輛的照片。',
+                ]);
+            }
+
+            foreach ($submittedIds as $index => $photoId) {
+                $currentPhotos[$photoId]->update(['sort_order' => $index]);
+            }
+
+            return $vehicle->photos()->get();
+        });
     }
 
     private function assertBelongsToVehicle(Vehicle $vehicle, VehiclePhoto $photo): void
