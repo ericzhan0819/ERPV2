@@ -165,6 +165,23 @@ export interface VehicleExpensePayload {
   idempotency_key: string
 }
 
+export interface VehiclePhoto {
+  id: number
+  vehicle_id: number
+  url: string
+  thumbnail_url: string
+  original_filename: string
+  mime_type: string
+  size: number
+  width: number | null
+  height: number | null
+  sort_order: number
+  is_cover: boolean
+  uploaded_by: number | null
+  created_at: string | null
+  updated_at: string | null
+}
+
 export interface CreateVehiclePayload {
   brand: string
   model: string

@@ -11,7 +11,14 @@ import {
   reserveVehicle,
 } from '../../api/vehicles'
 import { listCashAccountOptions } from '../../api/cashAccounts'
-import type { VehicleDetailResponse } from '../../types/vehicle'
+import {
+  deleteVehiclePhoto,
+  listVehiclePhotos,
+  reorderVehiclePhotos,
+  setCoverVehiclePhoto,
+  uploadVehiclePhotos,
+} from '../../api/vehiclePhotos'
+import type { VehicleDetailResponse, VehiclePhoto } from '../../types/vehicle'
 import type { CashAccountOption } from '../../types/cashAccount'
 import { generateIdempotencyKey } from '../../utils/idempotency'
 import { vehicleStatusLabels } from '../../utils/vehicleStatus'
@@ -19,7 +26,13 @@ import { VehicleStatusBadge } from '../../components/VehicleStatusBadge'
 import { ApprovalStatusBadge } from '../../components/ApprovalStatusBadge'
 import { CustomerSelect } from '../../components/CustomerSelect'
 import { useAuth } from '../../hooks/useAuth'
-import { canManageVehicles, canRunSalesFlow, canViewFinancials, canViewSalesPricing } from '../../utils/permissions'
+import {
+  canManageVehicles,
+  canManageVehiclePhotos,
+  canRunSalesFlow,
+  canViewFinancials,
+  canViewSalesPricing,
+} from '../../utils/permissions'
 
 const EXPENSE_CATEGORIES = ['維修支出', '美容支出', '代辦支出', '拍場支出', '其他支出'] as const
 
@@ -154,6 +167,7 @@ export function VehicleDetail() {
   const canViewFinance = canViewFinancials(user?.role)
   const canViewSalesPrice = canViewSalesPricing(user?.role)
   const canManage = canManageVehicles(user?.role)
+  const canManagePhotos = canManageVehiclePhotos(user?.role)
   const canSell = canRunSalesFlow(user?.role)
   const canReportExpense = canRunSalesFlow(user?.role)
   const { id } = useParams<{ id: string }>()
@@ -397,6 +411,8 @@ export function VehicleDetail() {
           </button>
         )}
       </div>
+
+      <VehiclePhotosPanel vehicleId={vehicleId} canManage={canManagePhotos} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Panel title="基本資料">
@@ -915,5 +931,208 @@ function CloseSaleModal({
         </button>
       </form>
     </Modal>
+  )
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canManage: boolean }) {
+  const [photos, setPhotos] = useState<VehiclePhoto[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [busyPhotoId, setBusyPhotoId] = useState<number | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function loadPhotos() {
+    setLoading(true)
+    listVehiclePhotos(vehicleId)
+      .then((data) => {
+        setPhotos(data)
+        setLoadError(null)
+      })
+      .catch(() => setLoadError('車輛照片載入失敗'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadPhotos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vehicleId])
+
+  async function handleFilesSelected(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = event.target.files ? Array.from(event.target.files) : []
+    event.target.value = ''
+    if (files.length === 0) return
+    setUploading(true)
+    setUploadError(null)
+    try {
+      await uploadVehiclePhotos(vehicleId, files)
+      loadPhotos()
+    } catch (err) {
+      setUploadError(extractErrorMessage(err, '上傳照片失敗，請稍後再試'))
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  async function handleDelete(photo: VehiclePhoto) {
+    if (!window.confirm('確定要刪除這張照片嗎？此動作無法復原。')) return
+    setBusyPhotoId(photo.id)
+    setActionError(null)
+    try {
+      await deleteVehiclePhoto(vehicleId, photo.id)
+      loadPhotos()
+    } catch (err) {
+      setActionError(extractErrorMessage(err, '刪除照片失敗，請稍後再試'))
+    } finally {
+      setBusyPhotoId(null)
+    }
+  }
+
+  async function handleSetCover(photo: VehiclePhoto) {
+    setBusyPhotoId(photo.id)
+    setActionError(null)
+    try {
+      await setCoverVehiclePhoto(vehicleId, photo.id)
+      loadPhotos()
+    } catch (err) {
+      setActionError(extractErrorMessage(err, '設定封面失敗，請稍後再試'))
+    } finally {
+      setBusyPhotoId(null)
+    }
+  }
+
+  async function handleMove(photo: VehiclePhoto, direction: 'left' | 'right') {
+    const index = photos.findIndex((p) => p.id === photo.id)
+    const targetIndex = direction === 'left' ? index - 1 : index + 1
+    if (index === -1 || targetIndex < 0 || targetIndex >= photos.length) return
+    const reordered = [...photos]
+    ;[reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]]
+    setPhotos(reordered)
+    setBusyPhotoId(photo.id)
+    setActionError(null)
+    try {
+      await reorderVehiclePhotos(
+        vehicleId,
+        reordered.map((p) => p.id),
+      )
+      loadPhotos()
+    } catch (err) {
+      setActionError(extractErrorMessage(err, '調整排序失敗，請稍後再試'))
+      loadPhotos()
+    } finally {
+      setBusyPhotoId(null)
+    }
+  }
+
+  return (
+    <Panel title="車輛照片">
+      {canManage && (
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            className="hidden"
+            onChange={handleFilesSelected}
+          />
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
+          >
+            {uploading ? '上傳中...' : '上傳照片'}
+          </button>
+          {uploadError && <p className="text-sm text-error">{uploadError}</p>}
+        </div>
+      )}
+
+      {actionError && <p className="mb-3 text-sm text-error">{actionError}</p>}
+
+      {loadError && <p className="text-sm text-error">{loadError}</p>}
+
+      {!loadError && loading && <p className="text-sm text-fg-muted">載入中...</p>}
+
+      {!loadError && !loading && photos.length === 0 && (
+        <p className="text-sm text-fg-muted">尚無照片</p>
+      )}
+
+      {!loadError && !loading && photos.length > 0 && (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          {photos.map((photo, index) => {
+            const busy = busyPhotoId === photo.id
+            return (
+              <div key={photo.id} className="overflow-hidden rounded-xl border border-border bg-surface-2">
+                <div className="relative aspect-[4/3] w-full">
+                  <img
+                    src={photo.thumbnail_url}
+                    alt={photo.original_filename}
+                    className="h-full w-full object-cover"
+                  />
+                  {photo.is_cover && (
+                    <span className="absolute left-2 top-2 rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-primary-fg">
+                      封面
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-col gap-2 p-2">
+                  <p className="truncate text-xs text-fg-muted" title={photo.original_filename}>
+                    {photo.original_filename}
+                  </p>
+                  <p className="text-xs text-fg-subtle">{formatFileSize(photo.size)}</p>
+                  {canManage && (
+                    <div className="flex flex-wrap items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={busy || index === 0}
+                        onClick={() => handleMove(photo, 'left')}
+                        className="rounded-md border border-border-strong px-2 py-1 text-xs text-fg-muted hover:bg-surface disabled:opacity-40"
+                      >
+                        ←
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy || index === photos.length - 1}
+                        onClick={() => handleMove(photo, 'right')}
+                        className="rounded-md border border-border-strong px-2 py-1 text-xs text-fg-muted hover:bg-surface disabled:opacity-40"
+                      >
+                        →
+                      </button>
+                      {!photo.is_cover && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => handleSetCover(photo)}
+                          className="rounded-md border border-border-strong px-2 py-1 text-xs text-fg-muted hover:bg-surface disabled:opacity-40"
+                        >
+                          設封面
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => handleDelete(photo)}
+                        className="rounded-md border border-error/40 px-2 py-1 text-xs text-error hover:bg-error/10 disabled:opacity-40"
+                      >
+                        刪除
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </Panel>
   )
 }

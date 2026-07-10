@@ -30,6 +30,12 @@ export function canManageVehicles(role: UserRole | undefined): boolean {
   return !!role && VEHICLE_MANAGE_ROLES.includes(role)
 }
 
+// 車輛照片上傳 / 刪除 / 排序 / 設封面：對齊後端 VehiclePolicy::managePhotos()，
+// sales 只能查看（viewPhotos 對所有角色開放，不需另外的 canView 函式）。
+export function canManageVehiclePhotos(role: UserRole | undefined): boolean {
+  return !!role && VEHICLE_MANAGE_ROLES.includes(role)
+}
+
 export function canRunSalesFlow(role: UserRole | undefined): boolean {
   return !!role && SALES_FLOW_ROLES.includes(role)
 }

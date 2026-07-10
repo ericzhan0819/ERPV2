@@ -210,31 +210,31 @@ Resource 原則：
 
 ### 5.1 API client / types
 
-- [ ] 新增 `src/types/vehiclePhoto.ts` 或整合至 `vehicle.ts`
-- [ ] 新增 `src/api/vehiclePhotos.ts`
-- [ ] 型別包含 `id` / `url` / `thumbnail_url` / `is_cover` / `sort_order` / `width` / `height` / `size`
+- [x] 新增 `VehiclePhoto` 型別，整合至 `src/types/vehicle.ts`
+- [x] 新增 `src/api/vehiclePhotos.ts`
+- [x] 型別包含 `id` / `url` / `thumbnail_url` / `is_cover` / `sort_order` / `width` / `height` / `size`
 
 ### 5.2 VehicleDetail UI
 
 新增區塊：`車輛照片`
 
-- [ ] 無照片空狀態
-- [ ] 縮圖 grid
-- [ ] 封面 badge
-- [ ] admin / manager 顯示上傳按鈕
-- [ ] admin / manager 顯示刪除 / 設封面 / 排序操作
-- [ ] sales 僅可查看，不顯示管理按鈕
-- [ ] 上傳中 loading 狀態
-- [ ] 上傳失敗錯誤提示
-- [ ] 刪除需確認
+- [x] 無照片空狀態
+- [x] 縮圖 grid
+- [x] 封面 badge
+- [x] admin / manager 顯示上傳按鈕
+- [x] admin / manager 顯示刪除 / 設封面 / 排序操作（排序以 ← / → 按鈕調整，未做拖曳排序，屬本階段最小可用實作）
+- [x] sales 僅可查看，不顯示管理按鈕
+- [x] 上傳中 loading 狀態
+- [x] 上傳失敗錯誤提示
+- [x] 刪除需確認
 
 ### 5.3 UI 原則
 
-- [ ] 遵守 `UI.md` 語意色彩 token
-- [ ] 不寫死 hex
-- [ ] dark mode 可讀
-- [ ] mobile layout 可基本使用
-- [ ] 圖片 grid 不破版
+- [x] 遵守 `UI.md` 語意色彩 token
+- [x] 不寫死 hex
+- [x] dark mode 可讀（沿用既有語意 token，未寫死顏色）
+- [x] mobile layout 可基本使用（grid 於窄螢幕降為 2 欄）
+- [x] 圖片 grid 不破版
 
 ---
 
