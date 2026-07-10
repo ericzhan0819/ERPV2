@@ -40,10 +40,16 @@ class VehiclePhotoServiceTest extends TestCase
         return new UploadedFile($path, $originalName, 'image/jpeg', null, true);
     }
 
-    private function makePhoto(Vehicle $vehicle, User $user, string $path, string $thumbnailPath): VehiclePhoto
-    {
+    private function makePhoto(
+        Vehicle $vehicle,
+        User $user,
+        string $path,
+        string $thumbnailPath,
+        ?int $uploadBatchId = null,
+    ): VehiclePhoto {
         return VehiclePhoto::create([
             'vehicle_id' => $vehicle->id,
+            'upload_batch_id' => $uploadBatchId,
             'disk' => 'public',
             'path' => $path,
             'thumbnail_path' => $thumbnailPath,
@@ -166,6 +172,70 @@ class VehiclePhotoServiceTest extends TestCase
         $this->assertSame(1, VehiclePhoto::where('vehicle_id', $vehicle->id)->count());
         $this->assertSame($first->pluck('id')->all(), $second->pluck('id')->all());
         $this->assertSame(1, VehiclePhotoUploadBatch::where('idempotency_key', $key)->count());
+    }
+
+    /**
+     * Codex stop-time review 指出：整批完成的判斷（batch.photo_ids 長度達到檔案
+     * 總數）跟「曝光」（把這批照片的 upload_batch_id 清成 NULL）是兩個分開的寫入
+     * 步驟。如果最後一個檔案的 photo_ids 已經 commit，但曝光那個 UPDATE 還沒執行
+     * 或還沒 commit 前，處理程序就中斷（例如 worker 被強制中止），這批照片會卡在
+     * 「已被視為完成、之後任何同一把 idempotency_key 的請求都直接回放」，但
+     * upload_batch_id 從未被清空、永遠對外不可見的狀態——沒有任何後續機制會再
+     * 重新嘗試曝光它們。這裡直接模擬這個中斷點：手刻一筆 photo_ids 長度已達檔案
+     * 總數、但照片仍帶著 upload_batch_id 的 batch，驗證用同一把 key 重新呼叫
+     * uploadPhotos()（進入 replay 分支）時會自我修復、把照片補曝光，而不是繼續
+     * 讓它們永久隱形。
+     */
+    public function test_upload_photos_replay_self_heals_visibility_left_behind_by_a_crash_before_finalization(): void
+    {
+        Storage::fake('public');
+
+        $vehicle = Vehicle::factory()->create();
+        $user = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
+        $service = app(VehiclePhotoService::class);
+        $key = 'test-upload-key-'.uniqid();
+        $file = $this->fakeJpegUploadedFile();
+
+        $payload = [
+            'vehicle_id' => $vehicle->id,
+            'files' => [[
+                'sha256' => hash_file('sha256', $file->getRealPath()),
+                'size' => $file->getSize(),
+                'original_filename' => $file->getClientOriginalName(),
+            ]],
+        ];
+
+        $batch = VehiclePhotoUploadBatch::create([
+            'vehicle_id' => $vehicle->id,
+            'idempotency_key' => $key,
+            'idempotency_payload' => json_encode($payload, JSON_THROW_ON_ERROR),
+            'photo_ids' => [],
+            'processing_lease_expires_at' => now()->addMinutes(10),
+        ]);
+
+        // 模擬「最後一個檔案已經真的建立、photo_ids 已經寫回 batch，但曝光步驟
+        // 還沒執行就中斷」：照片仍帶著 upload_batch_id，尚未提交完成。
+        $stuckPhoto = $this->makePhoto(
+            $vehicle,
+            $user,
+            'vehicles/'.$vehicle->id.'/stuck.webp',
+            'vehicles/'.$vehicle->id.'/stuck_thumb.webp',
+            $batch->id,
+        );
+        $batch->update(['photo_ids' => [$stuckPhoto->id], 'processing_lease_expires_at' => null]);
+
+        // 中斷之後、修復之前：這張照片對外完全不可見。
+        $this->assertSame(0, $vehicle->photos()->count());
+
+        $result = $service->uploadPhotos($vehicle, $user, [$file], $key);
+
+        $this->assertCount(1, $result);
+        $this->assertSame($stuckPhoto->id, $result->first()->id);
+        // 沒有重複建立新照片，只是把原本卡住的那一張補曝光。
+        $this->assertSame(1, VehiclePhoto::where('vehicle_id', $vehicle->id)->count());
+        $this->assertSame(1, $vehicle->photos()->count());
+        $stuckPhoto->refresh();
+        $this->assertNull($stuckPhoto->upload_batch_id);
     }
 
     /**
@@ -716,12 +786,17 @@ class VehiclePhotoServiceTest extends TestCase
     }
 
     /**
-     * Codex adversarial review（第八輪）指出：upload_batch_pending_ttl_seconds 過期
-     * 只代表「允許下一個真實請求續傳認領」，不保證真的會有請求回來——如果使用者
-     * 放棄重試，這批上傳裡已經真的建立好的照片會一直以正常、可見的 VehiclePhoto
-     * row 留著，讓一次從未真正完成的上傳看起來像是成功上傳了一部分。這裡驗證
-     * abandonStaleIncompleteUploadBatches() 會把超過永久放棄門檻、仍未完成的批次
-     * 清理掉：殘留照片 soft-delete、batch row 直接刪除。
+     * Codex adversarial review（第八輪，之後的 adversarial review 再指出一次）
+     * 指出：upload_batch_pending_ttl_seconds 過期只代表「允許下一個真實請求續傳
+     * 認領」，不保證真的會有請求回來——如果使用者放棄重試，這批上傳裡已經真的
+     * 建立好的照片不能一直以正常、可見的 VehiclePhoto row 留著，讓一次從未真正
+     * 完成的上傳看起來像是成功上傳了一部分，之後又被排程無預警清掉、造成使用者
+     * 已經看過的資料憑空消失。這裡的 $leftoverPhoto 刻意帶著
+     * `upload_batch_id => $batch->id`，模擬 uploadPhotos() 逐檔建立當下、整批
+     * 尚未完成、還沒被最終提交的真實狀態：先驗證這種照片從一開始就不會出現在
+     * $vehicle->photos()（一般列表/封面/排序/public API 共用的同一個關聯）裡，
+     * 再驗證 abandonStaleIncompleteUploadBatches() 把它清理掉時，不會有任何
+     * 使用者可觀察到的資料消失——因為它從頭到尾都不曾對外可見過。
      */
     public function test_abandon_stale_incomplete_upload_batches_soft_deletes_leftover_photos_and_removes_batch(): void
     {
@@ -731,13 +806,6 @@ class VehiclePhotoServiceTest extends TestCase
         $vehicle = Vehicle::factory()->create();
         $user = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
         $service = app(VehiclePhotoService::class);
-
-        $leftoverPhoto = $this->makePhoto(
-            $vehicle,
-            $user,
-            'vehicles/'.$vehicle->id.'/leftover.webp',
-            'vehicles/'.$vehicle->id.'/leftover_thumb.webp',
-        );
 
         $batch = VehiclePhotoUploadBatch::create([
             'vehicle_id' => $vehicle->id,
@@ -749,13 +817,26 @@ class VehiclePhotoServiceTest extends TestCase
                     ['sha256' => 'b', 'size' => 1, 'original_filename' => 'b.jpg'],
                 ],
             ], JSON_THROW_ON_ERROR),
-            'photo_ids' => [$leftoverPhoto->id],
+            'photo_ids' => [],
             // 遠超過 60 秒的永久放棄門檻，且早已超過任何合理的續傳 TTL。
             'processing_lease_expires_at' => now()->subDay(),
         ]);
+
+        $leftoverPhoto = $this->makePhoto(
+            $vehicle,
+            $user,
+            'vehicles/'.$vehicle->id.'/leftover.webp',
+            'vehicles/'.$vehicle->id.'/leftover_thumb.webp',
+            $batch->id,
+        );
+        $batch->update(['photo_ids' => [$leftoverPhoto->id]]);
         // create() 一律把 updated_at 填成「現在」，這裡另外 backdate 成遠超過永久
         // 放棄門檻，模擬「這筆批次真的已經很久沒有任何人動過」。
         DB::table('vehicle_photo_upload_batches')->where('id', $batch->id)->update(['updated_at' => now()->subDay()]);
+
+        // 清理之前：這張照片雖然真的存在於資料庫，但因為批次還沒提交完成，一般
+        // 列表關聯完全看不到它，不會有任何使用者曾經看過它。
+        $this->assertSame(0, $vehicle->photos()->whereKey($leftoverPhoto->id)->count());
 
         $result = $service->abandonStaleIncompleteUploadBatches();
 
@@ -763,6 +844,55 @@ class VehiclePhotoServiceTest extends TestCase
         $this->assertSame(0, VehiclePhoto::where('id', $leftoverPhoto->id)->count());
         $this->assertSame(1, VehiclePhoto::onlyTrashed()->where('id', $leftoverPhoto->id)->count());
         $this->assertDatabaseMissing('vehicle_photo_upload_batches', ['id' => $batch->id]);
+    }
+
+    /**
+     * 對照上一個測試（也是 Codex adversarial review 這一輪指出的核心情境）：
+     * uploadPhotos() 逐檔建立照片的過程中，這批照片必須完全不可見；整批全部
+     * 成功、真正提交完成後，才能一次性、全部一起出現在 $vehicle->photos()
+     * （一般列表、public API、setCover、reorder 共用的同一個關聯）裡，不會有
+     * 「部分檔案已上傳成功，看起來像成功了一部分」的中間可見狀態。
+     */
+    public function test_upload_photos_hides_photos_until_the_whole_batch_finishes_then_reveals_them_together(): void
+    {
+        Storage::fake('public');
+
+        $vehicle = Vehicle::factory()->create();
+        $user = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
+        $key = 'test-upload-key-'.uniqid();
+
+        $realProcessor = app(VehiclePhotoImageProcessor::class);
+        $seenIdsAfterFirstFile = null;
+        $processor = Mockery::mock(VehiclePhotoImageProcessor::class);
+        $processor->shouldReceive('process')
+            ->twice()
+            ->andReturnUsing(function ($file, $vehicleId) use ($realProcessor, &$seenIdsAfterFirstFile, $vehicle) {
+                if ($seenIdsAfterFirstFile === null) {
+                    // 第二個檔案開始處理之前，第一個檔案的 VehiclePhoto row 已經
+                    // commit 在資料庫裡了，這裡直接檢查此刻透過一般列表關聯看得到
+                    // 幾張照片——必須是 0，因為整批還沒完成、不該有任何一張提前
+                    // 曝光。
+                    $seenIdsAfterFirstFile = $vehicle->photos()->count();
+                }
+
+                return $realProcessor->process($file, $vehicleId);
+            });
+        $processor->shouldReceive('delete')->andReturnUsing(fn (...$args) => $realProcessor->delete(...$args));
+        $this->app->instance(VehiclePhotoImageProcessor::class, $processor);
+
+        $service = app(VehiclePhotoService::class);
+        $result = $service->uploadPhotos(
+            $vehicle,
+            $user,
+            [$this->fakeJpegUploadedFile('a.jpg'), $this->fakeJpegUploadedFile('b.jpg', 500, 500)],
+            $key,
+        );
+
+        $this->assertSame(0, $seenIdsAfterFirstFile);
+        $this->assertCount(2, $result);
+        // 整批成功後，兩張照片必須同時、一起出現在一般列表關聯裡。
+        $this->assertSame(2, $vehicle->photos()->count());
+        $this->assertSame(0, VehiclePhoto::where('vehicle_id', $vehicle->id)->whereNotNull('upload_batch_id')->count());
     }
 
     /**

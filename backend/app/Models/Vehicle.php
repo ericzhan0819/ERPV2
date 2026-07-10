@@ -85,9 +85,19 @@ class Vehicle extends Model
         return $this->hasMany(MoneyEntry::class);
     }
 
+    /**
+     * 只回傳已提交完成、正式可見的照片（upload_batch_id 為 NULL），排除還在
+     * 批次上傳中途、尚未整批完成的照片列（見
+     * VehiclePhoto::scopeVisible()）。一般列表、public API、setCover、
+     * reorder 都透過這個關聯查詢，因此天生就不會曝光、也不能操作還沒提交
+     * 完成的照片；uploadPhotos() 內部逐檔處理時的照片上限/封面/sort_order
+     * 檢查刻意改用 VehiclePhoto::where('vehicle_id', ...) 直接查詢、不經過
+     * 這個關聯，才能看到同一批次自己已建立、但尚未提交的照片，避免上限、
+     * 封面、sort_order 判斷漏算。
+     */
     public function photos(): HasMany
     {
-        return $this->hasMany(VehiclePhoto::class)->orderBy('sort_order');
+        return $this->hasMany(VehiclePhoto::class)->visible()->orderBy('sort_order');
     }
 
     public function sellerCustomer(): BelongsTo

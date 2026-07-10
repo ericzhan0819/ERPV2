@@ -53,6 +53,20 @@ class VehiclePhotoService
         $batch = $begin['batch'];
 
         if ($begin['mode'] === 'replay') {
+            // 正常情況下這批照片在上一次真正完成處理時就已經被
+            // markBatchPhotosVisible() 曝光過了；但整批的完成判斷（photo_ids 長度
+            // 達到檔案總數）跟「曝光」是兩個分開的寫入步驟，如果上一次呼叫在最後
+            // 一個檔案的 photo_ids 已經 commit、但曝光那個 UPDATE 還沒執行或還沒
+            // commit 前就中斷（例如 worker 被強制中止、程序崩潰），這批照片就會
+            // 卡在「已經被視為完成、之後任何請求都直接回放」但 upload_batch_id
+            // 從未被清空、永遠對外不可見的狀態——沒有任何機制會再重新嘗試曝光它們
+            // （Codex stop-time review 指出）。這裡在每一次回放時都重新做一次同樣
+            // 冪等的曝光動作：多數情況下這些照片早已是可見狀態，這個 UPDATE 的
+            // WHERE 條件不會匹配到任何 row，只是一個沒有副作用的健康檢查；只有在
+            // 真的卡在上述中斷情境時，才會在這裡把它們補曝光，讓使用者不需要知道
+            // 也不需要手動介入就能自動修復。
+            $this->markBatchPhotosVisible($batch->photo_ids ?? []);
+
             return $this->photosInOrder($batch->photo_ids ?? []);
         }
 
@@ -120,6 +134,15 @@ class VehiclePhotoService
                         $photo = VehiclePhoto::create([
                             ...$data,
                             'vehicle_id' => $vehicle->id,
+                            // 逐檔建立當下先記錄它屬於哪個 batch，視為「尚未提交、
+                            // 暫不可見」（Vehicle::photos() 的 visible() scope 會濾掉
+                            // upload_batch_id 不為 NULL 的照片）。整批上傳全部成功後，
+                            // uploadPhotos() 收尾會一次性把這批照片的 upload_batch_id
+                            // 清成 NULL，才視為正式提交完成、對外可見（Codex
+                            // adversarial review 指出：先前版本每個檔案一建立就立刻
+                            // 透過一般列表/封面/排序操作對外可見，中途永久放棄時被
+                            // 排程 sweep 掉等於憑空拿走使用者已經看過的資料）。
+                            'upload_batch_id' => $batch->id,
                             'sort_order' => $nextSortOrder,
                             'is_cover' => ! $hasCover,
                             'uploaded_by' => $user->id,
@@ -243,8 +266,22 @@ class VehiclePhotoService
 
         // 全部檔案都處理完成：batch.photo_ids 已經跟著每個檔案同步更新到位，長度會
         // 剛好等於這次請求的檔案總數，之後 beginUploadBatch() 會依此判斷為「已完成」
-        // 直接回放，不需要另外標記完成狀態或再做一次收尾寫入。順手清空租約，避免
-        // 已完成的 row 留著一個之後不會再被檢查、但語意上已經沒有意義的到期時間。
+        // 直接回放，不需要另外標記完成狀態或再做一次收尾寫入。
+        //
+        // 這裡一次性把這批（含這次呼叫之前續傳留下的 $alreadyDonePhotos 與這次呼叫
+        // 新建立的 $newlyCreatedThisCall）所有照片的 upload_batch_id 清成 NULL，
+        // 才視為「已提交、正式可見」（見 VehiclePhoto::scopeVisible() 與這次新增的
+        // 2026_07_11_000002 migration 說明）。在此之前，這些照片即使已經真的建立
+        // 在資料庫裡，也完全不會出現在一般列表、public API，或被 setCover/reorder
+        // 操作到——只有整批上傳確定全部成功的這一刻，才會被一次性、原子性地曝光，
+        // 不會有「部分檔案已上傳成功，看起來像成功了一部分」的中間可見狀態（Codex
+        // adversarial review 指出：先前版本每個檔案一建立就立刻可見，中途永久放棄
+        // 時被 vehicle-photos:sweep-stale-uploads 排程 sweep 掉，等於在使用者不知情
+        // 的狀況下把已經曝光過的資料憑空拿走）。
+        $this->markBatchPhotosVisible(array_map(fn (VehiclePhoto $photo) => $photo->id, $created));
+
+        // 順手清空租約，避免已完成的 row 留著一個之後不會再被檢查、但語意上已經
+        // 沒有意義的到期時間。
         $this->clearProcessingLease($batch, $claimToken);
 
         return new Collection($created);
@@ -269,6 +306,24 @@ class VehiclePhotoService
         return new Collection(array_values(array_filter(
             array_map(fn (int $id) => $photosById->get($id), $photoIds)
         )));
+    }
+
+    /**
+     * 把這批照片的 upload_batch_id 清成 NULL，視為「已提交、正式可見」（見
+     * VehiclePhoto::scopeVisible()）。刻意用一個獨立、可重複呼叫、冪等的方法：
+     * 整批上傳成功收尾時呼叫一次，之後每次 replay 回放時也再呼叫一次自我修復
+     * （見 uploadPhotos() 兩處呼叫點的說明）——不管是哪一次呼叫真正讓照片曝光，
+     * 結果都一樣，重複呼叫在照片已經可見時是沒有副作用的空 UPDATE。
+     *
+     * @param  array<int, int>  $photoIds
+     */
+    private function markBatchPhotosVisible(array $photoIds): void
+    {
+        if ($photoIds === []) {
+            return;
+        }
+
+        VehiclePhoto::query()->whereIn('id', $photoIds)->update(['upload_batch_id' => null]);
     }
 
     private function clearProcessingLease(VehiclePhotoUploadBatch $batch, string $claimToken): void
