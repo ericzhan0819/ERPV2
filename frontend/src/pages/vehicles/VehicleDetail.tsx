@@ -998,7 +998,7 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
     setUploading(true)
     setUploadError(null)
     try {
-      await uploadVehiclePhotos(vehicleId, files)
+      await uploadVehiclePhotos(vehicleId, files, generateIdempotencyKey())
       loadPhotos(vehicleId)
     } catch (err) {
       setUploadError(extractErrorMessage(err, '上傳照片失敗，請稍後再試'))

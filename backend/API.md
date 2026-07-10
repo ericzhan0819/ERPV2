@@ -753,7 +753,7 @@ Query 參數：
 
 `purchase-payment`、`expense`、`deposit`、`final-payment`、`refund`、`reserve`、`POST /vehicles`（勾選同步購車付款時）、`POST /money-entries` 等會建立金流紀錄的端點都要求前端帶入 `idempotency_key`（前端可用 UUID）。同一個 key 重複送出、且內容相同時會回傳原本已建立的紀錄，不會重複入帳；若同一個 key 被用在不同內容的請求上，會回傳 422 錯誤。目的是避免網路重試造成重複收支。
 
-車輛照片上傳（`POST /api/vehicles/{id}/photos`）不使用 idempotency_key：這個端點不會建立金流紀錄，屬於 multipart 檔案上傳，重複呼叫的後果是多建立幾張照片（可再透過刪除 API 清理），不是重複入帳，因此沿用既有 idempotency pattern 沒有必要。
+車輛照片上傳（`POST /api/vehicles/{id}/photos`）也需要帶 `idempotency_key`：雖然不是金流端點，但網路逾時、瀏覽器重複送出或 proxy 重試若沒有防護，會重複建立照片並吃掉每台車最多 60 張的上限，且使用者無法確定哪些是第一次嘗試留下的紀錄。一次上傳會建立多張照片，無法讓多筆照片共用同一個 `idempotency_key`，因此改用獨立的批次記錄表（`vehicle_photo_upload_batches`）記錄這次請求的檔案內容快照（依上傳順序排列的 sha256/size/原始檔名）。同一把 key、內容相同的重試會直接回傳第一次建立的照片，不會重複建立；同一把 key 但內容不同會回傳 `422`；同一把 key 在第一次請求仍處理中時提早重試，也會回傳 `422`（請稍後再試），不會回傳不完整或假造的結果。詳見第 13 節。
 
 ---
 
@@ -778,9 +778,16 @@ Query 參數：
 
 | 欄位 | 型別 | 說明 |
 |---|---|---|
+| idempotency_key | string | 必填，前端可用 UUID；同一把 key 帶相同檔案內容重試會回傳第一次的結果，不重複建立 |
 | photos[] | file[] | 必填，1~20 個檔案，單檔最大 8MB，僅接受 jpg/jpeg/png/webp |
 
 成功回傳新建立照片的 `VehiclePhotoResource` 陣列（`201`）。第一張上傳的照片自動成為封面。超過每台車 60 張上限、或超過單次 20 張上限時回傳 `422`。
+
+`idempotency_key` 重試規則（見第 12 節冪等性）：
+
+- 同一把 key、檔案內容（依上傳順序比對 sha256/size/原始檔名）與第一次相同：直接回傳第一次建立的照片，不會重複建立、不影響每台車 60 張上限。
+- 同一把 key、檔案內容不同：回傳 `422`。
+- 同一把 key，第一次請求仍在處理中（例如兩個請求幾乎同時抵達）：回傳 `422`，訊息提示稍後再試，不回傳不完整或假造的結果。
 
 ### PATCH /api/vehicles/{id}/photos/reorder — 僅限 admin/manager
 

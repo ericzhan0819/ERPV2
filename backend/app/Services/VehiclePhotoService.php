@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehiclePhoto;
+use App\Models\VehiclePhotoUploadBatch;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -26,7 +28,7 @@ class VehiclePhotoService
      * @param  array<int, UploadedFile>  $files
      * @return Collection<int, VehiclePhoto>
      */
-    public function uploadPhotos(Vehicle $vehicle, User $user, array $files): Collection
+    public function uploadPhotos(Vehicle $vehicle, User $user, array $files, string $idempotencyKey): Collection
     {
         $config = config('vehicle_photos');
 
@@ -34,6 +36,23 @@ class VehiclePhotoService
             throw ValidationException::withMessages([
                 'photos' => "單次上傳最多 {$config['max_files_per_upload']} 張照片。",
             ]);
+        }
+
+        // 一次上傳會建立多張照片，無法讓多筆 vehicle_photos row 共用同一個 unique
+        // idempotency_key（沿用 vehicles/money_entries 既有的「unique key + payload
+        // 快照比對」模式，但用獨立的 vehicle_photo_upload_batches 記錄表記這次請求的
+        // 檔案內容快照）。網路逾時、瀏覽器重複送出或 proxy 重試帶著同一把 key 重打這個
+        // 端點時，內容相同就直接回傳當初建立的照片、不重複建立；內容不同則拒絕（Codex
+        // adversarial review 指出先前完全沒有這層保護，重試會不斷疊加重複照片並吃掉
+        // 每台車 60 張上限）。
+        $payload = $this->buildUploadPayload($vehicle, $files);
+        ['batch' => $batch, 'isNew' => $isNew] = $this->beginUploadBatch($vehicle, $idempotencyKey, $payload);
+
+        if (! $isNew) {
+            return VehiclePhoto::query()
+                ->whereIn('id', $batch->photo_ids ?? [])
+                ->orderBy('sort_order')
+                ->get();
         }
 
         $created = [];
@@ -97,10 +116,132 @@ class VehiclePhotoService
                 $this->finalizePhysicalDeletion($photo);
             }
 
+            // 這批上傳整體失敗，$batch 的 photo_ids 會永遠是 null。刪除這筆 reservation
+            // row，讓使用者用同一把 idempotency_key 重新送出時，能被當成全新的第一次
+            // 嘗試乾淨地重試，而不是永遠卡在「payload 相同、但 photo_ids 一直是 null」
+            // 的半殘狀態、被 beginUploadBatch() 誤判成「仍在處理中」而拒絕重試。
+            $batch->delete();
+
             throw $e;
         }
 
+        // 所有照片都已經在各自的 transaction 內成功 commit——對使用者而言這次上傳已經
+        // 真正成功了，接下來只是把 photo_ids 寫回 reservation row 供未來 replay 使用的
+        // 收尾動作。如果這個 update() 本身失敗（例如當下 DB 連線短暫抖動），不能讓例外
+        // 往外拋：那會讓呼叫端看到「上傳失敗」的假訊息，但照片其實已經建立成功，且
+        // catch 區塊只會清理「這次呼叫自己建立」的照片，反而會產生「回報失敗、但照片
+        // 其實留著」的不一致。更嚴重的是，若放著 $batch 不管，它會永遠卡在
+        // payload 相符、但 photo_ids 仍是 null 的狀態，之後任何用同一把
+        // idempotency_key 的重試都會被 beginUploadBatch() 誤判成「仍在處理中」而永遠
+        // 卡死，沒有任何後續請求能修復——這比單純的重複建立照片更糟，因為它讓這把
+        // key 完全無法再使用。因此這裡吞下例外，盡力刪除這筆 reservation row：刪除
+        // 成功的話，之後用同一把 key 重試會被當成全新的第一次嘗試（在這個極罕見的
+        // 雙重失敗窗口內，代價是可能重複建立這批照片，而不是永久卡死），仍然遠優於
+        // 讓 key 永久失效。
+        try {
+            $batch->update(['photo_ids' => array_map(fn (VehiclePhoto $photo) => $photo->id, $created)]);
+        } catch (\Throwable $e) {
+            Log::warning('車輛照片批次記錄收尾失敗，嘗試清除 reservation row 避免 idempotency_key 永久卡死', [
+                'vehicle_id' => $vehicle->id,
+                'idempotency_key' => $batch->idempotency_key,
+                'photo_ids' => array_map(fn (VehiclePhoto $photo) => $photo->id, $created),
+                'exception' => $e->getMessage(),
+            ]);
+
+            try {
+                $batch->delete();
+            } catch (\Throwable $deleteException) {
+                // 連刪除都失敗代表 DB 當下真的不可用，這種狀況下這把 key 仍可能卡死，
+                // 但已經超出這次請求能自行修復的範圍，只能留下明確的 log 供人工排查。
+                Log::warning('車輛照片批次 reservation row 清除失敗，idempotency_key 可能暫時無法重試', [
+                    'vehicle_id' => $vehicle->id,
+                    'idempotency_key' => $batch->idempotency_key,
+                    'exception' => $deleteException->getMessage(),
+                ]);
+            }
+        }
+
         return new Collection($created);
+    }
+
+    /**
+     * @param  array<int, UploadedFile>  $files
+     * @return array{vehicle_id: int, files: array<int, array{sha256: string, size: int, original_filename: string}>}
+     */
+    private function buildUploadPayload(Vehicle $vehicle, array $files): array
+    {
+        return [
+            'vehicle_id' => $vehicle->id,
+            'files' => array_map(fn (UploadedFile $file) => [
+                'sha256' => hash_file('sha256', $file->getRealPath()),
+                'size' => $file->getSize(),
+                'original_filename' => $file->getClientOriginalName(),
+            ], $files),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array{batch: VehiclePhotoUploadBatch, isNew: bool}
+     */
+    private function beginUploadBatch(Vehicle $vehicle, string $idempotencyKey, array $payload): array
+    {
+        try {
+            $batch = DB::transaction(fn () => VehiclePhotoUploadBatch::create([
+                'vehicle_id' => $vehicle->id,
+                'idempotency_key' => $idempotencyKey,
+                'idempotency_payload' => json_encode($payload, JSON_THROW_ON_ERROR),
+            ]));
+
+            return ['batch' => $batch, 'isNew' => true];
+        } catch (QueryException $e) {
+            if (! $this->isIdempotencyKeyUniqueViolation($e)) {
+                throw $e;
+            }
+
+            // 沿用 VehicleService 既有的 race pattern：unique 違反後 rollback，開新
+            // transaction 並 lockForUpdate 重新讀取真正贏得這把 key 的 row，避免在同一個
+            // 已經失敗的 transaction 裡繼續讀取。
+            return DB::transaction(function () use ($e, $idempotencyKey, $payload) {
+                $existing = VehiclePhotoUploadBatch::query()
+                    ->where('idempotency_key', $idempotencyKey)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($existing === null) {
+                    throw $e;
+                }
+
+                $storedPayload = json_decode((string) $existing->idempotency_payload, true);
+                if (! is_array($storedPayload) || $storedPayload !== $payload) {
+                    throw ValidationException::withMessages([
+                        'idempotency_key' => '此 idempotency_key 已用於內容不同的照片上傳請求。',
+                    ]);
+                }
+
+                if ($existing->photo_ids === null) {
+                    // 極短暫的合法競態窗口：兩個帶著同一把 key 的請求幾乎同時抵達，
+                    // 第一個已經贏得 reservation row 但檔案處理尚未完成。這裡不能假裝
+                    // 已完成而回傳空結果，也不能卡住等待，直接請使用者稍後重試。
+                    throw ValidationException::withMessages([
+                        'idempotency_key' => '此照片上傳仍在處理中，請稍後再試一次。',
+                    ]);
+                }
+
+                return ['batch' => $existing, 'isNew' => false];
+            });
+        }
+    }
+
+    private function isIdempotencyKeyUniqueViolation(QueryException $e): bool
+    {
+        $sqlState = $e->errorInfo[0] ?? null;
+
+        if ($sqlState !== '23000') {
+            return false;
+        }
+
+        return str_contains($e->getMessage(), 'idempotency_key');
     }
 
     public function deletePhoto(Vehicle $vehicle, VehiclePhoto $photo): void

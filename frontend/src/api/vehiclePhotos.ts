@@ -6,8 +6,13 @@ export async function listVehiclePhotos(vehicleId: number): Promise<VehiclePhoto
   return data.data
 }
 
-export async function uploadVehiclePhotos(vehicleId: number, files: File[]): Promise<VehiclePhoto[]> {
+export async function uploadVehiclePhotos(
+  vehicleId: number,
+  files: File[],
+  idempotencyKey: string,
+): Promise<VehiclePhoto[]> {
   const formData = new FormData()
+  formData.append('idempotency_key', idempotencyKey)
   files.forEach((file) => formData.append('photos[]', file))
   const { data } = await apiClient.post<{ data: VehiclePhoto[] }>(`/api/vehicles/${vehicleId}/photos`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },

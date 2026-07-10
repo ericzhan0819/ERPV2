@@ -28,6 +28,7 @@ class VehiclePhotoController extends Controller
             $vehicle,
             $request->user(),
             $request->file('photos'),
+            $request->validated('idempotency_key'),
         );
 
         return VehiclePhotoResource::collection($photos);
