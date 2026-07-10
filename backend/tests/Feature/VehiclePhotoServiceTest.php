@@ -239,6 +239,181 @@ class VehiclePhotoServiceTest extends TestCase
     }
 
     /**
+     * Codex adversarial review 指出：若逐檔建立當下就依「目前是否已有
+     * is_cover=true 的 row」決定要不要把自己設成封面，且這個查詢沒有排除其他
+     * 批次還在中途、尚未提交的 hidden 照片，先佔走封面判斷的那個批次一旦後來
+     * 失敗 rollback 或被判定放棄而 sweep 掉，之後才完成的批次卻早已因為誤判
+     * 「已有封面」而放棄設封面，導致整台車最終沒有任何封面。修法是封面一律
+     * 留到 finalizeBatchVisibility() 曝光那一刻才判斷，且只看「此刻已經正式
+     * 可見」的照片。這裡驗證：即使有另一個批次的照片還卡在中途、對外不可見，
+     * 新的一批上傳完成、正式曝光時仍然會正確拿到封面，且不會去動到那個隱藏、
+     * 不相干的 row。
+     */
+    public function test_upload_photos_finalization_ignores_hidden_photo_from_another_in_progress_batch_when_assigning_cover(): void
+    {
+        Storage::fake('public');
+
+        $vehicle = Vehicle::factory()->create();
+        $user = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
+
+        $staleBatch = VehiclePhotoUploadBatch::create([
+            'vehicle_id' => $vehicle->id,
+            'idempotency_key' => 'other-batch-key-'.uniqid(),
+            'idempotency_payload' => json_encode(['vehicle_id' => $vehicle->id, 'files' => []], JSON_THROW_ON_ERROR),
+            'photo_ids' => [],
+            'processing_lease_expires_at' => null,
+        ]);
+
+        $hiddenPhoto = VehiclePhoto::create([
+            'vehicle_id' => $vehicle->id,
+            'upload_batch_id' => $staleBatch->id,
+            'disk' => 'public',
+            'path' => 'vehicles/'.$vehicle->id.'/hidden.webp',
+            'thumbnail_path' => 'vehicles/'.$vehicle->id.'/hidden_thumb.webp',
+            'original_filename' => 'test.webp',
+            'mime_type' => 'image/webp',
+            'size' => 100,
+            'width' => 10,
+            'height' => 10,
+            'sort_order' => 0,
+            // 對照新的曝光時機規則：這個模擬另一個批次中途建立的照片本身就
+            // 不該帶著 is_cover=true（見 uploadPhotos() 建立照片時的說明），
+            // 這裡刻意用 false 反映曝光前唯一合法的狀態。
+            'is_cover' => false,
+            'uploaded_by' => $user->id,
+        ]);
+
+        // 這批照片還在另一個批次中途、尚未提交，對外完全不可見。
+        $this->assertSame(0, $vehicle->photos()->count());
+
+        $service = app(VehiclePhotoService::class);
+        $result = $service->uploadPhotos(
+            $vehicle,
+            $user,
+            [$this->fakeJpegUploadedFile('a.jpg')],
+            'test-upload-key-'.uniqid(),
+        );
+
+        $this->assertCount(1, $result);
+        $this->assertTrue($result->first()->is_cover);
+        $this->assertSame(1, $vehicle->photos()->count());
+
+        // 隱藏批次的殘留 row 完全沒被動到，仍然不可見、仍然不是封面。
+        $hiddenPhoto->refresh();
+        $this->assertNotNull($hiddenPhoto->upload_batch_id);
+        $this->assertFalse($hiddenPhoto->is_cover);
+    }
+
+    /**
+     * cover_slot 是不分可見／隱藏的 DB-wide unique 索引：只要這台車有任何一筆
+     * row 帶著 is_cover=true，不論它此刻是否可見，都會佔用這台車唯一的
+     * cover_slot 值。這次修正之後，正常的上傳流程不會再讓任何隱藏中的照片帶著
+     * is_cover=true，但這裡直接模擬「這次修正上線前就已經卡住的殘留資料」——
+     * 一筆隱藏、對外不可見，卻已經帶著 is_cover=true 的舊 row。若曝光/指定封面
+     * 時沒有先清掉這種殘留資料，直接對新照片寫 is_cover=true 會撞到 unique
+     * constraint，讓整個曝光 transaction 失敗（Codex stop-time review 指出）。
+     */
+    public function test_upload_photos_finalization_self_heals_legacy_hidden_cover_row_instead_of_crashing(): void
+    {
+        Storage::fake('public');
+
+        $vehicle = Vehicle::factory()->create();
+        $user = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
+
+        $staleBatch = VehiclePhotoUploadBatch::create([
+            'vehicle_id' => $vehicle->id,
+            'idempotency_key' => 'other-batch-key-'.uniqid(),
+            'idempotency_payload' => json_encode(['vehicle_id' => $vehicle->id, 'files' => []], JSON_THROW_ON_ERROR),
+            'photo_ids' => [],
+            'processing_lease_expires_at' => null,
+        ]);
+
+        $legacyHiddenCoverPhoto = $this->makePhoto(
+            $vehicle,
+            $user,
+            'vehicles/'.$vehicle->id.'/legacy-hidden-cover.webp',
+            'vehicles/'.$vehicle->id.'/legacy-hidden-cover_thumb.webp',
+            $staleBatch->id,
+        );
+        $this->assertTrue($legacyHiddenCoverPhoto->is_cover);
+
+        // 這筆殘留資料還在另一個批次中途、對外完全不可見。
+        $this->assertSame(0, $vehicle->photos()->count());
+
+        $service = app(VehiclePhotoService::class);
+        $result = $service->uploadPhotos(
+            $vehicle,
+            $user,
+            [$this->fakeJpegUploadedFile('a.jpg')],
+            'test-upload-key-'.uniqid(),
+        );
+
+        $this->assertCount(1, $result);
+        $this->assertTrue($result->first()->is_cover);
+        $this->assertSame(1, $vehicle->photos()->count());
+
+        // 殘留資料被順手修復成 is_cover=false，讓新曝光的照片能安全成為唯一封面，
+        // 不再需要開發者手動介入資料庫清理。
+        $legacyHiddenCoverPhoto->refresh();
+        $this->assertNotNull($legacyHiddenCoverPhoto->upload_batch_id);
+        $this->assertFalse($legacyHiddenCoverPhoto->is_cover);
+    }
+
+    /**
+     * cover_slot 這個 unique 索引是直接算在實體 row 上，完全不理解 Laravel 的
+     * soft-delete scope：一筆已經被邏輯刪除（deleted_at 不為 NULL）、卻還帶著
+     * is_cover=true 的殘留 row，物理上仍然佔用著這台車唯一的 cover_slot 值。
+     * 清除殘留封面時若沿用 Eloquent 預設的查詢（會自動排除 soft-deleted row），
+     * 就完全看不到、也清不掉這種殘留資料，一樣會讓新封面的寫入撞到 unique
+     * constraint 而失敗（Codex stop-time review 指出）。這裡直接模擬這種已被
+     * 邏輯刪除的殘留封面 row，驗證清除時確實有用 withTrashed() 涵蓋到它。
+     */
+    public function test_upload_photos_finalization_self_heals_soft_deleted_legacy_cover_row_instead_of_crashing(): void
+    {
+        Storage::fake('public');
+
+        $vehicle = Vehicle::factory()->create();
+        $user = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
+
+        $staleBatch = VehiclePhotoUploadBatch::create([
+            'vehicle_id' => $vehicle->id,
+            'idempotency_key' => 'other-batch-key-'.uniqid(),
+            'idempotency_payload' => json_encode(['vehicle_id' => $vehicle->id, 'files' => []], JSON_THROW_ON_ERROR),
+            'photo_ids' => [],
+            'processing_lease_expires_at' => null,
+        ]);
+
+        $softDeletedLegacyCoverPhoto = $this->makePhoto(
+            $vehicle,
+            $user,
+            'vehicles/'.$vehicle->id.'/soft-deleted-legacy-cover.webp',
+            'vehicles/'.$vehicle->id.'/soft-deleted-legacy-cover_thumb.webp',
+            $staleBatch->id,
+        );
+        $softDeletedLegacyCoverPhoto->delete();
+        $this->assertTrue($softDeletedLegacyCoverPhoto->is_cover);
+        $this->assertTrue($softDeletedLegacyCoverPhoto->trashed());
+
+        $this->assertSame(0, $vehicle->photos()->count());
+
+        $service = app(VehiclePhotoService::class);
+        $result = $service->uploadPhotos(
+            $vehicle,
+            $user,
+            [$this->fakeJpegUploadedFile('a.jpg')],
+            'test-upload-key-'.uniqid(),
+        );
+
+        $this->assertCount(1, $result);
+        $this->assertTrue($result->first()->is_cover);
+        $this->assertSame(1, $vehicle->photos()->count());
+
+        $softDeletedLegacyCoverPhoto->refresh();
+        $this->assertTrue($softDeletedLegacyCoverPhoto->trashed());
+        $this->assertFalse($softDeletedLegacyCoverPhoto->is_cover);
+    }
+
+    /**
      * 同一把 idempotency_key 若被用在內容不同的第二次請求（例如不同檔案），
      * 必須拒絕，不能誤判成單純的重試而回放第一次的結果。
      */

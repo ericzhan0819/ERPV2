@@ -53,19 +53,21 @@ class VehiclePhotoService
         $batch = $begin['batch'];
 
         if ($begin['mode'] === 'replay') {
-            // 正常情況下這批照片在上一次真正完成處理時就已經被
-            // markBatchPhotosVisible() 曝光過了；但整批的完成判斷（photo_ids 長度
-            // 達到檔案總數）跟「曝光」是兩個分開的寫入步驟，如果上一次呼叫在最後
-            // 一個檔案的 photo_ids 已經 commit、但曝光那個 UPDATE 還沒執行或還沒
-            // commit 前就中斷（例如 worker 被強制中止、程序崩潰），這批照片就會
-            // 卡在「已經被視為完成、之後任何請求都直接回放」但 upload_batch_id
-            // 從未被清空、永遠對外不可見的狀態——沒有任何機制會再重新嘗試曝光它們
-            // （Codex stop-time review 指出）。這裡在每一次回放時都重新做一次同樣
-            // 冪等的曝光動作：多數情況下這些照片早已是可見狀態，這個 UPDATE 的
-            // WHERE 條件不會匹配到任何 row，只是一個沒有副作用的健康檢查；只有在
-            // 真的卡在上述中斷情境時，才會在這裡把它們補曝光，讓使用者不需要知道
-            // 也不需要手動介入就能自動修復。
-            $this->markBatchPhotosVisible($batch->photo_ids ?? []);
+            // 正常情況下這批照片在上一次真正完成處理時，最後一個檔案的
+            // transaction 就已經連同「達到完成」跟「曝光」一起原子性 commit 過了
+            // （見下面 finalizeBatchVisibility() 呼叫點）。這裡仍然在每一次回放時
+            // 都重新做一次同樣冪等的曝光/補封面動作，是為了涵蓋這個原子化修正
+            // 上線前就已經卡住的既有 row（Codex stop-time review 指出的中斷視窗：
+            // 舊版把「達到完成」與「曝光」分成兩個獨立寫入步驟，程序在兩者之間
+            // 中斷會讓照片永遠卡在已完成但不可見的狀態）：多數情況下這些照片早已
+            // 是可見狀態、也已有封面，這裡的 UPDATE 不會匹配到任何 row，是沒有
+            // 副作用的健康檢查；只有真的卡在舊有中斷情境時，才會在這裡自動修復，
+            // 不需要使用者知道也不需要人工介入。鎖住車輛 row 後才執行，確保跟
+            // 另一個並發請求的封面判斷序列化、不會互相踩踏。
+            DB::transaction(function () use ($vehicle, $batch) {
+                Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
+                $this->finalizeBatchVisibility($vehicle, $batch->photo_ids ?? []);
+            });
 
             return $this->photosInOrder($batch->photo_ids ?? []);
         }
@@ -88,6 +90,7 @@ class VehiclePhotoService
         $alreadyDoneIds = $batch->photo_ids ?? [];
         $alreadyDonePhotos = $this->photosInOrder($alreadyDoneIds)->all();
         $filesToProcess = array_slice($files, count($alreadyDoneIds));
+        $totalFilesCount = count($files);
 
         $created = $alreadyDonePhotos;
         $newlyCreatedThisCall = [];
@@ -118,7 +121,7 @@ class VehiclePhotoService
                 $data = $this->processor->process($file, $vehicle->id);
 
                 try {
-                    $photo = DB::transaction(function () use ($vehicle, $user, $data, $config, $batch, $claimToken) {
+                    $photo = DB::transaction(function () use ($vehicle, $user, $data, $config, $batch, $claimToken, $totalFilesCount) {
                         Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
 
                         $currentCount = VehiclePhoto::where('vehicle_id', $vehicle->id)->count();
@@ -128,7 +131,6 @@ class VehiclePhotoService
                             ]);
                         }
 
-                        $hasCover = VehiclePhoto::where('vehicle_id', $vehicle->id)->where('is_cover', true)->exists();
                         $nextSortOrder = (int) (VehiclePhoto::where('vehicle_id', $vehicle->id)->max('sort_order') ?? -1) + 1;
 
                         $photo = VehiclePhoto::create([
@@ -137,25 +139,52 @@ class VehiclePhotoService
                             // 逐檔建立當下先記錄它屬於哪個 batch，視為「尚未提交、
                             // 暫不可見」（Vehicle::photos() 的 visible() scope 會濾掉
                             // upload_batch_id 不為 NULL 的照片）。整批上傳全部成功後，
-                            // uploadPhotos() 收尾會一次性把這批照片的 upload_batch_id
-                            // 清成 NULL，才視為正式提交完成、對外可見（Codex
-                            // adversarial review 指出：先前版本每個檔案一建立就立刻
-                            // 透過一般列表/封面/排序操作對外可見，中途永久放棄時被
-                            // 排程 sweep 掉等於憑空拿走使用者已經看過的資料）。
+                            // 這個 transaction 才會（在 batch 剛好完成的那一次呼叫）
+                            // 一次性把這批照片的 upload_batch_id 清成 NULL，才視為
+                            // 正式提交完成、對外可見（Codex adversarial review 指出：
+                            // 先前版本每個檔案一建立就立刻透過一般列表/封面/排序操作
+                            // 對外可見，中途永久放棄時被排程 sweep 掉等於憑空拿走
+                            // 使用者已經看過的資料）。
                             'upload_batch_id' => $batch->id,
                             'sort_order' => $nextSortOrder,
-                            'is_cover' => ! $hasCover,
+                            // 建立當下一律不設封面，即使這是這台車第一張照片也一樣。
+                            // 舊版在這裡直接查「這台車是否已有 is_cover=true 的
+                            // row」，但那個查詢沒有排除還在其他批次中途、尚未提交的
+                            // hidden 照片：如果另一個批次先佔走了封面，之後卻失敗
+                            // rollback 或被判定放棄而 sweep 掉，這裡本來會誤以為
+                            // 「已經有封面」而不幫這批照片指定封面，導致整台車最終
+                            // 沒有任何封面（Codex adversarial review 指出）。封面
+                            // 一律留到整批確定成功、正式曝光的那一刻才在
+                            // finalizeBatchVisibility() 內判斷。
+                            'is_cover' => false,
                             'uploaded_by' => $user->id,
                         ]);
 
+                        $newPhotoIds = [...($batch->photo_ids ?? []), $photo->id];
+
                         $owned = $this->applyBatchUpdateIfOwned($batch, $claimToken, [
-                            'photo_ids' => [...($batch->photo_ids ?? []), $photo->id],
+                            'photo_ids' => $newPhotoIds,
                         ]);
 
                         if (! $owned) {
                             throw new VehiclePhotoUploadBatchSupersededException(
                                 '此照片上傳的 idempotency_key 已被另一個請求續傳認領。'
                             );
+                        }
+
+                        // 這是這批上傳最後一個檔案：在「寫入 photo_ids 達到完成」的
+                        // 同一個 transaction 內立刻曝光，不能分成兩個獨立步驟。先前
+                        // 版本把曝光（markBatchPhotosVisible）放在整個 foreach 迴圈
+                        // 結束之後才單獨呼叫，如果程序在「最後一個檔案的 photo_ids
+                        // 已經 commit」與「曝光的 UPDATE 執行或 commit」之間中斷
+                        // （worker 被強制中止、程序崩潰），這批照片就會卡在「已被
+                        // beginUploadBatch() 視為完成、之後永遠直接回放」但
+                        // upload_batch_id 從未清空、永遠對外不可見的狀態，且沒有任何
+                        // 排程會再重新嘗試曝光它們（Codex adversarial review 指出）。
+                        // 曝光跟「達成完成」寫在同一個 transaction、同一次 commit，
+                        // 就不會再有這個中斷視窗。
+                        if (count($newPhotoIds) >= $totalFilesCount) {
+                            $this->finalizeBatchVisibility($vehicle, $newPhotoIds);
                         }
 
                         return $photo;
@@ -266,25 +295,21 @@ class VehiclePhotoService
 
         // 全部檔案都處理完成：batch.photo_ids 已經跟著每個檔案同步更新到位，長度會
         // 剛好等於這次請求的檔案總數，之後 beginUploadBatch() 會依此判斷為「已完成」
-        // 直接回放，不需要另外標記完成狀態或再做一次收尾寫入。
-        //
-        // 這裡一次性把這批（含這次呼叫之前續傳留下的 $alreadyDonePhotos 與這次呼叫
-        // 新建立的 $newlyCreatedThisCall）所有照片的 upload_batch_id 清成 NULL，
-        // 才視為「已提交、正式可見」（見 VehiclePhoto::scopeVisible() 與這次新增的
-        // 2026_07_11_000002 migration 說明）。在此之前，這些照片即使已經真的建立
-        // 在資料庫裡，也完全不會出現在一般列表、public API，或被 setCover/reorder
-        // 操作到——只有整批上傳確定全部成功的這一刻，才會被一次性、原子性地曝光，
-        // 不會有「部分檔案已上傳成功，看起來像成功了一部分」的中間可見狀態（Codex
-        // adversarial review 指出：先前版本每個檔案一建立就立刻可見，中途永久放棄
-        // 時被 vehicle-photos:sweep-stale-uploads 排程 sweep 掉，等於在使用者不知情
-        // 的狀況下把已經曝光過的資料憑空拿走）。
-        $this->markBatchPhotosVisible(array_map(fn (VehiclePhoto $photo) => $photo->id, $created));
+        // 直接回放，不需要另外標記完成狀態。曝光（upload_batch_id 清成 NULL）與
+        // 封面指定已經在上面迴圈處理最後一個檔案的那個 transaction 內原子性完成
+        // （見 finalizeBatchVisibility() 呼叫點），這裡不需要也不應該再重複呼叫一次
+        // 帶有封面判斷副作用的版本，避免跟已經在鎖內做過一次的判斷重複競爭。
 
         // 順手清空租約，避免已完成的 row 留著一個之後不會再被檢查、但語意上已經
         // 沒有意義的到期時間。
         $this->clearProcessingLease($batch, $claimToken);
 
-        return new Collection($created);
+        // $created 裡的 model 實例是逐檔建立當下的記憶體快照：finalizeBatchVisibility()
+        // 對最後一個檔案曝光/指定封面時，是透過另一個 query builder／model 實例
+        // 直接寫 DB，不會回頭同步更新這裡持有的 $photo 物件，回傳前必須重新從 DB
+        // 讀一次，否則呼叫端看到的 upload_batch_id／is_cover 會是曝光、指定封面
+        // 之前的過期值。
+        return $this->photosInOrder(array_map(fn (VehiclePhoto $photo) => $photo->id, $created));
     }
 
     /**
@@ -310,20 +335,78 @@ class VehiclePhotoService
 
     /**
      * 把這批照片的 upload_batch_id 清成 NULL，視為「已提交、正式可見」（見
-     * VehiclePhoto::scopeVisible()）。刻意用一個獨立、可重複呼叫、冪等的方法：
-     * 整批上傳成功收尾時呼叫一次，之後每次 replay 回放時也再呼叫一次自我修復
+     * VehiclePhoto::scopeVisible()），並在此刻（而非個別檔案建立當下）判斷是否
+     * 需要幫這批照片指定封面。呼叫端必須已經在同一個 DB transaction 內鎖住這台
+     * 車輛的 row（見 uploadPhotos() 兩處呼叫點），確保「曝光」與「封面判斷」跟
+     * 同一台車其他並發請求（另一批上傳、deletePhoto()、setCover() 等）序列化，
+     * 不會看到彼此中途的狀態。
+     *
+     * 刻意用一個獨立、可重複呼叫、冪等的方法：整批上傳成功收尾時呼叫一次（在最後
+     * 一個檔案的 transaction 內），之後每次 replay 回放時也再呼叫一次自我修復
      * （見 uploadPhotos() 兩處呼叫點的說明）——不管是哪一次呼叫真正讓照片曝光，
-     * 結果都一樣，重複呼叫在照片已經可見時是沒有副作用的空 UPDATE。
+     * 結果都一樣，重複呼叫在照片已經可見、已經有封面時是沒有副作用的空操作。
+     *
+     * 封面刻意留到這裡才判斷，而不是在個別檔案建立當下查「這台車是否已有
+     * is_cover=true 的 row」：後者的查詢範圍如果包含其他批次還在中途、尚未提交的
+     * hidden 照片，會出現「先佔走封面的那個批次後來失敗 rollback 或被判定放棄而
+     * sweep 掉，這批照片卻已經因為誤判『已有封面』而全部是 is_cover=false」的
+     * 情況，導致整台車最終沒有任何可見封面（Codex adversarial review 指出）。
+     * 這裡只看「此刻已經正式可見的照片裡是否有封面」，只有真的沒有時，才從這批
+     * 剛曝光的照片裡挑排序最前面的一張指定為封面。
      *
      * @param  array<int, int>  $photoIds
      */
-    private function markBatchPhotosVisible(array $photoIds): void
+    private function finalizeBatchVisibility(Vehicle $vehicle, array $photoIds): void
     {
         if ($photoIds === []) {
             return;
         }
 
         VehiclePhoto::query()->whereIn('id', $photoIds)->update(['upload_batch_id' => null]);
+
+        $hasVisibleCover = VehiclePhoto::query()
+            ->where('vehicle_id', $vehicle->id)
+            ->whereNull('upload_batch_id')
+            ->where('is_cover', true)
+            ->exists();
+
+        if ($hasVisibleCover) {
+            return;
+        }
+
+        // cover_slot 是不分可見／隱藏、也不分是否已 soft-delete 的 DB-wide unique
+        // 索引（見 2026_07_09_000000 migration 說明：virtual column 直接算在實體
+        // row 上，完全不理解 Laravel 的 soft-delete scope），只要這台車有任何一筆
+        // row 帶著 is_cover=true，不論它是否可見、是否已被邏輯刪除，都會佔用這台
+        // 車唯一的 cover_slot 值，直接寫入新封面會撞到這個 unique constraint 而讓
+        // 整個曝光 transaction 失敗。理論上這次修正之後，任何照片建立當下一律先是
+        // is_cover=false，只有這裡才會指定封面，不該再有隱藏或已刪除的 row 帶著
+        // is_cover=true；但這次修正上線前建立的殘留資料，或其他尚未預見的路徑，
+        // 仍可能留下這種不一致狀態（Codex stop-time review 兩輪分別指出：先是
+        // 「只檢查可見封面是否存在不夠，隱藏的殘留封面 row 仍會讓這裡的寫入直接
+        // 炸掉」，接著指出「清除殘留封面時沒有用 withTrashed()，Eloquent 預設
+        // scope 會排除掉 soft-deleted row，讓已經被邏輯刪除、但物理上仍佔用
+        // cover_slot 的殘留 row 沒被清到，一樣會讓寫入直接炸掉」）。上面已經確認
+        // 沒有任何可見封面，代表這台車此刻「合法」的封面狀態就是沒有封面，此時
+        // 若還有 is_cover=true 的 row（不論可不可見、有沒有被邏輯刪除），一定是
+        // 不該存在的殘留資料，直接清掉讓 cover_slot 空出來，順便自我修復這筆
+        // 髒資料。
+        VehiclePhoto::query()
+            ->withTrashed()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('is_cover', true)
+            ->update(['is_cover' => false]);
+
+        $coverCandidate = VehiclePhoto::query()
+            ->whereIn('id', $photoIds)
+            ->whereNull('upload_batch_id')
+            ->orderBy('sort_order')
+            ->first();
+
+        if ($coverCandidate !== null) {
+            $coverCandidate->is_cover = true;
+            $coverCandidate->save();
+        }
     }
 
     private function clearProcessingLease(VehiclePhotoUploadBatch $batch, string $claimToken): void
