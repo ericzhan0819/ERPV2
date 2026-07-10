@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'idempotency_payload',
     'photo_ids',
     'processing_lease_expires_at',
+    'claim_token',
 ])]
 class VehiclePhotoUploadBatch extends Model
 {

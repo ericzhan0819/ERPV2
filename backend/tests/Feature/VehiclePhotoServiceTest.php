@@ -226,46 +226,188 @@ class VehiclePhotoServiceTest extends TestCase
     }
 
     /**
-     * Codex stop-time review 指出：所有照片都成功建立、commit 之後，最後的收尾動作
-     * （清空 processing_lease_expires_at）若失敗，不能讓例外直接往外拋——使用者會
-     * 看到「上傳失敗」，但照片其實已經真的建立好。這裡驗證修正後的行為：收尾失敗
-     * 仍會回傳這次真正建立的照片，且完成判斷只看 photo_ids 長度、不依賴租約是否
-     * 成功清空，之後同一把 key 仍可以正常回放。
+     * Codex adversarial review（第四輪）指出：先前版本的租約回收機制只在「認領」那
+     * 一刻核發新的 processing_lease_expires_at，卻沒有在認領之後的每一次寫入都驗證
+     * 擁有權。若前一個擁有者其實只是跑得比租約久、尚未真正放棄，它手上握著的舊
+     * $batch 物件仍可能在被續傳認領之後繼續寫入，覆蓋掉新擁有者已經寫入、甚至已經
+     * 回傳給使用者的進度。這裡直接測試 fencing 機制本身：模擬一筆已經被新請求續傳
+     * 認領（核發新 claim_token）的 batch，驗證前一個擁有者拿著舊 token 嘗試寫入
+     * 一定會被擋下（回傳 false、完全不寫入任何欄位），新擁有者的進度完全不受影響。
      */
-    public function test_upload_photos_survives_clear_processing_lease_failure_after_success(): void
+    public function test_stale_claim_token_writes_are_rejected_after_batch_is_superseded(): void
     {
         Storage::fake('public');
+        config(['vehicle_photos.upload_batch_pending_ttl_seconds' => 60]);
 
         $vehicle = Vehicle::factory()->create();
         $user = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
         $service = app(VehiclePhotoService::class);
         $key = 'test-upload-key-'.uniqid();
+        $file = $this->fakeJpegUploadedFile();
 
-        // 單一檔案的成功流程會對 batch 呼叫兩次 update()：(1) 檔案處理完成當下同步
-        // 寫回 photo_ids，(2) 整批完成後收尾清空租約。只讓第 2 次失敗，模擬「照片
-        // 已經真的建立成功，只有收尾清空租約這個衛生動作失敗」。
-        $updateCallCount = 0;
-        VehiclePhotoUploadBatch::updating(function () use (&$updateCallCount) {
-            $updateCallCount++;
-            if ($updateCallCount === 2) {
-                throw new RuntimeException('模擬批次收尾清空租約失敗');
-            }
-        });
+        $staleToken = 'stale-token-'.uniqid();
+        $batch = VehiclePhotoUploadBatch::create([
+            'vehicle_id' => $vehicle->id,
+            'idempotency_key' => $key,
+            'idempotency_payload' => json_encode([
+                'vehicle_id' => $vehicle->id,
+                'files' => [[
+                    'sha256' => hash_file('sha256', $file->getRealPath()),
+                    'size' => $file->getSize(),
+                    'original_filename' => $file->getClientOriginalName(),
+                ]],
+            ], JSON_THROW_ON_ERROR),
+            'photo_ids' => [],
+            // 模擬前一個擁有者（「request A」）的租約已過期，永遠沒有把它跑完。
+            'processing_lease_expires_at' => now()->subSeconds(10),
+            'claim_token' => $staleToken,
+        ]);
+
+        // 「request B」：租約過期後續傳認領，核發新 token 並完整處理完成。
+        $result = $service->uploadPhotos($vehicle, $user, [$file], $key);
+        $this->assertCount(1, $result);
+
+        $batch->refresh();
+        $this->assertNotSame($staleToken, $batch->claim_token);
+        $this->assertSame([$result->first()->id], $batch->photo_ids);
+
+        // 「request A」：模擬原本那個已經被取代的請求，手上還握著舊的 $staleToken，
+        // 嘗試繼續寫入。直接呼叫 applyBatchUpdateIfOwned()——這是 uploadPhotos()
+        // 內部每一次寫入實際使用的同一個方法，直接驗證 fencing 檢查本身。
+        $reflection = new \ReflectionMethod(VehiclePhotoService::class, 'applyBatchUpdateIfOwned');
+        $reflection->setAccessible(true);
+        $staleOwnerView = VehiclePhotoUploadBatch::findOrFail($batch->id);
+        $owned = $reflection->invoke($service, $staleOwnerView, $staleToken, ['photo_ids' => []]);
+
+        $this->assertFalse($owned);
+
+        // B 已經完成的進度完全沒有被 A 的過期寫入影響。
+        $batch->refresh();
+        $this->assertSame([$result->first()->id], $batch->photo_ids);
+    }
+
+    /**
+     * 對照上一個測試：這裡直接透過 uploadPhotos() 的正常呼叫路徑（不繞過反射）觸發
+     * 同樣的情境——處理到一半時，這個請求所擁有的 batch 被另一個請求續傳認領。驗證
+     * 已經在被取代之前、以合法 claim_token 寫入的第一張照片會被保留，第二個檔案因為
+     * fencing 檢查失敗完全不會留下照片，且呼叫端會收到明確的錯誤，而不是靜默的假
+     * 成功或誤刪別人的進度。
+     */
+    public function test_upload_photos_rolls_back_only_the_superseded_files_when_taken_over_mid_loop(): void
+    {
+        Storage::fake('public');
+
+        $vehicle = Vehicle::factory()->create();
+        $user = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
+        $key = 'test-upload-key-'.uniqid();
+
+        $realProcessor = app(VehiclePhotoImageProcessor::class);
+        $callCount = 0;
+        $processor = Mockery::mock(VehiclePhotoImageProcessor::class);
+        $processor->shouldReceive('process')
+            ->twice()
+            ->andReturnUsing(function ($file, $vehicleId) use ($realProcessor, &$callCount, $key) {
+                $callCount++;
+                if ($callCount === 2) {
+                    // 模擬另一個請求在第一個檔案處理完成、第二個檔案開始處理前，
+                    // 續傳認領了同一筆 batch（核發新的 claim_token）。
+                    VehiclePhotoUploadBatch::where('idempotency_key', $key)
+                        ->update(['claim_token' => 'intruder-token']);
+                }
+
+                return $realProcessor->process($file, $vehicleId);
+            });
+        $processor->shouldReceive('delete')->andReturnUsing(fn (...$args) => $realProcessor->delete(...$args));
+        $this->app->instance(VehiclePhotoImageProcessor::class, $processor);
+
+        $service = app(VehiclePhotoService::class);
 
         try {
-            $result = $service->uploadPhotos($vehicle, $user, [$this->fakeJpegUploadedFile()], $key);
-        } finally {
-            VehiclePhotoUploadBatch::flushEventListeners();
+            $service->uploadPhotos(
+                $vehicle,
+                $user,
+                [$this->fakeJpegUploadedFile('a.jpg'), $this->fakeJpegUploadedFile('b.jpg', 500, 500)],
+                $key,
+            );
+            $this->fail('預期應拋出例外');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('idempotency_key', $e->errors());
         }
 
-        // 儘管收尾清空租約失敗，照片本身已經真的建立成功，不能讓呼叫端看到假的失敗結果。
-        $this->assertCount(1, $result);
+        // 第一個檔案是在被取代之前、以合法 claim_token 寫入，必須保留，不能被這次
+        // 失敗的請求牽連刪除；第二個檔案因為 fencing 檢查失敗，完全沒有留下照片。
         $this->assertSame(1, VehiclePhoto::where('vehicle_id', $vehicle->id)->count());
 
-        // 同一把 key 之後仍可以正常回放，不受收尾失敗影響、也不會重複建立照片。
-        $retryResult = $service->uploadPhotos($vehicle, $user, [$this->fakeJpegUploadedFile()], $key);
-        $this->assertSame($result->pluck('id')->all(), $retryResult->pluck('id')->all());
+        $batch = VehiclePhotoUploadBatch::where('idempotency_key', $key)->first();
+        $this->assertSame('intruder-token', $batch->claim_token);
+        $this->assertCount(1, $batch->photo_ids);
+    }
+
+    /**
+     * Codex stop-time review（第五輪）指出：上一版的修正只在「透過 fencing 檢查偵測
+     * 到已被取代」時才不刪除既有照片；如果第二個檔案是因為完全無關的原因失敗
+     * （例如圖片本身損毀，在還沒進到 DB transaction、根本沒機會做 fencing 檢查前就
+     * 已經拋出），一般失敗的清理路徑仍會無條件刪除這次呼叫自己建立的所有照片——
+     * 即使其中第一張照片是在被取代之前、以合法 claim_token 成功寫入
+     * batch.photo_ids，新的擁有者可能已經完成並回傳給使用者。這裡直接驗證這種
+     * 「清理善後時才發現已被取代」的情境，第一張照片必須被保留。
+     */
+    public function test_upload_photos_preserves_accepted_photos_when_supersession_is_discovered_during_generic_failure_cleanup(): void
+    {
+        Storage::fake('public');
+
+        $vehicle = Vehicle::factory()->create();
+        $user = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
+        $key = 'test-upload-key-'.uniqid();
+
+        $realProcessor = app(VehiclePhotoImageProcessor::class);
+        $callCount = 0;
+        $processor = Mockery::mock(VehiclePhotoImageProcessor::class);
+        $processor->shouldReceive('process')
+            ->twice()
+            ->andReturnUsing(function ($file, $vehicleId) use ($realProcessor, &$callCount, $key) {
+                $callCount++;
+                if ($callCount === 2) {
+                    // 模擬另一個請求在第一個檔案處理完成、第二個檔案開始處理前，
+                    // 續傳認領了同一筆 batch；接著這個檔案本身處理失敗，且失敗原因
+                    // 與被取代完全無關（例如圖片損毀），在還沒機會做任何 fencing
+                    // 檢查前就直接拋出。
+                    VehiclePhotoUploadBatch::where('idempotency_key', $key)
+                        ->update(['claim_token' => 'intruder-token-generic-failure']);
+
+                    throw ValidationException::withMessages([
+                        'photos' => '模擬圖片損毀，與被取代無關的獨立處理失敗',
+                    ]);
+                }
+
+                return $realProcessor->process($file, $vehicleId);
+            });
+        $processor->shouldReceive('delete')->andReturnUsing(fn (...$args) => $realProcessor->delete(...$args));
+        $this->app->instance(VehiclePhotoImageProcessor::class, $processor);
+
+        $service = app(VehiclePhotoService::class);
+
+        try {
+            $service->uploadPhotos(
+                $vehicle,
+                $user,
+                [$this->fakeJpegUploadedFile('a.jpg'), $this->fakeJpegUploadedFile('b.jpg', 500, 500)],
+                $key,
+            );
+            $this->fail('預期應拋出例外');
+        } catch (ValidationException $e) {
+            // 應該收到「已被取代」的錯誤，而不是「圖片損毀」的原始錯誤——一旦發現
+            // 自己已經不再擁有這個 batch，原始失敗原因對使用者而言已經是過期資訊。
+            $this->assertArrayHasKey('idempotency_key', $e->errors());
+        }
+
+        // 第一個檔案是在被取代之前、以合法 claim_token 成功寫入的照片，即使第二個
+        // 檔案因為完全無關的原因失敗、觸發整批清理，也絕對不能被牽連刪除。
         $this->assertSame(1, VehiclePhoto::where('vehicle_id', $vehicle->id)->count());
+
+        $batch = VehiclePhotoUploadBatch::where('idempotency_key', $key)->first();
+        $this->assertSame('intruder-token-generic-failure', $batch->claim_token);
+        $this->assertCount(1, $batch->photo_ids);
     }
 
     /**

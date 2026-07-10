@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\VehiclePhotoUploadBatchSupersededException;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehiclePhoto;
@@ -11,6 +12,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class VehiclePhotoService
@@ -53,7 +55,17 @@ class VehiclePhotoService
             return $this->photosInOrder($batch->photo_ids ?? []);
         }
 
-        // 'new' 模式從頭開始（$alreadyDoneIds 為空）；'resume' 模式是續傳一批 TTL 過期、
+        // claim_token 是這次呼叫「認領」這筆 batch 時核發的 fencing token（見
+        // beginUploadBatch()）。租約過期後被另一個請求續傳認領時，會核發一把新的
+        // token；原本那個呼叫端即使還在跑、還握著舊的 $batch 物件，後續任何寫入都
+        // 必須帶著這裡拿到的 token 才會生效，token 一旦被換過就一律失敗，不會覆蓋
+        // 新擁有者的進度（Codex adversarial review 第四輪指出：先前版本只在認領當下
+        // 核發新租約，卻沒有在認領之後的每一次寫入都驗證擁有權，被取代的舊請求仍可能
+        // 繼續寫壞新請求的進度，甚至在自己失敗時把新擁有者已經回傳給使用者的照片
+        // 從 photo_ids 清單裡復原掉）。
+        $claimToken = $begin['claimToken'];
+
+        // 'new' 模式從頭開始（$alreadyDoneIds 為空）；'resume' 模式是續傳一批租約過期、
         // 前一次處理程序已放棄的批次，$alreadyDoneIds 是它上次成功處理到的檔案清單
         // （依 payload 的檔案順序），只需要接著處理剩下的檔案，不重做已經真的建立過
         // 照片的部分（Codex adversarial review 第三輪指出：先前版本回收逾時批次時會
@@ -82,13 +94,16 @@ class VehiclePhotoService
         // batch.photo_ids」序列化，確保並發請求看到的一定是彼此的最新結果，也確保
         // 每張照片一旦 commit，這次上傳的進度就同時、原子性地反映在 batch 上——不會
         // 出現「照片已建立、但 batch.photo_ids 還沒更新」的中間狀態，之後不管是續傳
-        // 還是回放都一定看得到跟實際 DB 一致的進度。
+        // 還是回放都一定看得到跟實際 DB 一致的進度。寫回 batch.photo_ids 時用
+        // applyBatchUpdateIfOwned() 帶上 claim_token fencing：若這次寫入失敗（代表
+        // 這個請求已經被取代），整個 transaction（含剛建立的照片）一併 rollback，
+        // 不會留下沒被記錄進 batch 的孤兒照片。
         try {
             foreach ($filesToProcess as $file) {
                 $data = $this->processor->process($file, $vehicle->id);
 
                 try {
-                    $photo = DB::transaction(function () use ($vehicle, $user, $data, $config, $batch) {
+                    $photo = DB::transaction(function () use ($vehicle, $user, $data, $config, $batch, $claimToken) {
                         Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
 
                         $currentCount = VehiclePhoto::where('vehicle_id', $vehicle->id)->count();
@@ -109,7 +124,15 @@ class VehiclePhotoService
                             'uploaded_by' => $user->id,
                         ]);
 
-                        $batch->update(['photo_ids' => [...($batch->photo_ids ?? []), $photo->id]]);
+                        $owned = $this->applyBatchUpdateIfOwned($batch, $claimToken, [
+                            'photo_ids' => [...($batch->photo_ids ?? []), $photo->id],
+                        ]);
+
+                        if (! $owned) {
+                            throw new VehiclePhotoUploadBatchSupersededException(
+                                '此照片上傳的 idempotency_key 已被另一個請求續傳認領。'
+                            );
+                        }
 
                         return $photo;
                     });
@@ -123,40 +146,56 @@ class VehiclePhotoService
                 $newlyCreatedThisCall[] = $photo;
             }
         } catch (\Throwable $e) {
+            // 不論這次失敗的原始原因是什麼（單一檔案處理失敗、超過每台車照片上限，
+            // 或是在上面的 transaction 內就已經偵測到 fencing 失敗），第一步永遠是
+            // 先用 claim_token fencing 嘗試把 batch.photo_ids／租約復原回這次呼叫
+            // 開始前的進度（$alreadyDoneIds）。這個「嘗試復原」的結果本身，就是
+            // 「此刻我是否仍然擁有這個 batch」最新、最準確的答案——比起單純檢查
+            // 「是不是 VehiclePhotoUploadBatchSupersededException」更可靠：後者只
+            // 能偵測到「在處理某個檔案的當下就已經被取代」，偵測不到「檔案處理本身
+            // 因為其他原因失敗（例如圖片損毀），但在準備清理善後的這一刻，才發現
+            // 自己其實已經被取代」這種情況（Codex adversarial review 第五輪指出：
+            // 先前版本只在偵測到 fencing 失敗時才不刪除照片，一般失敗的清理路徑仍會
+            // 無條件刪除 $newlyCreatedThisCall，即使這些照片是被取代之前、以合法
+            // claim_token 成功寫入 batch.photo_ids、新擁有者可能已經完成並回傳給
+            // 使用者的照片，一樣會被刪掉）。
+            //
+            // 順序也很關鍵：一定要先讓這次「復原/清空租約」的寫入嘗試落地（不論成功
+            // 或失敗），才進入下面判斷是否刪除 $newlyCreatedThisCall 的照片。如果復原
+            // 成功，代表 batch.photo_ids 這個瞬間已經確定不再指向這些即將被刪除的
+            // id，之後任何人（含另一個續傳認領的請求）重新讀取 batch 都不會再依賴
+            // 這些照片，這時候刪除檔案才是安全的；如果復原失敗（代表此刻已經不再
+            // 擁有這個 batch），就完全不能刪除，因為 batch.photo_ids 現在可能仍然
+            // （或即將）指向這些照片，新擁有者的續傳/完成結果可能已經涵蓋、甚至已經
+            // 回傳給使用者。
+            $stillOwned = $this->applyBatchUpdateIfOwned($batch, $claimToken, [
+                'photo_ids' => $alreadyDoneIds,
+                'processing_lease_expires_at' => null,
+            ]);
+
+            if (! $stillOwned) {
+                Log::warning('車輛照片上傳批次已被其他請求續傳認領，放棄後續處理並保留既有照片', [
+                    'vehicle_id' => $vehicle->id,
+                    'idempotency_key' => $batch->idempotency_key,
+                    'original_exception' => $e->getMessage(),
+                ]);
+
+                throw ValidationException::withMessages([
+                    'idempotency_key' => '此照片上傳已被其他請求接手處理，請重新查詢確認結果。',
+                ]);
+            }
+
             foreach ($newlyCreatedThisCall as $photo) {
                 // 維持既有的「單次請求整批要嘛全部成功、要嘛全部不算數」語意：只要
                 // 這批檔案裡有任何一個失敗，這次呼叫自己建立的照片全部回滾刪除，不
                 // 留下「5 張只成功 2 張」這種讓使用者困惑的半成品。$alreadyDonePhotos
                 // 是續傳一批「先前某次呼叫」已經真的成功建立、且原本就記錄在
-                // batch.photo_ids 的照片，不屬於這次失敗、不能被牽連刪除。這些
+                // batch.photo_ids 的照片，不屬於這次失敗、不能被牽連刪除。上面的
+                // fencing 檢查已經確認此刻仍然擁有這個 batch，這裡刪除是安全的。這些
                 // 剛建立的照片從未在任何 transaction 外被讀取過，沒有「已經被其他人
                 // 看到、需要先隱藏」的顧慮，直接 finalizePhysicalDeletion() 清
                 // storage + forceDelete()，避免留下用不到的 soft-delete tombstone row。
                 $this->finalizePhysicalDeletion($photo);
-            }
-
-            // 上面已經把這次呼叫自己建立的照片全部刪除，batch.photo_ids 也必須跟著
-            // 復原回這次呼叫開始前的進度（$alreadyDoneIds），不能繼續指向剛剛已經
-            // forceDelete() 的 id——否則之後的回放/續傳會拿著一批不存在的 photo id
-            // 去查詢，得到殘缺結果。同時清空 processing_lease_expires_at：這裡的例外
-            // 是我們自己的 PHP 呼叫堆疊在拋出、一定會被這個 catch 接住，代表這次請求
-            // 已經確定結束（不是 worker 被殺、fatal error 這種完全跳過 catch 的情境），
-            // 可以確定沒有其他人還在使用這個 batch，安全地讓下一個帶著同一把 key 的
-            // 請求不需要等到租約自然到期，就能立刻從 $alreadyDoneIds 續傳。
-            try {
-                $batch->update([
-                    'photo_ids' => $alreadyDoneIds,
-                    'processing_lease_expires_at' => null,
-                ]);
-            } catch (\Throwable $updateException) {
-                // 只是收尾動作失敗，不影響已經確定要往外拋的原始例外；最壞情況只是
-                // 下一次同把 key 的請求要多等到租約自然過期才能續傳，不會遺失任何
-                // 已經建立的照片，記錄下來即可。
-                Log::warning('車輛照片上傳批次失敗後復原進度失敗', [
-                    'vehicle_id' => $vehicle->id,
-                    'idempotency_key' => $batch->idempotency_key,
-                    'exception' => $updateException->getMessage(),
-                ]);
             }
 
             throw $e;
@@ -166,7 +205,7 @@ class VehiclePhotoService
         // 剛好等於這次請求的檔案總數，之後 beginUploadBatch() 會依此判斷為「已完成」
         // 直接回放，不需要另外標記完成狀態或再做一次收尾寫入。順手清空租約，避免
         // 已完成的 row 留著一個之後不會再被檢查、但語意上已經沒有意義的到期時間。
-        $this->clearProcessingLease($batch);
+        $this->clearProcessingLease($batch, $claimToken);
 
         return new Collection($created);
     }
@@ -192,20 +231,67 @@ class VehiclePhotoService
         )));
     }
 
-    private function clearProcessingLease(VehiclePhotoUploadBatch $batch): void
+    private function clearProcessingLease(VehiclePhotoUploadBatch $batch, string $claimToken): void
     {
         try {
-            $batch->update(['processing_lease_expires_at' => null]);
+            $this->applyBatchUpdateIfOwned($batch, $claimToken, ['processing_lease_expires_at' => null]);
         } catch (\Throwable $e) {
             // 只是收尾的衛生動作（見呼叫端註解），失敗不影響這次請求本身的結果：
             // 最壞情況只是下一次同把 key 的請求要多等到租約自然到期，不會遺失任何
-            // 已經建立的照片或 batch 進度，記錄下來即可，不需要往外拋。
+            // 已經建立的照片或 batch 進度，記錄下來即可，不需要往外拋。這裡不特別
+            // 區分「更新失敗」與「fencing token 不符（已被取代）」：兩者對這個已經
+            // 完全成功的請求而言後果相同，都只是少做一個之後不會再被檢查的收尾動作。
             Log::warning('車輛照片上傳批次清空 processing lease 失敗', [
                 'vehicle_id' => $batch->vehicle_id,
                 'idempotency_key' => $batch->idempotency_key,
                 'exception' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * 用 claim_token 當作 fencing token 寫入 batch：只有 $claimToken 與資料庫目前
+     * 記錄的 claim_token 相符（代表呼叫端此刻仍然是這筆 batch 真正的擁有者）才會
+     * 真的寫入並回傳 true；一旦這個 batch 已經被另一個請求續傳認領（核發了新的
+     * claim_token），這裡會回傳 false，且完全不寫入任何欄位——呼叫端必須自行決定
+     * 如何回應「已被取代」這件事，不能假裝寫入成功（Codex adversarial review 第四輪
+     * 指出：先前版本只在認領當下核發新租約，卻沒有在認領之後的每一次寫入都驗證
+     * 擁有權）。
+     *
+     * 這裡刻意繞過 Model::update()，改用 query builder 直接下 `WHERE id = ? AND
+     * claim_token = ?` 當作 fencing 條件，因為 Eloquent 的 Model::update() 只會用
+     * 主鍵當 WHERE 條件，無法在同一次 UPDATE 語句內原子性地附加這個額外條件。寫入
+     * 成功後才把同樣的值同步進記憶體中的 $batch 物件，讓呼叫端後續讀取
+     * $batch->photo_ids 等屬性時看到的是最新值。
+     *
+     * @param  array<string, mixed>  $attributes  Model 層級的屬性值（例如 PHP array、
+     *                                            Carbon 或 null），會在這裡自行轉換成 query builder 需要的儲存格式。
+     */
+    private function applyBatchUpdateIfOwned(VehiclePhotoUploadBatch $batch, string $claimToken, array $attributes): bool
+    {
+        $storageAttributes = [];
+        foreach ($attributes as $key => $value) {
+            $storageAttributes[$key] = match (true) {
+                is_array($value) => json_encode($value, JSON_THROW_ON_ERROR),
+                $value instanceof \DateTimeInterface => $value->format('Y-m-d H:i:s'),
+                default => $value,
+            };
+        }
+
+        $affected = VehiclePhotoUploadBatch::query()
+            ->whereKey($batch->id)
+            ->where('claim_token', $claimToken)
+            ->update($storageAttributes);
+
+        if ($affected !== 1) {
+            return false;
+        }
+
+        foreach ($attributes as $key => $value) {
+            $batch->setAttribute($key, $value);
+        }
+
+        return true;
     }
 
     /**
@@ -226,22 +312,25 @@ class VehiclePhotoService
 
     /**
      * @param  array<string, mixed>  $payload
-     * @return array{batch: VehiclePhotoUploadBatch, mode: 'new'|'resume'|'replay'}
+     * @return array{batch: VehiclePhotoUploadBatch, mode: 'new'|'resume'|'replay', claimToken: string}
      */
     private function beginUploadBatch(Vehicle $vehicle, string $idempotencyKey, array $payload): array
     {
         $leaseSeconds = (int) config('vehicle_photos.upload_batch_pending_ttl_seconds');
 
         try {
+            $claimToken = (string) Str::uuid();
+
             $batch = DB::transaction(fn () => VehiclePhotoUploadBatch::create([
                 'vehicle_id' => $vehicle->id,
                 'idempotency_key' => $idempotencyKey,
                 'idempotency_payload' => json_encode($payload, JSON_THROW_ON_ERROR),
                 'photo_ids' => [],
                 'processing_lease_expires_at' => now()->addSeconds($leaseSeconds),
+                'claim_token' => $claimToken,
             ]));
 
-            return ['batch' => $batch, 'mode' => 'new'];
+            return ['batch' => $batch, 'mode' => 'new', 'claimToken' => $claimToken];
         } catch (QueryException $e) {
             if (! $this->isIdempotencyKeyUniqueViolation($e)) {
                 throw $e;
@@ -275,8 +364,9 @@ class VehiclePhotoService
                 $totalCount = count($payload['files']);
 
                 if ($doneCount >= $totalCount) {
-                    // 已完成的批次（photo_ids 長度已達檔案總數）：直接回放。
-                    return ['batch' => $existing, 'mode' => 'replay'];
+                    // 已完成的批次（photo_ids 長度已達檔案總數）：直接回放，不需要
+                    // claim_token（不會再寫入任何東西）。
+                    return ['batch' => $existing, 'mode' => 'replay', 'claimToken' => (string) $existing->claim_token];
                 }
 
                 // 尚未完成，可能是 (a) 真的還在處理中（另一個幾乎同時抵達的相同請求，
@@ -310,21 +400,30 @@ class VehiclePhotoService
                     'previous_lease_expires_at' => $existing->processing_lease_expires_at?->toISOString(),
                 ]);
 
-                // 續傳認領：只重新核發租約，photo_ids／idempotency_payload 完全不動，
-                // 讓 uploadPhotos() 從 $doneCount 之後接著處理剩下的檔案，不重做已經
-                // 真的建立過照片的部分。
+                // 續傳認領：核發一把新的 claim_token 並重新核發租約，photo_ids／
+                // idempotency_payload 完全不動，讓 uploadPhotos() 從 $doneCount 之後
+                // 接著處理剩下的檔案，不重做已經真的建立過照片的部分。這個 update()
+                // 發生在 lockForUpdate() 鎖住這筆 row 的同一個 transaction 內，
+                // 確保「認領」這個動作本身不會跟另一個同時嘗試續傳的請求競爭——
+                // 兩者會依 lockForUpdate 序列化，第二個進來時會看到租約已經被剛剛
+                // 那個請求重新核發成未過期，落回上面的 else 分支被保守拒絕。
                 //
-                // 殘留風險：若前一次處理程序其實只是跑得比租約久、尚未真正放棄（例如
-                // 主機嚴重過載導致還在處理中的請求遲遲無法呼叫 clearProcessingLease()），
-                // 這裡的續傳認領可能與它同時處理同一批剩餘檔案，兩者各自對「同一個
-                // 缺口」建立照片，造成該區間重複。這是 lease-based 回收機制沒有
-                // fencing token 就無法 100% 杜絕的已知理論限制，與
-                // VehiclePhotoImageProcessor 的圖片處理 lock 屬同一類殘留風險。租約
-                // 時長已設得遠大於實際批次處理所需時間，把這個窗口壓到可接受範圍，
-                // 遠優於讓 key 永久卡死、需要人工清資料庫。
-                $existing->update(['processing_lease_expires_at' => now()->addSeconds($leaseSeconds)]);
+                // 核發新 claim_token 是這裡真正的關鍵：前一個擁有者若其實只是跑得
+                // 比租約久、尚未真正放棄（例如主機嚴重過載導致還在處理中的請求遲遲
+                // 無法呼叫 clearProcessingLease()），它手上握著的仍是舊的
+                // claim_token。之後它每一次嘗試寫入 photo_ids 或
+                // processing_lease_expires_at，都會因為 applyBatchUpdateIfOwned()
+                // 的 fencing 檢查失敗而被擋下（見 uploadPhotos()），不會覆蓋掉這次
+                // 續傳認領之後寫入的新進度，也不會誤刪已經回傳給使用者的照片
+                // （Codex adversarial review 第四輪指出：先前版本只重新核發租約，
+                // 沒有這層 fencing，被取代的舊請求仍可能繼續寫壞新請求的進度）。
+                $claimToken = (string) Str::uuid();
+                $existing->update([
+                    'processing_lease_expires_at' => now()->addSeconds($leaseSeconds),
+                    'claim_token' => $claimToken,
+                ]);
 
-                return ['batch' => $existing, 'mode' => 'resume'];
+                return ['batch' => $existing, 'mode' => 'resume', 'claimToken' => $claimToken];
             });
         }
     }
