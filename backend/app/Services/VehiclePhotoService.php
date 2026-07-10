@@ -89,8 +89,11 @@ class VehiclePhotoService
             }
         } catch (\Throwable $e) {
             foreach ($created as $photo) {
-                $this->processor->delete($photo->disk, $photo->path, $photo->thumbnail_path);
-                $photo->delete();
+                // 這些照片從未在任何 transaction 外被讀取過（整批上傳都還沒成功
+                // 回應），沒有「已經被其他人看到、需要先隱藏」的顧慮，直接
+                // finalizePhysicalDeletion() 清 storage + forceDelete()，避免留下
+                // 用不到的 soft-delete tombstone row。
+                $this->finalizePhysicalDeletion($photo);
             }
 
             throw $e;
@@ -103,15 +106,19 @@ class VehiclePhotoService
     {
         $this->assertBelongsToVehicle($vehicle, $photo);
 
-        // storage 檔案必須在 DB row 真正刪除「之前」處理完成：若先刪 DB row 再刪
-        // storage，一旦 storage 刪除失敗（或該次請求在兩步之間中斷），已經沒有任何
-        // DB row 指向這些檔案，代表系統會永久遺失「這張照片其實還沒真的刪除」的
-        // 紀錄，公開網址仍可能繼續存取一張使用者以為已經刪除的照片（Codex
-        // adversarial review 指出：deletion-before-storage-cleanup 會讓「已刪除」的
-        // 照片仍可公開存取）。改成先刪 storage，刪除失敗就直接拋例外、DB 完全不動，
-        // 之後可以安全重試整個刪除；只有 storage 確定清乾淨後才進入 DB transaction。
-        $this->processor->delete($photo->disk, $photo->path, $photo->thumbnail_path);
-
+        // DB 狀態變更與 storage 實體刪除無法跨系統原子化，先做哪一邊都各自有風險
+        // （兩輪 Codex adversarial review 分別指出：先刪 DB row 會讓「已刪除」的照片
+        // 在 storage 清乾淨前仍可公開存取；先刪 storage 則會在處理中途當機/逾時時，
+        // 讓 DB row 永久卡在指向不存在檔案的壞掉狀態，且無法重試）。
+        //
+        // 解法是用 deleted_at soft delete 把這兩個風險都消掉：先在鎖定車輛 row 的
+        // 同一個 transaction 內把這張照片標記為 soft-deleted（同時清空 is_cover、
+        // 改指定下一張封面）。一旦這個 transaction commit，此照片立刻從所有查詢
+        // （含 public API、列表、封面判斷）消失，不會再有「DB 說已刪除、storage
+        // 還在服務」的公開存取視窗。commit 之後才進行 storage 實體刪除；若那一步
+        // 失敗或程序中斷，DB row 仍完整保留 disk/path/thumbnail_path 且已經是
+        // 對外隱藏狀態，之後可以安全重試 storage 清理而不影響任何讀取行為。只有
+        // storage 確定清乾淨後，才 forceDelete() 徹底移除這筆 tombstone row。
         DB::transaction(function () use ($vehicle, $photo) {
             Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
 
@@ -125,6 +132,15 @@ class VehiclePhotoService
             $photo->refresh();
             $wasCover = $photo->is_cover;
 
+            if ($wasCover) {
+                // cover_slot 的 DB unique 索引不理解 Laravel 的 soft-delete scope，
+                // 即使等一下把這筆 row soft-delete，物理上它仍然存在、is_cover 仍是
+                // true 就仍佔用這台車的 cover_slot 唯一值。必須先明確清成 false 並
+                // 存檔，才能把封面指定給下一張照片，否則會撞到唯一索引。
+                $photo->is_cover = false;
+                $photo->save();
+            }
+
             $photo->delete();
 
             if ($wasCover) {
@@ -135,6 +151,49 @@ class VehiclePhotoService
                 }
             }
         });
+
+        // 已經在上面的 transaction 內對外隱藏，這裡的 storage 清理即使失敗或中斷，
+        // 都不會讓已刪除的照片重新變成可公開存取，也不會讓 DB 落入不一致的狀態；
+        // 只是這個 tombstone row 會繼續保留。「之後可以安全重試」必須有實際會被
+        // 呼叫到的程式碼才算數，不能只是註解說說——soft-deleted row 預設會被
+        // Eloquent 的 global scope 排除在一般查詢與 route model binding 之外，
+        // 沒有任何其他程式路徑會再摸到它，若沒有 purgeTrashedPhotos() 主動掃描
+        // 並重試，這個 tombstone 就會永遠卡住（Codex adversarial review 指出）。
+        $this->finalizePhysicalDeletion($photo);
+    }
+
+    /**
+     * 掃描並重試因 storage 清理失敗（或處理中途中斷）而卡在 soft-deleted
+     * tombstone 狀態的車輛照片。這是 deletePhoto() 內 finalizePhysicalDeletion()
+     * 失敗後唯一的重試管道：這些照片的 DB row 已經 soft-deleted、對外完全隱藏，
+     * 不會出現在任何一般查詢或 route model binding 結果中，只能靠直接掃描
+     * onlyTrashed() 才找得到。適合排進排程或由管理者手動執行（見
+     * `App\Console\Commands\PurgeTrashedVehiclePhotosCommand`）。
+     *
+     * @return array{purged: int, failed: int}
+     */
+    public function purgeTrashedPhotos(): array
+    {
+        $purged = 0;
+        $failed = 0;
+
+        VehiclePhoto::onlyTrashed()->get()->each(function (VehiclePhoto $photo) use (&$purged, &$failed) {
+            try {
+                $this->finalizePhysicalDeletion($photo);
+                $purged++;
+            } catch (\Throwable) {
+                $failed++;
+            }
+        });
+
+        return ['purged' => $purged, 'failed' => $failed];
+    }
+
+    private function finalizePhysicalDeletion(VehiclePhoto $photo): void
+    {
+        $this->processor->delete($photo->disk, $photo->path, $photo->thumbnail_path);
+
+        $photo->forceDelete();
     }
 
     public function setCover(Vehicle $vehicle, VehiclePhoto $photo): VehiclePhoto
