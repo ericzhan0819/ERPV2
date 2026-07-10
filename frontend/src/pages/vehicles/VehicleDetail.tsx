@@ -949,20 +949,45 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
   const [busyPhotoId, setBusyPhotoId] = useState<number | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // 每次「屬於目前車輛」的載入都會遞增，非最新一次的回應在 resolve 時直接捨棄，避免
+  // 連續操作時，較舊、較慢的回應覆蓋掉已經是最新的照片清單（race condition）。
+  const requestIdRef = useRef(0)
+  // 記錄目前 render 對應的車輛 id。上傳 / 刪除 / 設封面 / 排序等操作完成後觸發的
+  // loadPhotos() 是以「操作發起當下」的 vehicleId 呼叫；如果操作進行中使用者已經切換
+  // 到別台車，這個刷新回來的就是舊車輛的照片，不該套用到目前畫面。
+  const vehicleIdRef = useRef(vehicleId)
 
-  function loadPhotos() {
+  function loadPhotos(forVehicleId: number) {
+    // 呼叫當下就先擋掉「已經不是目前顯示中車輛」的刷新（例如上傳/刪除等操作完成觸發
+    // 的刷新，但使用者早已切換到別台車），完全不遞增 requestIdRef、不打 API、不動
+    // loading 狀態。這一步很關鍵：如果讓這種舊車輛的刷新照樣遞增 requestIdRef，會把
+    // 「目前車輛」自己合法、仍在飛行中的請求所持有的 requestId 比下去，害那個真正該
+    // 顯示的回應在 resolve 時被誤判成「非最新」而被捨棄，導致 loading 卡住、照片也不會
+    // 出現，等於被一個完全無關的舊車輛操作打斷了目前車輛正常的載入。
+    if (vehicleIdRef.current !== forVehicleId) return
+    const requestId = ++requestIdRef.current
     setLoading(true)
-    listVehiclePhotos(vehicleId)
+    listVehiclePhotos(forVehicleId)
       .then((data) => {
+        if (requestIdRef.current !== requestId || vehicleIdRef.current !== forVehicleId) return
         setPhotos(data)
         setLoadError(null)
       })
-      .catch(() => setLoadError('車輛照片載入失敗'))
-      .finally(() => setLoading(false))
+      .catch(() => {
+        if (requestIdRef.current !== requestId || vehicleIdRef.current !== forVehicleId) return
+        setLoadError('車輛照片載入失敗')
+      })
+      .finally(() => {
+        if (requestIdRef.current !== requestId || vehicleIdRef.current !== forVehicleId) return
+        setLoading(false)
+      })
   }
 
   useEffect(() => {
-    loadPhotos()
+    vehicleIdRef.current = vehicleId
+    setPhotos([])
+    setLoadError(null)
+    loadPhotos(vehicleId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vehicleId])
 
@@ -974,7 +999,7 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
     setUploadError(null)
     try {
       await uploadVehiclePhotos(vehicleId, files)
-      loadPhotos()
+      loadPhotos(vehicleId)
     } catch (err) {
       setUploadError(extractErrorMessage(err, '上傳照片失敗，請稍後再試'))
     } finally {
@@ -988,7 +1013,7 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
     setActionError(null)
     try {
       await deleteVehiclePhoto(vehicleId, photo.id)
-      loadPhotos()
+      loadPhotos(vehicleId)
     } catch (err) {
       setActionError(extractErrorMessage(err, '刪除照片失敗，請稍後再試'))
     } finally {
@@ -1001,7 +1026,7 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
     setActionError(null)
     try {
       await setCoverVehiclePhoto(vehicleId, photo.id)
-      loadPhotos()
+      loadPhotos(vehicleId)
     } catch (err) {
       setActionError(extractErrorMessage(err, '設定封面失敗，請稍後再試'))
     } finally {
@@ -1023,10 +1048,10 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
         vehicleId,
         reordered.map((p) => p.id),
       )
-      loadPhotos()
+      loadPhotos(vehicleId)
     } catch (err) {
       setActionError(extractErrorMessage(err, '調整排序失敗，請稍後再試'))
-      loadPhotos()
+      loadPhotos(vehicleId)
     } finally {
       setBusyPhotoId(null)
     }
