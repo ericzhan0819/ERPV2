@@ -10,6 +10,7 @@ use App\Models\VehiclePhotoUploadBatch;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -168,13 +169,44 @@ class VehiclePhotoService
             // commit 之前完全看不到 batch 復原（fencing 仍會保守拒絕），要嘛在
             // commit 之後同時看到「batch 已復原」與「這些照片已經對外隱藏」，不會
             // 有中間的不一致狀態。
-            $stillOwned = $this->restoreBatchAndSoftDeleteRolledBackPhotos(
-                $vehicle,
-                $batch,
-                $claimToken,
-                $alreadyDoneIds,
-                $newlyCreatedThisCall,
-            );
+            try {
+                $stillOwned = $this->restoreBatchAndSoftDeleteRolledBackPhotos(
+                    $vehicle,
+                    $batch,
+                    $claimToken,
+                    $alreadyDoneIds,
+                    $newlyCreatedThisCall,
+                );
+            } catch (\Throwable $cleanupException) {
+                // 這個復原/soft-delete transaction 本身可能因為暫時性的 DB 問題
+                // （deadlock、lock wait timeout 等）失敗，即使已經在
+                // restoreBatchAndSoftDeleteRolledBackPhotos() 內用
+                // DB::transaction($callback, 3) 讓 Laravel 自動重試 deadlock 三次
+                // 仍不保證一定成功（Codex adversarial review 第七輪指出：先前版本
+                // 完全沒有處理這個 transaction 自己失敗的情況，會讓底層原始 SQL
+                // 例外直接外洩，蓋掉真正的失敗原因）。
+                //
+                // 因為整個復原/soft-delete 是包在單一 DB transaction 內，一旦這個
+                // transaction 沒有 commit，就完全沒有任何東西被改動：這次呼叫自己
+                // 建立的照片（$newlyCreatedThisCall）與 batch.photo_ids／租約，都還
+                // 停留在「失敗前最後一次成功寫入」的狀態，不是不上不下的半殘狀態。
+                // 這代表系統不會因此永久卡死——只是沒能立即復原成可重試，會退回
+                // 沿用既有的租約 TTL 機制（見 beginUploadBatch()）：租約到期後，
+                // 之後帶著同一把 idempotency_key 的請求一樣能安全續傳，不需要人工
+                // 介入資料庫。這裡只需要老實記錄兩個例外（原始失敗原因 + 復原失敗
+                // 原因），並回傳一個誠實、可重試的錯誤，不能讓底層原始的 SQL 例外
+                // 直接外洩，也不能假裝復原成功繼續往下刪除照片。
+                Log::warning('車輛照片上傳失敗後的批次復原/清理本身也失敗，將退回租約 TTL 機制自然復原', [
+                    'vehicle_id' => $vehicle->id,
+                    'idempotency_key' => $batch->idempotency_key,
+                    'original_exception' => $e->getMessage(),
+                    'cleanup_exception' => $cleanupException->getMessage(),
+                ]);
+
+                throw ValidationException::withMessages([
+                    'photos' => '照片上傳失敗，且系統清理暫時發生問題，請稍後重新查詢確認結果或重試。',
+                ]);
+            }
 
             if (! $stillOwned) {
                 Log::warning('車輛照片上傳批次已被其他請求續傳認領，放棄後續處理並保留既有照片', [
@@ -321,10 +353,21 @@ class VehiclePhotoService
      * storage 實體清理（best-effort，失敗只留下 tombstone，交由
      * purgeTrashedPhotos() 之後重試）。
      *
+     * 這個 transaction 帶了 3 次自動重試（`DB::transaction($callback, 3)`）：
+     * lockForUpdate() 在高併發下可能撞上 deadlock 或短暫的 lock wait timeout，
+     * Laravel 對這類可重試的 QueryException 會自動整個 closure 重跑，不需要自己
+     * 手刻重試迴圈。若 3 次都失敗，例外會直接往外拋，由呼叫端（uploadPhotos()）
+     * 決定如何回應（見那裡的 try/catch）。
+     *
+     * 刻意宣告成 protected 而非 private：測試需要模擬「這個 transaction 重試 3
+     * 次後仍然失敗」這個情境，用匿名子類別覆寫這個方法丟出例外是唯一不需要真的
+     * 製造一次可攜（SQLite/MySQL 都能重現）的底層 DB 失敗、就能可靠測到
+     * uploadPhotos() 對應 catch 分支的方式；private 方法無法被子類別覆寫。
+     *
      * @param  array<int, int>  $alreadyDoneIds
      * @param  array<int, VehiclePhoto>  $newlyCreatedThisCall
      */
-    private function restoreBatchAndSoftDeleteRolledBackPhotos(
+    protected function restoreBatchAndSoftDeleteRolledBackPhotos(
         Vehicle $vehicle,
         VehiclePhotoUploadBatch $batch,
         string $claimToken,
@@ -374,7 +417,7 @@ class VehiclePhotoService
             }
 
             return true;
-        });
+        }, 3);
     }
 
     /**
@@ -422,14 +465,37 @@ class VehiclePhotoService
             // 沿用 VehicleService 既有的 race pattern：unique 違反後 rollback，開新
             // transaction 並 lockForUpdate 重新讀取真正贏得這把 key 的 row，避免在同一個
             // 已經失敗的 transaction 裡繼續讀取。
-            return DB::transaction(function () use ($e, $vehicle, $idempotencyKey, $payload, $leaseSeconds) {
+            return DB::transaction(function () use ($vehicle, $idempotencyKey, $payload, $leaseSeconds) {
                 $existing = VehiclePhotoUploadBatch::query()
                     ->where('idempotency_key', $idempotencyKey)
                     ->lockForUpdate()
                     ->first();
 
                 if ($existing === null) {
-                    throw $e;
+                    // 造成 unique 違反的那筆 row，在我們的 INSERT 失敗到現在重新查詢
+                    // 這段時間內已經不存在了。最可能的原因是
+                    // vehicle-photos:sweep-stale-uploads 排程判定它已經永久放棄並清理
+                    // 掉（見 abandonStaleIncompleteUploadBatches()）——代表這把
+                    // idempotency_key 事實上已經空出來了，不是真的有另一個目前仍然
+                    // 存在的 row 在跟我們搶。若直接把原始的 unique constraint
+                    // QueryException 往外拋，一個合法的重試會收到一個難以理解的底層
+                    // SQL 錯誤，而不是乾淨地繼續完成上傳（Codex adversarial review 第
+                    // 十一輪指出）。這裡改成把這次請求當成全新的認領，在同一個
+                    // transaction 內重新 INSERT 一次；如果連這次都又剛好撞上另一個
+                    // 幾乎同一時間抵達的請求（極端的雙重競態），才把那次的 unique
+                    // constraint 例外原封不動往外拋，不再進一步重試。
+                    $retryClaimToken = (string) Str::uuid();
+
+                    $batch = VehiclePhotoUploadBatch::create([
+                        'vehicle_id' => $vehicle->id,
+                        'idempotency_key' => $idempotencyKey,
+                        'idempotency_payload' => json_encode($payload, JSON_THROW_ON_ERROR),
+                        'photo_ids' => [],
+                        'processing_lease_expires_at' => now()->addSeconds($leaseSeconds),
+                        'claim_token' => $retryClaimToken,
+                    ]);
+
+                    return ['batch' => $batch, 'mode' => 'new', 'claimToken' => $retryClaimToken];
                 }
 
                 $storedPayload = json_decode((string) $existing->idempotency_payload, true);
@@ -637,6 +703,199 @@ class VehiclePhotoService
         });
 
         return ['purged' => $purged, 'failed' => $failed];
+    }
+
+    /**
+     * 掃描並清理長期沒有任何請求再回來續傳的未完成上傳批次。
+     * upload_batch_pending_ttl_seconds 過期只代表「允許下一個真實請求續傳認領」，
+     * 不保證真的會有請求回來——如果使用者放棄重試（例如直接關掉分頁），這批上傳
+     * 裡已經真的建立好的照片會一直以正常、可見的 VehiclePhoto row 留著，讓一次
+     * 從未真正完成的上傳看起來像是成功上傳了一部分（Codex adversarial review 第
+     * 八輪指出）。
+     *
+     * 判斷「永久放棄」用 updated_at 是否早於 upload_batch_abandon_sweep_seconds
+     * 門檻（見 config/vehicle_photos.php 的說明，預設遠大於
+     * upload_batch_pending_ttl_seconds），而不是只看 processing_lease_expires_at
+     * 是否早於門檻——租約在 uploadPhotos() 一般失敗的復原路徑（見
+     * restoreBatchAndSoftDeleteRolledBackPhotos()）與整批成功後都會被明確清成
+     * `null`，代表「立即可續傳」，但這不等於「已經放棄」：一個 photo_ids 仍未達
+     * 檔案總數、租約是 `null` 的批次，可能是「剛失敗、幾秒後就會被使用者重試」，
+     * 也可能是「使用者當下就直接放棄、從此再也沒人回來」，兩者從
+     * processing_lease_expires_at 這個欄位本身完全無法區分（Codex adversarial
+     * review 第十輪指出：先前版本的候選查詢要求 processing_lease_expires_at 不為
+     * null 且早於門檻，會讓所有租約已清空的未完成批次永遠不會被掃到、永久跳過
+     * 清理）。改用 updated_at（任何一次有意義的寫入——認領、逐檔進度更新、清空
+     * 租約——都會更新這個欄位）當作「距離上次真的有人動過這筆批次多久了」的
+     * 唯一判準，不管租約當下是 `null` 還是一個過期的舊時間戳，都能正確反映出
+     * 「已經放置多久沒人碰」。額外用「租約不是仍在未來的有效值」擋掉真正有人
+     * 正在處理中的批次，確保不會誤傷。符合門檻的批次會把目前 photo_ids 記錄的
+     * 照片全部 soft-delete（沿用 deletePhoto() 同一套 cover_slot 處理方式），
+     * 並直接刪除這筆 batch row——沒有原始檔案可以繼續處理，這筆記錄除了佔位
+     * 沒有其他用途，刪除後也讓同一把 idempotency_key 未來能被當成全新的上傳
+     * 使用。soft-delete 之後的 storage 實體清理交給既有的
+     * purgeTrashedPhotos()（vehicle-photos:purge-trashed 排程）處理，不在這裡
+     * 重複實作。適合排進排程或由管理者手動執行（見
+     * `App\Console\Commands\SweepStaleVehiclePhotoUploadBatchesCommand`）。
+     *
+     * @return array{abandoned: int, failed: int}
+     */
+    public function abandonStaleIncompleteUploadBatches(): array
+    {
+        $abandoned = 0;
+        $failed = 0;
+        $skipped = 0;
+
+        $sweepSeconds = (int) config('vehicle_photos.upload_batch_abandon_sweep_seconds');
+        $cutoff = now()->subSeconds($sweepSeconds);
+
+        $candidateIds = VehiclePhotoUploadBatch::query()
+            ->where('updated_at', '<', $cutoff)
+            ->where(function ($query) {
+                // 租約是 null（一般失敗復原或整批成功後清空）或已過期，都代表此刻
+                // 沒有人「正在」處理中；真正在處理的批次一定有一個仍在未來的租約，
+                // 這裡先排除掉，避免候選清單掃到還在合法進行中的批次（實際的
+                // 放棄判斷仍在 reclaimIfStillAbandoned() 內鎖定後重新檢查一次）。
+                $query->whereNull('processing_lease_expires_at')
+                    ->orWhere('processing_lease_expires_at', '<', now());
+            })
+            ->pluck('id');
+
+        $candidateIds->each(function (int $batchId) use ($cutoff, &$abandoned, &$failed, &$skipped) {
+            try {
+                $outcome = $this->reclaimIfStillAbandoned($batchId, $cutoff);
+
+                if ($outcome === 'abandoned') {
+                    $abandoned++;
+
+                    Log::warning('車輛照片上傳批次長期無人續傳，視為永久放棄並清理殘留照片', [
+                        'batch_id' => $batchId,
+                    ]);
+                } else {
+                    $skipped++;
+                }
+            } catch (\Throwable $e) {
+                $failed++;
+
+                // 這個方法是排程（vehicle-photos:sweep-stale-uploads，見
+                // routes/console.php）唯一的清理路徑，一旦排在背景無人值守跑，
+                // 指令輸出的統計數字沒有人會即時盯著看。若這裡不記錄是哪一筆、
+                // 什麼原因失敗，殘留照片可能無限期留著卻沒有任何可行動的線索。
+                Log::warning('車輛照片上傳批次長期無人續傳，清理失敗，將於下次排程重試', [
+                    'batch_id' => $batchId,
+                    'exception' => $e->getMessage(),
+                ]);
+            }
+        });
+
+        // $skipped（狀態已改變、被真正的重試接手或已完成而放棄清理的批次數）只用於
+        // 內部判斷，不放進回傳值：呼叫端（指令、測試）只需要知道「實際清理了幾筆」
+        // 與「清理失敗幾筆」，被安全跳過的批次不算失敗，也不是需要額外關注的異常。
+        unset($skipped);
+
+        return ['abandoned' => $abandoned, 'failed' => $failed];
+    }
+
+    /**
+     * abandonStaleIncompleteUploadBatches() 的每一筆候選都交給這裡個別處理，回傳
+     * `'abandoned'`（真的清理掉了）或 `'skipped'`（此刻其實已經不符合放棄條件，
+     * 什麼都沒做）。
+     *
+     * 這裡刻意「不」沿用外層候選清單掃描時讀到的快照，而是在同一個 DB transaction
+     * 內用 lockForUpdate() 鎖住這筆 row 之後，重新從 DB 讀一次目前真正的狀態：
+     * 外層的候選清單是在進入這個 transaction「之前」查出來的，這段時間差裡完全
+     * 可能有一個真正的使用者請求帶著同一把 idempotency_key 回來續傳認領，核發
+     * 新的租約、繼續處理甚至已經完成整批上傳。如果繼續用外層的舊 photo_ids 快照
+     * 去刪照片、刪 batch，會刪掉這個真實請求已經完成、甚至已經回傳給使用者的照片
+     * 與紀錄（Codex adversarial review 第九輪指出）。這裡重新檢查「租約是否仍然
+     * 早於這次掃描開始時的 cutoff」與「是否仍未完成」，確保只有此刻真的還符合
+     * 放棄條件的批次才會被清理；一旦狀態已經改變（被續傳認領、完成，或租約已經
+     * 被重新核發），直接回傳 `'skipped'`，不做任何事，留給下一輪排程或使用者自己
+     * 的流程處理。
+     *
+     * 刻意宣告成 protected 而非 private：測試需要模擬「候選清單掃描之後、這個
+     * transaction 真正鎖住 row 之前，這筆批次已經被一個真實請求續傳認領或完成」
+     * 這個競態窗口，最直接可靠的方式是繞過外層的候選查詢時機、直接針對已經改變
+     * 過的狀態呼叫這個方法本身；private 方法無法被子類別或測試以此方式驗證。
+     */
+    protected function reclaimIfStillAbandoned(int $batchId, Carbon $cutoff): string
+    {
+        return DB::transaction(function () use ($batchId, $cutoff) {
+            $batch = VehiclePhotoUploadBatch::query()->whereKey($batchId)->lockForUpdate()->first();
+
+            if ($batch === null) {
+                // 已經被其他排程執行、或前面某次重試順帶清掉了。
+                return 'skipped';
+            }
+
+            $payload = json_decode((string) $batch->idempotency_payload, true);
+            $totalCount = is_array($payload) && isset($payload['files']) && is_array($payload['files'])
+                ? count($payload['files'])
+                : 0;
+            $doneCount = count($batch->photo_ids ?? []);
+
+            // 租約是 null（一般失敗復原或整批成功後清空）或已過期，都代表此刻沒有
+            // 人「正在」處理中；一個仍在未來的租約代表真的有人正在合法處理，一律
+            // 保留不動。是否「已經放棄」看 updated_at（任何一次有意義的寫入都會
+            // 更新這個欄位）是否早於這次掃描開始時的 cutoff，不能只看
+            // processing_lease_expires_at 是否早於 cutoff——租約清成 null 之後就
+            // 永遠不會再「早於」任何時間點，若只看這個欄位，所有租約已清空的未
+            // 完成批次會永久跳過清理（Codex adversarial review 第十輪指出）。
+            $leaseIsActive = $batch->processing_lease_expires_at !== null
+                && $batch->processing_lease_expires_at->isFuture();
+
+            $stillAbandoned = $doneCount < $totalCount
+                && ! $leaseIsActive
+                && $batch->updated_at !== null
+                && $batch->updated_at->lt($cutoff);
+
+            if (! $stillAbandoned) {
+                return 'skipped';
+            }
+
+            $vehicle = Vehicle::query()->whereKey($batch->vehicle_id)->lockForUpdate()->first();
+
+            // 理論上不會發生：vehicle_photos.vehicle_id 已經 harden 成 RESTRICT
+            // （見 2026_07_09_000001 migration），只要這批照片還沒清乾淨，車輛就
+            // 無法被刪除。但 vehicle_photo_upload_batches 自己的 vehicle_id 外鍵
+            // 仍是 CASCADE（見該表 migration 說明），車輛真的被刪除時 batch row
+            // 會被一起刪掉，理論上不會再被外層查詢掃到；防禦性地處理成直接刪除
+            // row，不假設一定找得到車輛。
+            if ($vehicle === null) {
+                $batch->delete();
+
+                return 'abandoned';
+            }
+
+            $photoIds = $batch->photo_ids ?? [];
+
+            if ($photoIds !== []) {
+                // cover_slot 的 DB unique 索引不理解 Laravel 的 soft-delete scope，
+                // 必須先明確清成 false，才能把封面指定給下一張仍然有效的照片，
+                // 否則會撞到唯一索引（沿用 deletePhoto() 同一套處理方式）。
+                $wasCoverAmongAbandoned = VehiclePhoto::query()
+                    ->whereIn('id', $photoIds)
+                    ->where('is_cover', true)
+                    ->exists();
+
+                if ($wasCoverAmongAbandoned) {
+                    VehiclePhoto::query()->whereIn('id', $photoIds)->update(['is_cover' => false]);
+                }
+
+                VehiclePhoto::query()->whereIn('id', $photoIds)->delete();
+
+                if ($wasCoverAmongAbandoned) {
+                    $next = $vehicle->photos()->orderBy('sort_order')->first();
+                    if ($next !== null) {
+                        $next->is_cover = true;
+                        $next->save();
+                    }
+                }
+            }
+
+            $batch->delete();
+
+            return 'abandoned';
+        }, 3);
     }
 
     private function finalizePhysicalDeletion(VehiclePhoto $photo): void

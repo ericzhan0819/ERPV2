@@ -10,6 +10,7 @@ use App\Services\VehiclePhotoImageProcessor;
 use App\Services\VehiclePhotoService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Mockery;
@@ -493,6 +494,81 @@ class VehiclePhotoServiceTest extends TestCase
     }
 
     /**
+     * Codex adversarial review（第七輪）指出：restoreBatchAndSoftDeleteRolledBackPhotos()
+     * 本身是一個 DB transaction，若這個 transaction 自己失敗（例如 deadlock 重試 3
+     * 次仍失敗），先前版本完全沒有處理：底層原始的 SQL 例外會直接外洩，蓋掉真正
+     * 的失敗原因，呼叫端拿到的是一個不清楚、不可預期的錯誤。這裡驗證修正後的行為：
+     * 用匿名子類別覆寫這個 protected 方法模擬「復原 transaction 本身也失敗」，
+     * 確認 uploadPhotos() 會回傳一個清楚、誠實的錯誤（不是原始的圖片處理失敗訊息，
+     * 也不是底層例外），且因為整個復原 transaction 從未 commit，第一個檔案的照片
+     * 與 batch 進度都完整維持在「失敗前最後一次成功寫入」的狀態——不是不上不下的
+     * 半殘狀態，只是沒有立即復原成可重試，會退回沿用既有的租約 TTL 機制自然恢復。
+     */
+    public function test_upload_photos_reports_clear_error_and_preserves_state_when_rollback_transaction_itself_fails(): void
+    {
+        Storage::fake('public');
+
+        $vehicle = Vehicle::factory()->create();
+        $user = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
+        $key = 'test-upload-key-'.uniqid();
+
+        $realProcessor = app(VehiclePhotoImageProcessor::class);
+        $callCount = 0;
+        $processor = Mockery::mock(VehiclePhotoImageProcessor::class);
+        $processor->shouldReceive('process')
+            ->twice()
+            ->andReturnUsing(function ($file, $vehicleId) use ($realProcessor, &$callCount) {
+                $callCount++;
+                if ($callCount === 2) {
+                    throw ValidationException::withMessages([
+                        'photos' => '模擬第二個檔案處理失敗',
+                    ]);
+                }
+
+                return $realProcessor->process($file, $vehicleId);
+            });
+        $this->app->instance(VehiclePhotoImageProcessor::class, $processor);
+
+        $service = new class(app(VehiclePhotoImageProcessor::class)) extends VehiclePhotoService
+        {
+            protected function restoreBatchAndSoftDeleteRolledBackPhotos(
+                Vehicle $vehicle,
+                VehiclePhotoUploadBatch $batch,
+                string $claimToken,
+                array $alreadyDoneIds,
+                array $newlyCreatedThisCall,
+            ): bool {
+                throw new RuntimeException('模擬復原 transaction 本身也失敗（例如 deadlock 重試 3 次仍失敗）');
+            }
+        };
+
+        try {
+            $service->uploadPhotos(
+                $vehicle,
+                $user,
+                [$this->fakeJpegUploadedFile('a.jpg'), $this->fakeJpegUploadedFile('b.jpg', 500, 500)],
+                $key,
+            );
+            $this->fail('預期應拋出例外');
+        } catch (ValidationException $e) {
+            // 應該收到清楚、誠實的錯誤，不是原始的「圖片損毀」訊息，也不是底層
+            // RuntimeException 直接外洩。
+            $this->assertArrayHasKey('photos', $e->errors());
+        }
+
+        // 復原 transaction 從未 commit：第一個檔案的照片完全沒被動過，仍然可見
+        // （不是 soft-delete，也沒被實體刪除），batch.photo_ids 仍指向它，租約
+        // 也還是失敗前最後一次核發的值，尚未被清空——這是「還沒來得及復原」的
+        // 有效狀態，不是資料損毀，會在租約自然過期後被下一次請求安全續傳。
+        $this->assertSame(1, VehiclePhoto::where('vehicle_id', $vehicle->id)->count());
+        $this->assertSame(0, VehiclePhoto::onlyTrashed()->where('vehicle_id', $vehicle->id)->count());
+
+        $batch = VehiclePhotoUploadBatch::where('idempotency_key', $key)->first();
+        $this->assertCount(1, $batch->photo_ids);
+        $this->assertNotNull($batch->processing_lease_expires_at);
+    }
+
+    /**
      * Codex adversarial review（第二輪）指出：先前的修正只處理了「服務自己的 catch
      * 區塊有機會執行到」的失敗。若 worker 被強制中止、遇到 fatal error，或伺服器
      * 重啟，PHP 根本沒有機會執行到任何 catch 區塊，batch 的 processing_lease_expires_at
@@ -637,5 +713,290 @@ class VehiclePhotoServiceTest extends TestCase
 
         $this->expectException(ValidationException::class);
         $service->uploadPhotos($vehicle, $user, [$file], $key);
+    }
+
+    /**
+     * Codex adversarial review（第八輪）指出：upload_batch_pending_ttl_seconds 過期
+     * 只代表「允許下一個真實請求續傳認領」，不保證真的會有請求回來——如果使用者
+     * 放棄重試，這批上傳裡已經真的建立好的照片會一直以正常、可見的 VehiclePhoto
+     * row 留著，讓一次從未真正完成的上傳看起來像是成功上傳了一部分。這裡驗證
+     * abandonStaleIncompleteUploadBatches() 會把超過永久放棄門檻、仍未完成的批次
+     * 清理掉：殘留照片 soft-delete、batch row 直接刪除。
+     */
+    public function test_abandon_stale_incomplete_upload_batches_soft_deletes_leftover_photos_and_removes_batch(): void
+    {
+        Storage::fake('public');
+        config(['vehicle_photos.upload_batch_abandon_sweep_seconds' => 60]);
+
+        $vehicle = Vehicle::factory()->create();
+        $user = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
+        $service = app(VehiclePhotoService::class);
+
+        $leftoverPhoto = $this->makePhoto(
+            $vehicle,
+            $user,
+            'vehicles/'.$vehicle->id.'/leftover.webp',
+            'vehicles/'.$vehicle->id.'/leftover_thumb.webp',
+        );
+
+        $batch = VehiclePhotoUploadBatch::create([
+            'vehicle_id' => $vehicle->id,
+            'idempotency_key' => 'test-upload-key-'.uniqid(),
+            'idempotency_payload' => json_encode([
+                'vehicle_id' => $vehicle->id,
+                'files' => [
+                    ['sha256' => 'a', 'size' => 1, 'original_filename' => 'a.jpg'],
+                    ['sha256' => 'b', 'size' => 1, 'original_filename' => 'b.jpg'],
+                ],
+            ], JSON_THROW_ON_ERROR),
+            'photo_ids' => [$leftoverPhoto->id],
+            // 遠超過 60 秒的永久放棄門檻，且早已超過任何合理的續傳 TTL。
+            'processing_lease_expires_at' => now()->subDay(),
+        ]);
+        // create() 一律把 updated_at 填成「現在」，這裡另外 backdate 成遠超過永久
+        // 放棄門檻，模擬「這筆批次真的已經很久沒有任何人動過」。
+        DB::table('vehicle_photo_upload_batches')->where('id', $batch->id)->update(['updated_at' => now()->subDay()]);
+
+        $result = $service->abandonStaleIncompleteUploadBatches();
+
+        $this->assertSame(['abandoned' => 1, 'failed' => 0], $result);
+        $this->assertSame(0, VehiclePhoto::where('id', $leftoverPhoto->id)->count());
+        $this->assertSame(1, VehiclePhoto::onlyTrashed()->where('id', $leftoverPhoto->id)->count());
+        $this->assertDatabaseMissing('vehicle_photo_upload_batches', ['id' => $batch->id]);
+    }
+
+    /**
+     * 對照上一個測試：租約過期時間還沒超過永久放棄門檻時，不能被誤判成已放棄——
+     * 那個範圍內仍然是「允許續傳認領」的正常等待期，不該清掉使用者可能還會回來
+     * 完成的上傳。
+     */
+    public function test_abandon_stale_incomplete_upload_batches_ignores_batches_within_sweep_threshold(): void
+    {
+        Storage::fake('public');
+        config(['vehicle_photos.upload_batch_abandon_sweep_seconds' => 3600]);
+
+        $vehicle = Vehicle::factory()->create();
+        $user = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
+        $service = app(VehiclePhotoService::class);
+
+        $photo = $this->makePhoto(
+            $vehicle,
+            $user,
+            'vehicles/'.$vehicle->id.'/recent.webp',
+            'vehicles/'.$vehicle->id.'/recent_thumb.webp',
+        );
+
+        $batch = VehiclePhotoUploadBatch::create([
+            'vehicle_id' => $vehicle->id,
+            'idempotency_key' => 'test-upload-key-'.uniqid(),
+            'idempotency_payload' => json_encode([
+                'vehicle_id' => $vehicle->id,
+                'files' => [
+                    ['sha256' => 'a', 'size' => 1, 'original_filename' => 'a.jpg'],
+                    ['sha256' => 'b', 'size' => 1, 'original_filename' => 'b.jpg'],
+                ],
+            ], JSON_THROW_ON_ERROR),
+            'photo_ids' => [$photo->id],
+            // 租約才剛過期 60 秒，遠低於 3600 秒的永久放棄門檻，仍是正常的續傳
+            // 等待期。
+            'processing_lease_expires_at' => now()->subSeconds(60),
+        ]);
+
+        $result = $service->abandonStaleIncompleteUploadBatches();
+
+        $this->assertSame(['abandoned' => 0, 'failed' => 0], $result);
+        $this->assertSame(1, VehiclePhoto::where('id', $photo->id)->count());
+        $this->assertDatabaseHas('vehicle_photo_upload_batches', ['id' => $batch->id]);
+    }
+
+    /**
+     * 已完成的批次（photo_ids 長度已達檔案總數）即使租約早已過期，也不代表放棄，
+     * 只是完成後沒有特別清空租約而已；這種批次要繼續留著供未來相同
+     * idempotency_key 的請求回放，不能被永久放棄清理誤刪。
+     */
+    public function test_abandon_stale_incomplete_upload_batches_ignores_completed_batches(): void
+    {
+        Storage::fake('public');
+        config(['vehicle_photos.upload_batch_abandon_sweep_seconds' => 60]);
+
+        $vehicle = Vehicle::factory()->create();
+        $user = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
+        $service = app(VehiclePhotoService::class);
+
+        $photo = $this->makePhoto(
+            $vehicle,
+            $user,
+            'vehicles/'.$vehicle->id.'/done.webp',
+            'vehicles/'.$vehicle->id.'/done_thumb.webp',
+        );
+
+        $batch = VehiclePhotoUploadBatch::create([
+            'vehicle_id' => $vehicle->id,
+            'idempotency_key' => 'test-upload-key-'.uniqid(),
+            'idempotency_payload' => json_encode([
+                'vehicle_id' => $vehicle->id,
+                'files' => [
+                    ['sha256' => 'a', 'size' => 1, 'original_filename' => 'a.jpg'],
+                ],
+            ], JSON_THROW_ON_ERROR),
+            'photo_ids' => [$photo->id],
+            'processing_lease_expires_at' => now()->subDay(),
+        ]);
+        DB::table('vehicle_photo_upload_batches')->where('id', $batch->id)->update(['updated_at' => now()->subDay()]);
+
+        $result = $service->abandonStaleIncompleteUploadBatches();
+
+        $this->assertSame(['abandoned' => 0, 'failed' => 0], $result);
+        $this->assertSame(1, VehiclePhoto::where('id', $photo->id)->count());
+        $this->assertDatabaseHas('vehicle_photo_upload_batches', ['id' => $batch->id]);
+    }
+
+    /**
+     * Codex adversarial review（第十輪）指出：processing_lease_expires_at 在一般
+     * 失敗的復原路徑與整批成功後都會被明確清成 `null`，代表「立即可續傳」，但這
+     * 不等於「已經放棄」。若候選查詢只挑 processing_lease_expires_at 不為 null 且
+     * 早於門檻的批次，所有租約已清空的未完成批次會永久跳過清理，即使已經幾天
+     * 沒有任何人回來續傳。這裡驗證 processing_lease_expires_at 為 `null`、但
+     * updated_at 早已遠超過永久放棄門檻的批次，一樣會被正確清理。
+     */
+    public function test_abandon_stale_incomplete_upload_batches_sweeps_batches_with_null_lease_left_over_from_a_failed_retry(): void
+    {
+        Storage::fake('public');
+        config(['vehicle_photos.upload_batch_abandon_sweep_seconds' => 60]);
+
+        $vehicle = Vehicle::factory()->create();
+        $user = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
+        $service = app(VehiclePhotoService::class);
+
+        $leftoverPhoto = $this->makePhoto(
+            $vehicle,
+            $user,
+            'vehicles/'.$vehicle->id.'/null-lease.webp',
+            'vehicles/'.$vehicle->id.'/null-lease_thumb.webp',
+        );
+
+        $batch = VehiclePhotoUploadBatch::create([
+            'vehicle_id' => $vehicle->id,
+            'idempotency_key' => 'test-upload-key-'.uniqid(),
+            'idempotency_payload' => json_encode([
+                'vehicle_id' => $vehicle->id,
+                'files' => [
+                    ['sha256' => 'a', 'size' => 1, 'original_filename' => 'a.jpg'],
+                    ['sha256' => 'b', 'size' => 1, 'original_filename' => 'b.jpg'],
+                ],
+            ], JSON_THROW_ON_ERROR),
+            'photo_ids' => [$leftoverPhoto->id],
+            // 模擬一般失敗復原路徑（或整批成功）之後的正常狀態：租約已被明確清空，
+            // 而不是撐到自然過期。
+            'processing_lease_expires_at' => null,
+        ]);
+        // 模擬「早已放置很久沒有任何人回來續傳」。
+        DB::table('vehicle_photo_upload_batches')->where('id', $batch->id)->update(['updated_at' => now()->subDay()]);
+
+        $result = $service->abandonStaleIncompleteUploadBatches();
+
+        $this->assertSame(['abandoned' => 1, 'failed' => 0], $result);
+        $this->assertSame(0, VehiclePhoto::where('id', $leftoverPhoto->id)->count());
+        $this->assertSame(1, VehiclePhoto::onlyTrashed()->where('id', $leftoverPhoto->id)->count());
+        $this->assertDatabaseMissing('vehicle_photo_upload_batches', ['id' => $batch->id]);
+    }
+
+    /**
+     * 對照上一個測試：租約為 null 但 updated_at 還很新（剛失敗、可能幾秒後就會被
+     * 使用者重試）不能被誤判成放棄。
+     */
+    public function test_abandon_stale_incomplete_upload_batches_ignores_recently_updated_batches_with_null_lease(): void
+    {
+        Storage::fake('public');
+        config(['vehicle_photos.upload_batch_abandon_sweep_seconds' => 3600]);
+
+        $vehicle = Vehicle::factory()->create();
+        $user = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
+        $service = app(VehiclePhotoService::class);
+
+        $photo = $this->makePhoto(
+            $vehicle,
+            $user,
+            'vehicles/'.$vehicle->id.'/just-failed.webp',
+            'vehicles/'.$vehicle->id.'/just-failed_thumb.webp',
+        );
+
+        $batch = VehiclePhotoUploadBatch::create([
+            'vehicle_id' => $vehicle->id,
+            'idempotency_key' => 'test-upload-key-'.uniqid(),
+            'idempotency_payload' => json_encode([
+                'vehicle_id' => $vehicle->id,
+                'files' => [
+                    ['sha256' => 'a', 'size' => 1, 'original_filename' => 'a.jpg'],
+                    ['sha256' => 'b', 'size' => 1, 'original_filename' => 'b.jpg'],
+                ],
+            ], JSON_THROW_ON_ERROR),
+            'photo_ids' => [$photo->id],
+            'processing_lease_expires_at' => null,
+        ]);
+
+        $result = $service->abandonStaleIncompleteUploadBatches();
+
+        $this->assertSame(['abandoned' => 0, 'failed' => 0], $result);
+        $this->assertSame(1, VehiclePhoto::where('id', $photo->id)->count());
+        $this->assertDatabaseHas('vehicle_photo_upload_batches', ['id' => $batch->id]);
+    }
+
+    /**
+     * Codex adversarial review（第九輪）指出：先前版本的候選清單是在進入清理
+     * transaction「之前」查出來的，若在這段時間差裡有一個真正的使用者請求帶著
+     * 同一把 idempotency_key 回來續傳認領（核發新租約、可能已經完成整批上傳），
+     * 清理仍會照著候選清單掃描當下的舊快照，刪掉這個真實請求已經完成、甚至已經
+     * 回傳給使用者的照片與 batch 紀錄。這裡直接驗證 reclaimIfStillAbandoned()
+     * 在真正拿到 lock、重新讀取當下狀態時，會偵測到「已經不再符合放棄條件」並
+     * 安全跳過，不做任何事——模擬候選清單掃描完成之後、清理 transaction 真正執行
+     * 之前，這筆批次已經被續傳認領（租約被重新核發成未來時間）的競態窗口。
+     */
+    public function test_reclaim_if_still_abandoned_skips_batch_reclaimed_by_a_real_retry_after_candidate_scan(): void
+    {
+        Storage::fake('public');
+        config(['vehicle_photos.upload_batch_abandon_sweep_seconds' => 60]);
+
+        $vehicle = Vehicle::factory()->create();
+        $user = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
+        $service = app(VehiclePhotoService::class);
+
+        $leftoverPhoto = $this->makePhoto(
+            $vehicle,
+            $user,
+            'vehicles/'.$vehicle->id.'/reclaimed.webp',
+            'vehicles/'.$vehicle->id.'/reclaimed_thumb.webp',
+        );
+
+        $batch = VehiclePhotoUploadBatch::create([
+            'vehicle_id' => $vehicle->id,
+            'idempotency_key' => 'test-upload-key-'.uniqid(),
+            'idempotency_payload' => json_encode([
+                'vehicle_id' => $vehicle->id,
+                'files' => [
+                    ['sha256' => 'a', 'size' => 1, 'original_filename' => 'a.jpg'],
+                    ['sha256' => 'b', 'size' => 1, 'original_filename' => 'b.jpg'],
+                ],
+            ], JSON_THROW_ON_ERROR),
+            'photo_ids' => [$leftoverPhoto->id],
+            'processing_lease_expires_at' => now()->subDay(),
+        ]);
+
+        // 這裡計算的 cutoff 對應「候選清單掃描當下」；批次在被掃描進候選清單之後
+        // （scan 完成之後、真正的清理 transaction 執行之前），模擬一個真實的使用者
+        // 請求帶著同一把 idempotency_key 回來續傳認領：核發新租約（未來時間）。
+        $cutoff = now()->subSeconds((int) config('vehicle_photos.upload_batch_abandon_sweep_seconds'));
+        $batch->update(['processing_lease_expires_at' => now()->addMinutes(30)]);
+
+        $reflection = new \ReflectionMethod(VehiclePhotoService::class, 'reclaimIfStillAbandoned');
+        $reflection->setAccessible(true);
+        $outcome = $reflection->invoke($service, $batch->id, $cutoff);
+
+        $this->assertSame('skipped', $outcome);
+
+        // 被續傳認領的批次與其照片完全沒有被動過。
+        $this->assertDatabaseHas('vehicle_photo_upload_batches', ['id' => $batch->id]);
+        $this->assertSame(1, VehiclePhoto::where('id', $leftoverPhoto->id)->count());
+        $this->assertSame(0, VehiclePhoto::onlyTrashed()->where('id', $leftoverPhoto->id)->count());
     }
 }

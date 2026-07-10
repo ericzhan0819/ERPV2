@@ -789,6 +789,7 @@ Query 參數：
 - 同一把 key、檔案內容不同：回傳 `422`。
 - 同一把 key，前一次請求仍在處理中（處理租約仍在有效期內，例如兩個請求幾乎同時抵達）：回傳 `422`，訊息提示稍後再試，不回傳不完整或假造的結果。
 - 同一把 key，前一次請求的處理租約已過期（例如處理程序被中止、伺服器重啟，租約時長預設依單檔處理 TTL × 單次最多檔案數推算，至少 900 秒，可用 `VEHICLE_PHOTOS_UPLOAD_BATCH_PENDING_TTL_SECONDS` 調整）：視為前一次處理程序已放棄，自動續傳認領同一筆紀錄，只接著處理「上次還沒處理完的檔案」，不會重新處理已經真的建立過照片的部分，不需要人工介入資料庫；已放棄的那次處理如果其實還在跑，極端情況下可能對「還沒處理完的那幾個檔案」造成重複建立（詳見 `config/vehicle_photos.php` 的 `upload_batch_pending_ttl_seconds` 註解）。
+- 若租約過期後遲遲沒有任何請求回來續傳（例如使用者直接關掉分頁放棄重試），已經真的建立好的部分照片會持續以正常、可見的照片留著。`vehicle-photos:sweep-stale-uploads` 排程指令（預設每日執行一次）會清理超過永久放棄門檻（預設 24 小時，可用 `VEHICLE_PHOTOS_UPLOAD_BATCH_ABANDON_SWEEP_SECONDS` 調整）、仍未完成的批次：把殘留照片標記刪除、移除該筆上傳紀錄，讓車輛照片清單恢復成「這次失敗的上傳完全沒發生過」的一致狀態（詳見 `config/vehicle_photos.php` 的 `upload_batch_abandon_sweep_seconds` 註解）。
 
 ### PATCH /api/vehicles/{id}/photos/reorder — 僅限 admin/manager
 

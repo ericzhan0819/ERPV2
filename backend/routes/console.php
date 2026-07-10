@@ -30,3 +30,23 @@ Schedule::command('vehicle-photos:purge-trashed')
     ->onFailure(function () {
         Log::error('vehicle-photos:purge-trashed 排程執行後仍有車輛照片 tombstone 未清乾淨，請查看 storage/logs/vehicle-photos-purge.log 與 laravel.log 的詳細記錄');
     });
+
+// upload_batch_pending_ttl_seconds 過期只代表「允許下一個真實請求續傳認領」一批
+// 未完成的照片上傳，不保證真的會有請求回來——如果使用者放棄重試，這批上傳裡已經
+// 真的建立好的照片會一直以正常、可見的 VehiclePhoto row 留著，讓一次從未真正完成
+// 的上傳看起來像是成功上傳了一部分，持續佔用每台車 60 張上限（Codex adversarial
+// review 第八輪指出：先前版本只處理了「復原 transaction 本身失敗」時的錯誤回報，
+// 沒有處理「沒有人再打進來重試」這個更根本的情境）。這裡把
+// vehicle-photos:sweep-stale-uploads 指令排進排程，主動清理長期無人續傳、已被
+// 永久放棄的批次，不需要等一個可能永遠不會出現的重試請求。
+//
+// 判斷「永久放棄」的門檻（upload_batch_abandon_sweep_seconds，預設 24 小時）遠大於
+// 一般重試的合理時間窗，所以排程本身用 daily() 已經足夠及時，不需要跟
+// purge-trashed 一樣抓到每小時；沿用同一套「輸出寫進獨立 log 檔 + 失敗時額外告警」
+// 的既有模式，方便串接既有的 log 監控/告警管道。
+Schedule::command('vehicle-photos:sweep-stale-uploads')
+    ->daily()
+    ->appendOutputTo(storage_path('logs/vehicle-photos-sweep-stale-uploads.log'))
+    ->onFailure(function () {
+        Log::error('vehicle-photos:sweep-stale-uploads 排程執行後仍有殘留的車輛照片上傳批次清理失敗，請查看 storage/logs/vehicle-photos-sweep-stale-uploads.log 與 laravel.log 的詳細記錄');
+    });

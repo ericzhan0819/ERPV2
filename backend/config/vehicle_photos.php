@@ -137,6 +137,25 @@ return [
         max(900, $processingLockTtlSeconds * $maxFilesPerUpload)
     ),
 
+    // upload_batch_pending_ttl_seconds 過期只代表「允許下一個帶著同一把
+    // idempotency_key 的『真實請求』續傳認領」，本身不會主動清掉任何東西——如果
+    // 沒有任何後續請求真的打進來（使用者放棄重試、只是關掉分頁），這批上傳裡已經
+    // 真的建立好的照片就會一直以正常、可見的 VehiclePhoto row 留著，讓一個從未
+    // 真正完成的批次看起來像是成功上傳了一部分，持續佔用每台車 60 張上限、可能
+    // 影響封面判斷（Codex adversarial review 第八輪指出：先前版本只處理了「復原
+    // transaction 本身失敗」時的錯誤回報，沒有處理「沒有人再打進來重試」這個更
+    // 根本的情境——TTL 只保證「可以被續傳」，不保證「一定會被續傳」）。
+    //
+    // 這裡另外設一個遠大於 upload_batch_pending_ttl_seconds 的「永久放棄」門檻：
+    // 租約過期超過這麼久，代表已經不是「使用者正在重試中」的正常範圍，而是這批
+    // 上傳被徹底放棄了，交由 vehicle-photos:sweep-stale-uploads 排程指令（見
+    // routes/console.php、VehiclePhotoService::abandonStaleIncompleteUploadBatches()）
+    // 主動把殘留的照片 soft-delete、刪除這筆 batch row，讓車輛照片清單恢復成
+    // 「這次失敗的上傳完全沒發生過」的一致狀態，不需要等一個可能永遠不會出現的
+    // 重試請求。預設 24 小時：遠大於任何合理的使用者重試時間窗，足以確定不會跟
+    // 一個仍在進行中、只是異常緩慢的合法重試競爭。
+    'upload_batch_abandon_sweep_seconds' => (int) env('VEHICLE_PHOTOS_UPLOAD_BATCH_ABANDON_SWEEP_SECONDS', 86400),
+
     /*
     |--------------------------------------------------------------------------
     | 圖片重新編碼尺寸 / 品質
