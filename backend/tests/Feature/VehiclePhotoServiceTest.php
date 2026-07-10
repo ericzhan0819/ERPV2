@@ -411,6 +411,88 @@ class VehiclePhotoServiceTest extends TestCase
     }
 
     /**
+     * Codex adversarial review（第六輪）指出：先前版本的失敗回滾分成兩個獨立步驟——
+     * 先復原 batch.photo_ids／清空租約，再刪除照片本體。一旦「復原 batch」先
+     * commit，另一個帶著同一把 idempotency_key 的請求就可能立刻認領、重新處理
+     * 這幾個檔案，此時舊照片可能還「可見」，造成短暫但真實的重複可見視窗；若
+     * storage 清理又失敗，這些孤兒照片甚至會永久留著。這裡驗證修正後的行為：
+     * 回滾的照片會在跟 batch 復原「同一個 transaction」內立刻 soft-delete，即使
+     * storage 實體清理隨後失敗，也不會影響「這批照片已經對外隱藏」這件事，同一把
+     * idempotency_key 可以立刻安全重試，不會撞到還可見的舊照片、也不會遺失
+     * 已經真正建立的第一張照片的清理紀錄（tombstone）。
+     */
+    public function test_upload_photos_rolled_back_photos_are_soft_deleted_even_when_storage_cleanup_fails_and_retry_is_safe(): void
+    {
+        Storage::fake('public');
+
+        $vehicle = Vehicle::factory()->create();
+        $user = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
+        $key = 'test-upload-key-'.uniqid();
+
+        $realProcessor = app(VehiclePhotoImageProcessor::class);
+        $callCount = 0;
+        $processor = Mockery::mock(VehiclePhotoImageProcessor::class);
+        $processor->shouldReceive('process')
+            ->twice()
+            ->andReturnUsing(function ($file, $vehicleId) use ($realProcessor, &$callCount) {
+                $callCount++;
+                if ($callCount === 2) {
+                    throw ValidationException::withMessages([
+                        'photos' => '模擬第二個檔案處理失敗',
+                    ]);
+                }
+
+                return $realProcessor->process($file, $vehicleId);
+            });
+        // 第一個檔案的照片被回滾時，storage 實體清理刻意失敗，模擬 storage 暫時
+        // 不可用，驗證即使如此，soft-delete（邏輯刪除）仍然先落地生效。
+        $processor->shouldReceive('delete')->once()->andThrow(new RuntimeException('storage 暫時無法連線'));
+        $this->app->instance(VehiclePhotoImageProcessor::class, $processor);
+
+        $service = app(VehiclePhotoService::class);
+
+        try {
+            $service->uploadPhotos(
+                $vehicle,
+                $user,
+                [$this->fakeJpegUploadedFile('a.jpg'), $this->fakeJpegUploadedFile('b.jpg', 500, 500)],
+                $key,
+            );
+            $this->fail('預期應拋出例外');
+        } catch (ValidationException $e) {
+            // 即使收尾的 storage 清理失敗，回傳給呼叫端的仍然是這次真正發生的原始
+            // 錯誤（第二個檔案處理失敗），不會被清理過程中的例外蓋掉。
+            $this->assertArrayHasKey('photos', $e->errors());
+        }
+
+        // 第一個檔案的照片雖然 storage 清理失敗、實體檔案還留著，但已經被
+        // soft-delete，一般查詢完全看不到，不會被算進車輛照片數量。
+        $this->assertSame(0, VehiclePhoto::where('vehicle_id', $vehicle->id)->count());
+        $this->assertSame(1, VehiclePhoto::onlyTrashed()->where('vehicle_id', $vehicle->id)->count());
+
+        // 同一把 idempotency_key 立刻重試，不需要等 storage 清理完成，也不會撞到
+        // 前一次留下的 tombstone 或造成重複。$service 這個實例的建構子已經綁定
+        // 舊的 mock processor（delete() 的 once() 期望已經被上面用掉），這裡改用
+        // 一個新解析出來、綁定真正 processor 的 service 實例。
+        $this->app->forgetInstance(VehiclePhotoImageProcessor::class);
+        $retryService = app(VehiclePhotoService::class);
+        $retryResult = $retryService->uploadPhotos(
+            $vehicle,
+            $user,
+            [$this->fakeJpegUploadedFile('a.jpg'), $this->fakeJpegUploadedFile('b.jpg', 500, 500)],
+            $key,
+        );
+
+        $this->assertCount(2, $retryResult);
+        $this->assertSame(2, VehiclePhoto::where('vehicle_id', $vehicle->id)->count());
+
+        // 前一次留下的 tombstone 仍然可以被排程 purgeTrashedPhotos() 正常清理，
+        // 不會因為 batch 已經復原/重試過就變成孤兒、永遠沒人處理。
+        $purgeResult = $retryService->purgeTrashedPhotos();
+        $this->assertSame(['purged' => 1, 'failed' => 0], $purgeResult);
+    }
+
+    /**
      * Codex adversarial review（第二輪）指出：先前的修正只處理了「服務自己的 catch
      * 區塊有機會執行到」的失敗。若 worker 被強制中止、遇到 fatal error，或伺服器
      * 重啟，PHP 根本沒有機會執行到任何 catch 區塊，batch 的 processing_lease_expires_at

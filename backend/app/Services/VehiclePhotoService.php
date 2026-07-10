@@ -147,31 +147,34 @@ class VehiclePhotoService
             }
         } catch (\Throwable $e) {
             // 不論這次失敗的原始原因是什麼（單一檔案處理失敗、超過每台車照片上限，
-            // 或是在上面的 transaction 內就已經偵測到 fencing 失敗），第一步永遠是
-            // 先用 claim_token fencing 嘗試把 batch.photo_ids／租約復原回這次呼叫
-            // 開始前的進度（$alreadyDoneIds）。這個「嘗試復原」的結果本身，就是
+            // 或是在上面的 transaction 內就已經偵測到 fencing 失敗），都必須在
+            // 「同一個 DB transaction」內同時完成兩件事：(1) 用 claim_token fencing
+            // 把 batch.photo_ids／租約復原回這次呼叫開始前的進度、(2) 把這次呼叫
+            // 自己建立的照片 soft-delete（對外隱藏）。這兩件事的結果本身，就是
             // 「此刻我是否仍然擁有這個 batch」最新、最準確的答案——比起單純檢查
             // 「是不是 VehiclePhotoUploadBatchSupersededException」更可靠：後者只
             // 能偵測到「在處理某個檔案的當下就已經被取代」，偵測不到「檔案處理本身
             // 因為其他原因失敗（例如圖片損毀），但在準備清理善後的這一刻，才發現
-            // 自己其實已經被取代」這種情況（Codex adversarial review 第五輪指出：
-            // 先前版本只在偵測到 fencing 失敗時才不刪除照片，一般失敗的清理路徑仍會
-            // 無條件刪除 $newlyCreatedThisCall，即使這些照片是被取代之前、以合法
-            // claim_token 成功寫入 batch.photo_ids、新擁有者可能已經完成並回傳給
-            // 使用者的照片，一樣會被刪掉）。
+            // 自己其實已經被取代」這種情況。
             //
-            // 順序也很關鍵：一定要先讓這次「復原/清空租約」的寫入嘗試落地（不論成功
-            // 或失敗），才進入下面判斷是否刪除 $newlyCreatedThisCall 的照片。如果復原
-            // 成功，代表 batch.photo_ids 這個瞬間已經確定不再指向這些即將被刪除的
-            // id，之後任何人（含另一個續傳認領的請求）重新讀取 batch 都不會再依賴
-            // 這些照片，這時候刪除檔案才是安全的；如果復原失敗（代表此刻已經不再
-            // 擁有這個 batch），就完全不能刪除，因為 batch.photo_ids 現在可能仍然
-            // （或即將）指向這些照片，新擁有者的續傳/完成結果可能已經涵蓋、甚至已經
-            // 回傳給使用者。
-            $stillOwned = $this->applyBatchUpdateIfOwned($batch, $claimToken, [
-                'photo_ids' => $alreadyDoneIds,
-                'processing_lease_expires_at' => null,
-            ]);
+            // 這兩件事必須同一個 transaction 原子性完成，不能像先前版本一樣分成
+            // 「先復原 batch → 再刪除照片」兩個獨立步驟：一旦 batch 復原先 commit，
+            // 另一個帶著同一把 idempotency_key 的請求就可能立刻認領、重新處理這幾個
+            // 檔案，而此時舊照片可能都還「可見」（尚未被刪除），造成短暫但真實的
+            // 重複可見視窗；若接下來 finalizePhysicalDeletion() 的 storage 清理失敗
+            // 又沒有先 soft-delete，這些孤兒照片甚至會永久留著、繼續佔用每台車 60
+            // 張上限、繼續被其他查詢看到（Codex adversarial review 第六輪指出）。
+            // 把兩者包進同一個 transaction 後，任何後續請求要嘛在這個 transaction
+            // commit 之前完全看不到 batch 復原（fencing 仍會保守拒絕），要嘛在
+            // commit 之後同時看到「batch 已復原」與「這些照片已經對外隱藏」，不會
+            // 有中間的不一致狀態。
+            $stillOwned = $this->restoreBatchAndSoftDeleteRolledBackPhotos(
+                $vehicle,
+                $batch,
+                $claimToken,
+                $alreadyDoneIds,
+                $newlyCreatedThisCall,
+            );
 
             if (! $stillOwned) {
                 Log::warning('車輛照片上傳批次已被其他請求續傳認領，放棄後續處理並保留既有照片', [
@@ -186,16 +189,21 @@ class VehiclePhotoService
             }
 
             foreach ($newlyCreatedThisCall as $photo) {
-                // 維持既有的「單次請求整批要嘛全部成功、要嘛全部不算數」語意：只要
-                // 這批檔案裡有任何一個失敗，這次呼叫自己建立的照片全部回滾刪除，不
-                // 留下「5 張只成功 2 張」這種讓使用者困惑的半成品。$alreadyDonePhotos
-                // 是續傳一批「先前某次呼叫」已經真的成功建立、且原本就記錄在
-                // batch.photo_ids 的照片，不屬於這次失敗、不能被牽連刪除。上面的
-                // fencing 檢查已經確認此刻仍然擁有這個 batch，這裡刪除是安全的。這些
-                // 剛建立的照片從未在任何 transaction 外被讀取過，沒有「已經被其他人
-                // 看到、需要先隱藏」的顧慮，直接 finalizePhysicalDeletion() 清
-                // storage + forceDelete()，避免留下用不到的 soft-delete tombstone row。
-                $this->finalizePhysicalDeletion($photo);
+                // 這些照片在上面的 transaction 內已經 soft-delete、對外完全隱藏
+                // （跟 deletePhoto() 相同的「邏輯刪除先落地」原則），這裡的 storage
+                // 實體清理只是收尾動作，失敗不能讓這次上傳請求回報的原始例外被蓋掉，
+                // 也不影響「這批檔案已經不算數」這個已經生效的事實：失敗只留下
+                // tombstone，交由 purgeTrashedPhotos()（vehicle-photos:purge-trashed
+                // 指令）之後重試。
+                try {
+                    $this->finalizePhysicalDeletion($photo);
+                } catch (\Throwable $cleanupException) {
+                    Log::warning('車輛照片上傳失敗回滾時 storage 清理失敗，留下 tombstone 待重試', [
+                        'vehicle_photo_id' => $photo->id,
+                        'vehicle_id' => $vehicle->id,
+                        'exception' => $cleanupException->getMessage(),
+                    ]);
+                }
             }
 
             throw $e;
@@ -292,6 +300,81 @@ class VehiclePhotoService
         }
 
         return true;
+    }
+
+    /**
+     * uploadPhotos() 失敗回滾時使用：在同一個 DB transaction 內，用 claim_token
+     * fencing 把 batch.photo_ids／租約復原回 $alreadyDoneIds，並把這次呼叫自己
+     * 建立、現在要回滾的照片全部 soft-delete。回傳 false 代表 fencing 檢查失敗
+     * （已被另一個請求續傳認領），這種情況下整個 transaction 會 rollback、什麼都
+     * 不會發生——不會復原 batch，也不會刪除任何照片，呼叫端必須自行決定如何回應
+     * 「已被取代」這件事。
+     *
+     * 把「batch 復原」與「照片 soft-delete」包在同一個 transaction，是為了避免
+     * 先復原 batch 再刪除照片這種兩步驟做法留下的時間窗：一旦 batch 復原先
+     * commit，另一個帶著同一把 idempotency_key 的請求就可能立刻認領、重新處理
+     * 這幾個檔案，此時舊照片可能還「可見」（尚未刪除），造成短暫但真實的重複
+     * 可見視窗；若之後 storage 清理又失敗，這些孤兒照片甚至會永久留著（Codex
+     * adversarial review 第六輪指出）。這裡改成先 soft-delete（跟 deletePhoto()
+     * 相同的「邏輯刪除先落地」原則），一旦這個 transaction commit，這些照片立刻
+     * 從所有查詢（含每台車照片上限計算、封面判斷）消失，之後才由呼叫端另外做
+     * storage 實體清理（best-effort，失敗只留下 tombstone，交由
+     * purgeTrashedPhotos() 之後重試）。
+     *
+     * @param  array<int, int>  $alreadyDoneIds
+     * @param  array<int, VehiclePhoto>  $newlyCreatedThisCall
+     */
+    private function restoreBatchAndSoftDeleteRolledBackPhotos(
+        Vehicle $vehicle,
+        VehiclePhotoUploadBatch $batch,
+        string $claimToken,
+        array $alreadyDoneIds,
+        array $newlyCreatedThisCall,
+    ): bool {
+        return DB::transaction(function () use ($vehicle, $batch, $claimToken, $alreadyDoneIds, $newlyCreatedThisCall) {
+            Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
+
+            $owned = $this->applyBatchUpdateIfOwned($batch, $claimToken, [
+                'photo_ids' => $alreadyDoneIds,
+                'processing_lease_expires_at' => null,
+            ]);
+
+            if (! $owned) {
+                return false;
+            }
+
+            if ($newlyCreatedThisCall === []) {
+                return true;
+            }
+
+            $rolledBackIds = array_map(fn (VehiclePhoto $photo) => $photo->id, $newlyCreatedThisCall);
+
+            // cover_slot 的 DB unique 索引不理解 Laravel 的 soft-delete scope，即使
+            // 等一下把這幾筆 row soft-delete，物理上它們仍然存在、is_cover 仍是
+            // true 就仍佔用這台車的 cover_slot 唯一值。必須先明確清成 false，才能
+            // 把封面指定給下一張仍然有效的照片，否則會撞到唯一索引（沿用
+            // deletePhoto() 同一套處理方式）。
+            $wasCoverAmongRolledBack = VehiclePhoto::query()
+                ->whereIn('id', $rolledBackIds)
+                ->where('is_cover', true)
+                ->exists();
+
+            if ($wasCoverAmongRolledBack) {
+                VehiclePhoto::query()->whereIn('id', $rolledBackIds)->update(['is_cover' => false]);
+            }
+
+            VehiclePhoto::query()->whereIn('id', $rolledBackIds)->delete();
+
+            if ($wasCoverAmongRolledBack) {
+                $next = $vehicle->photos()->orderBy('sort_order')->first();
+                if ($next !== null) {
+                    $next->is_cover = true;
+                    $next->save();
+                }
+            }
+
+            return true;
+        });
     }
 
     /**
