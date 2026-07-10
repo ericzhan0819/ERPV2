@@ -197,8 +197,23 @@ class VehiclePhotoService
             try {
                 $this->finalizePhysicalDeletion($photo);
                 $purged++;
-            } catch (\Throwable) {
+            } catch (\Throwable $e) {
                 $failed++;
+
+                // 這個方法是排程（vehicle-photos:purge-trashed，見 routes/console.php）
+                // 唯一的重試路徑，一旦排在背景無人值守跑，指令輸出的 purged=/failed=
+                // 統計數字沒有人會即時盯著看。若這裡不記錄是哪一筆、哪個 disk/path、
+                // 什麼原因失敗，storage 權限或連線退化時，公開網址指向的檔案可能無限
+                // 期留著，卻沒有任何可行動的線索能查是哪張照片、為什麼卡住（Codex
+                // adversarial review 指出）。
+                Log::warning('車輛照片 tombstone 重試清理仍然失敗', [
+                    'vehicle_photo_id' => $photo->id,
+                    'vehicle_id' => $photo->vehicle_id,
+                    'disk' => $photo->disk,
+                    'path' => $photo->path,
+                    'thumbnail_path' => $photo->thumbnail_path,
+                    'exception' => $e->getMessage(),
+                ]);
             }
         });
 
