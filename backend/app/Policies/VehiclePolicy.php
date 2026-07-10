@@ -81,4 +81,14 @@ class VehiclePolicy
     {
         return true;
     }
+
+    public function viewPhotos(User $user, Vehicle $vehicle): bool
+    {
+        return true;
+    }
+
+    public function managePhotos(User $user, Vehicle $vehicle): bool
+    {
+        return $user->hasAnyRole([User::ROLE_ADMIN, User::ROLE_MANAGER]);
+    }
 }
