@@ -1,4 +1,4 @@
-# API 文件 — 中古車行內部營運系統（1.0 + v1.1）
+# API 文件 — 中古車行內部營運系統（1.0 + v1.1 + v1.2）
 
 Base URL：`http://localhost:8000`（依 `.env` `APP_URL` 而定）
 
@@ -6,7 +6,7 @@ Base URL：`http://localhost:8000`（依 `.env` `APP_URL` 而定）
 
 1. 先呼叫 `GET /sanctum/csrf-cookie` 取得 CSRF cookie（Sanctum 內建路由）。
 2. 之後所有 request 都要帶 `X-XSRF-TOKEN`（axios 預設會自動處理，需搭配 `withCredentials: true`）。
-3. 除了 `POST /api/login`、`POST /api/logout` 外，其餘 `/api/*` 都需要登入（`auth:sanctum` + `active` middleware）。
+3. 除了 `POST /api/login`、`POST /api/logout`、`GET /api/public/*`（v1.2 官網公開唯讀 API）外，其餘 `/api/*` 都需要登入（`auth:sanctum` + `active` middleware）。
 4. 標註「僅限管理員」的路由另外掛 `admin` middleware，非管理員呼叫會回傳 `403`。
 5. v1.1 起部分路由改掛 `role:admin,manager` 或 `role:admin,manager,sales` middleware，依 `users.role` 判斷；不符合角色會回傳 `403 {"message": "權限不足"}`。
 
@@ -752,3 +752,124 @@ Query 參數：
 ## 12. 冪等性（idempotency_key）
 
 `purchase-payment`、`expense`、`deposit`、`final-payment`、`refund`、`reserve`、`POST /vehicles`（勾選同步購車付款時）、`POST /money-entries` 等會建立金流紀錄的端點都要求前端帶入 `idempotency_key`（前端可用 UUID）。同一個 key 重複送出、且內容相同時會回傳原本已建立的紀錄，不會重複入帳；若同一個 key 被用在不同內容的請求上，會回傳 422 錯誤。目的是避免網路重試造成重複收支。
+
+車輛照片上傳（`POST /api/vehicles/{id}/photos`）不使用 idempotency_key：這個端點不會建立金流紀錄，屬於 multipart 檔案上傳，重複呼叫的後果是多建立幾張照片（可再透過刪除 API 清理），不是重複入帳，因此沿用既有 idempotency pattern 沒有必要。
+
+---
+
+## 13. Vehicle Photos（車輛照片，v1.2）
+
+車輛照片為 v1.2 新增模組，資料表 `vehicle_photos`。上傳的圖片一律重新編碼為 `webp`（移除 EXIF / GPS 等拍攝資訊），並產生縮圖；同一台車最多 60 張、單次上傳最多 20 張、單張檔案最大 8MB，僅接受 `jpg`／`jpeg`／`png`／`webp`。
+
+角色權限：
+
+| 操作 | admin | manager | sales |
+|---|---|---|---|
+| 讀取（`GET .../photos`） | ✓ | ✓ | ✓ |
+| 上傳／刪除／排序／設封面 | ✓ | ✓ | ✗（403） |
+
+### GET /api/vehicles/{id}/photos
+
+回傳該車目前所有照片（依 `sort_order` 排序），`VehiclePhotoResource` 陣列。
+
+### POST /api/vehicles/{id}/photos — 僅限 admin/manager
+
+`multipart/form-data`，欄位：
+
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| photos[] | file[] | 必填，1~20 個檔案，單檔最大 8MB，僅接受 jpg/jpeg/png/webp |
+
+成功回傳新建立照片的 `VehiclePhotoResource` 陣列（`201`）。第一張上傳的照片自動成為封面。超過每台車 60 張上限、或超過單次 20 張上限時回傳 `422`。
+
+### PATCH /api/vehicles/{id}/photos/reorder — 僅限 admin/manager
+
+```json
+{ "photo_ids": [12, 9, 7] }
+```
+
+`photo_ids` 必須剛好等於此車輛目前所有照片 id（不可缺漏、重複，或包含其他車輛的照片），否則回傳 `422`。成功回傳依新順序排列的 `VehiclePhotoResource` 陣列。
+
+### PATCH /api/vehicles/{id}/photos/{photoId}/cover — 僅限 admin/manager
+
+將指定照片設為封面，其餘照片自動取消封面。回傳更新後的單筆 `VehiclePhotoResource`。指定的 `photoId` 不屬於該車輛時回傳 `422`。
+
+### DELETE /api/vehicles/{id}/photos/{photoId} — 僅限 admin/manager
+
+刪除單張照片（`{"message": "照片已刪除"}`）。若刪除的是封面照，自動改指定 `sort_order` 最小的下一張照片為封面；若刪除後已無任何照片，車輛沒有封面。
+
+### VehiclePhotoResource
+
+```json
+{
+  "id": 1,
+  "vehicle_id": 15,
+  "url": "http://localhost:8000/storage/vehicles/15/xxxx.webp",
+  "thumbnail_url": "http://localhost:8000/storage/vehicles/15/xxxx_thumb.webp",
+  "original_filename": "IMG_1234.jpg",
+  "mime_type": "image/jpeg",
+  "size": 3456789,
+  "width": 4032,
+  "height": 3024,
+  "sort_order": 0,
+  "is_cover": true,
+  "uploaded_by": 2,
+  "created_at": "2026-07-09T10:00:00.000000Z",
+  "updated_at": "2026-07-09T10:00:00.000000Z"
+}
+```
+
+---
+
+## 14. Public Vehicles（官網公開唯讀 API，v1.2）
+
+`GET /api/public/*` 不需登入，供未來官網 MVP 讀取已上架車輛資料。整組獨立於 `auth:sanctum` 群組之外，並掛 `throttle:60,1`（每 IP 每分鐘 60 次，超過回 `429`），避免匿名使用者以大 `per_page` 或高頻請求放大 DB 讀取與序列化成本。
+
+只回傳 `status=listed` 的車輛；`preparing`／`reserved`／`sold`／`cancelled` 的車輛一律視為不存在（`GET /api/public/vehicles/{id}` 回傳 `404`，不區分「車輛不存在」與「車輛存在但非上架中」，避免洩漏車輛生命週期狀態）。
+
+**允許回傳欄位**（`PublicVehicleResource` / `PublicVehicleListResource` 白名單）：`id`、`stock_no`、`brand`、`model`、`year`、`mileage_km`、`color`、`fuel_type`、`transmission`、`displacement`、`asking_price`、`cover_photo`、`photos`（僅詳情頁）、`listing_date`、`created_at`。
+
+**禁止回傳欄位**：`purchase_price`（收購價）、`floor_price`（底價）、`sold_price`（成交價）、任何買方／賣方／客戶個資、`money_entries`／成本／毛利、`cash_account`、內部備註（證件／備鑰／過戶／驗車檢核、貸款或車況備註）、`approval_status`、`idempotency_key`、`uploaded_by`、`original_filename`、`mime_type`。公開 API 使用獨立的 `PublicVehicleResource`／`PublicVehicleListResource`／`PublicVehiclePhotoResource`，不共用內部 `VehicleResource`／`VehiclePhotoResource`，避免未來內部欄位新增時意外外洩。
+
+### GET /api/public/vehicles
+
+Query 參數：
+
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| per_page | int | 1~100，預設 20 |
+| page | int | 頁碼 |
+
+依 `listing_date` 由新到舊排序。列表**只回傳封面照**（`cover_photo`），不回傳每台車完整相簿，避免單一請求換取大量照片序列化。回傳分頁後的 `PublicVehicleListResource` 陣列。
+
+### GET /api/public/vehicles/{id}
+
+回傳單筆 `PublicVehicleResource`，包含完整 `photos` 陣列（依 `sort_order` 排序）。找不到或非上架狀態一律回傳：
+
+```json
+{ "message": "Vehicle not found" }
+```
+
+### PublicVehicleResource
+
+```json
+{
+  "id": 15,
+  "stock_no": "V202607070001",
+  "brand": "Toyota",
+  "model": "Camry",
+  "year": 2020,
+  "mileage_km": 35000,
+  "color": "白色",
+  "fuel_type": "gasoline",
+  "transmission": "automatic",
+  "displacement": 2000,
+  "asking_price": 680000,
+  "cover_photo": { "id": 1, "url": "...", "thumbnail_url": "...", "is_cover": true, "sort_order": 0, "width": 4032, "height": 3024 },
+  "photos": [ { "id": 1, "url": "...", "thumbnail_url": "...", "is_cover": true, "sort_order": 0, "width": 4032, "height": 3024 } ],
+  "listing_date": "2026-07-09",
+  "created_at": "2026-07-09T10:00:00.000000Z"
+}
+```
+
+`PublicVehicleListResource` 欄位相同，但不含 `photos`（只有 `cover_photo`）。

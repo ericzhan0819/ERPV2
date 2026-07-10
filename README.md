@@ -1,6 +1,6 @@
-# 中古車行內部營運系統（1.0 + v1.1 + v1.2 planning）
+# 中古車行內部營運系統（1.0 + v1.1 + v1.2）
 
-小型中古車行內部使用的前後端分離營運管理系統。v1.1 新增角色（`admin`／`manager`／`sales`）、敏感金額遮蔽、一般收支審核、客戶模組與建車入庫欄位補強，另依使用者需求追加管理員稽核紀錄。v1.1 已完成 smoke，封版狀態詳見 `docs/current-state.md`、`docs/v1.1-smoke-report.md`。v1.2 已新增車輛圖片與官網前置規劃，詳見 `企劃書_v1.2.md`、`PLAN_v1.2.md`。API 與既有計畫細節見 `backend/API.md`、`PLAN_v1.1.md`。
+小型中古車行內部使用的前後端分離營運管理系統。v1.1 新增角色（`admin`／`manager`／`sales`）、敏感金額遮蔽、一般收支審核、客戶模組與建車入庫欄位補強，另依使用者需求追加管理員稽核紀錄。v1.1 已完成 smoke，封版狀態詳見 `docs/current-state.md`、`docs/v1.1-smoke-report.md`。v1.2 新增車輛照片管理（`vehicle_photos`：上傳、縮圖、排序、封面、刪除，admin/manager 管理、sales 唯讀）與官網公開唯讀車輛 API（`GET /api/public/vehicles`、`GET /api/public/vehicles/{id}`，僅回傳已上架車輛的安全欄位），詳見 `企劃書_v1.2.md`、`PLAN_v1.2.md`。官網前端本身不在 v1.2 範圍內。API 與既有計畫細節見 `backend/API.md`、`PLAN_v1.1.md`。
 
 ## 環境需求
 
@@ -27,6 +27,12 @@
    ```
 
    依實際環境調整 `.env` 內的 `DB_*`、`FRONTEND_URL`、`SANCTUM_STATEFUL_DOMAINS`（預設值已對應 `docker-compose.yml`）。
+
+   v1.2 車輛照片上傳需要 public storage 對外可讀，執行一次：
+
+   ```bash
+   php artisan storage:link
+   ```
 
 3. 前端：
 
@@ -108,6 +114,8 @@ php artisan test
 9a. （v1.1）以 `sales` 帳號收訂金/尾款後，在 admin 核准前嘗試成交結案應回 422；admin 核准足額收款後才可成交結案。
 10. （v1.1）新增客戶並與車輛建立買方/賣方關聯，確認客戶詳情可看到關聯車輛；刪除仍有關聯車輛的客戶應被拒絕。
 11. 以 admin 開啟「稽核紀錄」，確認登入、資料新增／修改／刪除皆有紀錄；manager／sales 不可進入該頁或呼叫稽核 API。
+12. （v1.2）於車輛詳情頁以 `admin`／`manager` 帳號上傳／刪除／排序／設定封面照片，確認縮圖與封面正確顯示；以 `sales` 帳號檢視同一頁，確認只能看照片、不會顯示上傳／刪除／排序等管理按鈕，且直接呼叫對應 API 會回傳 `403`。
+13. （v1.2）呼叫 `GET /api/public/vehicles`、`GET /api/public/vehicles/{id}`（不帶登入 cookie），確認只回傳 `status=listed` 的車輛，且回應 JSON 不含收購價、底價、成交價、客戶個資、收支、毛利、資金帳戶等欄位；查詢非上架中或不存在的車輛 id 應回傳 `404`。
 
 ## 常見問題
 

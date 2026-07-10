@@ -1,9 +1,9 @@
-# ERPV2 current-state — v1.1 smoke passed
+# ERPV2 current-state — v1.1 smoke passed，v1.2 進行中
 
-日期：2026-07-08
+日期：2026-07-10
 專案：ERPV2 / 中古車行內部營運系統
-目前穩定點：`e05cf8d fix: 核准訂金/尾款/退款前檢查車輛是否已結案，防止事後核准打破已關帳不變量`
-狀態：v1.1 已以 `v1.1-smoke-passed` 封版；v1.2 已建立車輛圖片與官網前置規劃文件（`企劃書_v1.2.md`、`PLAN_v1.2.md`）。
+目前穩定點：`c6bd826 fix: 車輛照片刷新的過期請求改為呼叫時直接擋下，避免污染目前車輛的請求序號`
+狀態：v1.1 已以 `v1.1-smoke-passed` 封版。v1.2（車輛圖片與官網前置基礎）後端資料模型／Service／Policy／Request／Resource／API routes、前端車輛詳情頁照片管理 UI 已完成；`backend/API.md` 已補上 Vehicle Photos 與 Public Vehicles 章節。尚待完成：`PLAN_v1.2.md` 第 7～9 節 backend/frontend 測試與 manual smoke，尚未打 v1.2 完成 tag。
 
 ---
 
@@ -287,7 +287,7 @@ sales 不可以看到：
 
 ## 7. 下一階段建議
 
-v1.1 已封版。下一階段已定為 v1.2：
+v1.1 已封版。v1.2（車輛圖片管理 + 官網公開車輛資料前置基礎）進行中：
 
 ```text
 車輛圖片管理 + 官網公開車輛資料前置基礎
@@ -298,15 +298,23 @@ v1.2 必讀文件：
 - `企劃書_v1.2.md`
 - `PLAN_v1.2.md`
 
-v1.2 優先做：
+v1.2 已完成：
 
-- 車輛照片資料模型
-- 後台車輛照片上傳 / 刪除 / 排序 / 設封面
-- 車輛詳情頁照片管理 UI
-- sales 可看照片但不可管理
-- public vehicles read-only API
-- public API 僅公開已上架車輛、公開價格與照片
-- storage 設計先用 Laravel public disk，預留未來 Cloudflare R2
+- 車輛照片資料模型（`vehicle_photos`，含 soft delete tombstone、封面唯一性 DB 約束）
+- 後台車輛照片上傳 / 刪除 / 排序 / 設封面（`VehiclePhotoService` + `VehiclePhotoController`）
+- 車輛詳情頁照片管理 UI（admin/manager 可管理，sales 唯讀）
+- sales 可看照片但不可管理（`VehiclePolicy::viewPhotos()` / `managePhotos()`）
+- public vehicles read-only API（`GET /api/public/vehicles`、`GET /api/public/vehicles/{id}`）
+- public API 僅公開已上架車輛、公開價格與照片，並加上 IP throttle 防匿名放大攻擊
+- storage 設計先用 Laravel public disk，預留未來 Cloudflare R2（`config/vehicle_photos.php` 的 `disk`）
+- `backend/API.md`、`README.md`、本檔已補上 v1.2 對應內容
+
+v1.2 尚待完成：
+
+- `PLAN_v1.2.md` 第 7 節 backend tests（`VehiclePhotoTest`、`PublicVehicleApiTest`，含 MySQL 並發測試）
+- `PLAN_v1.2.md` 第 8 節 frontend tests / build 驗證
+- `PLAN_v1.2.md` 第 9 節 manual smoke 全項執行並記錄
+- v1.2 完成後補 smoke report 並打 tag（比照 `v1.1-smoke-passed`）
 
 v1.2 不做：
 

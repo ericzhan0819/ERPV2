@@ -242,24 +242,24 @@ Resource 原則：
 
 ### 6.1 API 文件
 
-- [ ] `backend/API.md` 補上 Vehicle Photo internal endpoints
-- [ ] `backend/API.md` 補上 Public Vehicles endpoints
-- [ ] 清楚列出 public API 可回傳欄位
-- [ ] 清楚列出 public API 禁止回傳欄位
+- [x] `backend/API.md` 補上 Vehicle Photo internal endpoints（第 13 節）
+- [x] `backend/API.md` 補上 Public Vehicles endpoints（第 14 節）
+- [x] 清楚列出 public API 可回傳欄位
+- [x] 清楚列出 public API 禁止回傳欄位
 
 ### 6.2 README / current-state / CLAUDE
 
-- [ ] `README.md` 補充 v1.2 方向
-- [ ] `docs/current-state.md` 補充 v1.2 進行中或完成後狀態
-- [ ] `CLAUDE.md` 補充 v1.2 必讀文件與範圍
+- [x] `README.md` 補充 v1.2 方向（含 `storage:link` 步驟與 v1.2 manual smoke 項目 12/13）
+- [x] `docs/current-state.md` 補充 v1.2 進行中或完成後狀態
+- [x] `CLAUDE.md` 補充 v1.2 必讀文件與範圍（先前任務已完成）
 
 ### 6.3 官網不在本階段實作
 
-- [ ] 不建立完整官網前端
-- [ ] 不建立 CMS
-- [ ] 不建立 SEO 管理
-- [ ] 不建立預約試乘 / lead form
-- [ ] 不建立線上付款
+- [x] 不建立完整官網前端
+- [x] 不建立 CMS
+- [x] 不建立 SEO 管理
+- [x] 不建立預約試乘 / lead form
+- [x] 不建立線上付款
 
 ---
 
