@@ -331,31 +331,36 @@ Resource 原則：
 
 ## 9. Manual smoke
 
+以下項目已於本機 dev 環境（既有 `php artisan serve` + MySQL）以 API 層級（curl + Sanctum token，admin/manager/sales 三種角色）驗證通過；UI 點擊層級因本環境無瀏覽器自動化工具（未安裝 playwright/chromium）尚待使用者在瀏覽器實際操作一次確認。
+
 ### Admin / Manager
 
-- [ ] 開啟車輛詳情頁可看到照片區塊
-- [ ] 可上傳多張照片
-- [ ] 第一張自動為封面
-- [ ] 可設定另一張為封面
-- [ ] 可刪除照片
-- [ ] 刪除封面後自動補封面
-- [ ] 可調整排序
-- [ ] 重新整理後排序與封面保持正確
+- [ ] 開啟車輛詳情頁可看到照片區塊（UI 層級待使用者於瀏覽器確認）
+- [x] 可上傳多張照片（admin、manager 皆以 API 驗證成功）
+- [x] 第一張自動為封面
+- [x] 可設定另一張為封面
+- [x] 可刪除照片
+- [x] 刪除封面後自動補封面（依 sort_order 最小者遞補）
+- [x] 可調整排序
+- [x] 重新整理後排序與封面保持正確（重新 GET list 驗證持久化）
 
 ### Sales
 
-- [ ] 可看到車輛照片
-- [ ] 看不到上傳按鈕
-- [ ] 看不到刪除按鈕
-- [ ] 看不到設封面與排序操作
-- [ ] 仍看不到收購價、成本、毛利、資金帳戶
+- [x] 可看到車輛照片（GET list 回 200）
+- [x] 看不到上傳按鈕（API 層級：上傳回 403）
+- [x] 看不到刪除按鈕（API 層級：刪除回 403）
+- [x] 看不到設封面與排序操作（API 層級：設封面回 403）
+- [ ] 仍看不到收購價、成本、毛利、資金帳戶（v1.1 既有 RoleAccessTest 已覆蓋，本次未重複以 UI 檢查）
 
 ### Public API
 
-- [ ] 未登入可讀 `GET /api/public/vehicles`
-- [ ] 只看到已上架車輛
-- [ ] 回傳封面照與照片 URL
-- [ ] 不回傳底價 / 成交價 / 收購價 / 客戶 / 收支 / 毛利
+- [x] 未登入可讀 `GET /api/public/vehicles`
+- [x] 只看到已上架車輛（另建一筆 preparing 車輛驗證 detail 回 404、list 不列出，測試後已清除）
+- [x] 回傳封面照與照片 URL
+- [x] 不回傳底價 / 成交價 / 收購價 / 客戶 / 收支 / 毛利（逐欄位比對 JSON key，確認無洩漏）
+- [x] 額外驗證：`throttle:60,1` 限流生效（第 61 次請求起回 429）
+
+**重大發現與修復**：manual smoke 過程中發現車輛照片上傳在真實 MySQL 環境下 100% 失敗（`照片處理逾時，請重新上傳`），即使沒有任何並發。根因：Laravel `Cache::lock()` 搭配 `CACHE_STORE=database` 時，`DatabaseLock::refresh()` 用 UPDATE 影響列數 `>= 1` 判斷續約是否成功；MySQL PDO 預設「影響列數」只計算「值真的改變」的列，若 `refresh()` 剛好在 `acquire()` 的同一秒內呼叫（本案的 decode/encode 只需數十毫秒，幾乎必然落在同一秒），新舊 `expiration` 相同，MySQL 回報 0 rows affected，讓程式誤判鎖已遺失並中止上傳。測試環境用 `CACHE_STORE=array`（不受此限制）所以先前 `VehiclePhotoTest` 全數通過但沒踩到這個問題，直到這次對著真實 MySQL 走 manual smoke 才暴露。修復方式：在 `backend/config/database.php` 的 `mysql` / `mariadb` 連線 `options` 加上 `Mysql::ATTR_FOUND_ROWS => true`，讓 PDO 回報「WHERE 條件有 match 到的列數」而非「值有改變的列數」，這是這個 MySQL 特有行為的標準修法。修復後重新以 API 完整走過上傳／封面／刪除／排序流程皆正確，`php artisan test` 330 passed / 4 skipped（既有 MySQL-only skip）不受影響。
 
 ---
 

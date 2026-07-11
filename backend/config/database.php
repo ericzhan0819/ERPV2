@@ -59,8 +59,20 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
+            // ATTR_FOUND_ROWS：Laravel 的 database cache lock（Cache::lock() 搭配
+            // CACHE_STORE=database）用「UPDATE ... WHERE owner=? AND expiration>?」
+            // 的 affected-rows 是否 >= 1 判斷 acquire()/refresh() 是否成功。MySQL
+            // PDO 預設 affected-rows 只算「值真的改變」的列數；當 refresh() 剛好在
+            // acquire() 的同一秒內呼叫（秒級 timestamp），新舊 expiration 相同，
+            // MySQL 回報 0 rows affected，讓 refresh() 誤判成「鎖已遺失」，即使鎖其實
+            // 仍然有效持有。車輛照片上傳的 VehiclePhotoImageProcessor 全域處理鎖即因
+            // 此在單機測試（無並發）下就 100% 觸發 assertLockStillHeld() 失敗，整個
+            // 上傳功能實際上完全無法使用（manual smoke 才發現，array cache store 的
+            // 測試環境不會踩到這個 MySQL 特有行為）。開啟 FOUND_ROWS 讓 affected-rows
+            // 改成「WHERE 條件有 match 到的列數」，refresh() 才會如預期回傳 true。
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                Mysql::ATTR_FOUND_ROWS => true,
             ]) : [],
         ],
 
@@ -79,8 +91,12 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
+            // 同上 mysql 連線的 ATTR_FOUND_ROWS 說明：mariadb 走同一顆 pdo_mysql
+            // driver，database cache lock 的 refresh() 同樣需要 affected-rows 反映
+            // 「match 到的列數」而非「值有變化的列數」。
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                Mysql::ATTR_FOUND_ROWS => true,
             ]) : [],
         ],
 
