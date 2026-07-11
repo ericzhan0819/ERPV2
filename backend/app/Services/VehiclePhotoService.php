@@ -135,7 +135,22 @@ class VehiclePhotoService
             // 這裡不需要 lockForUpdate：正確性仍然由下面 per-file transaction 內的
             // row lock + 上限檢查保證，這裡只是儘早擋掉明顯會失敗的請求，不是
             // 唯一的把關點。
-            $currentPhotoCount = VehiclePhoto::where('vehicle_id', $vehicle->id)->count();
+            //
+            // 這裡只能算「穩定容量」：對外可見的照片（upload_batch_id 為 NULL）
+            // 加上自己這個 batch 已經寫入的照片（upload_batch_id = 這個 batch）。
+            // 不可以把「其他 batch 尚未提交、還在處理中」的 hidden row 也算進去
+            // ——那些 row 屬於別的並發請求，有可能在它失敗時被復原/soft-delete，
+            // 屆時容量會立刻空出來。若這裡把它們算進上限，會讓一個原本可以在
+            // 那個並發請求結算後成功的合法請求，被這個便宜的預檢提早、錯誤地
+            // 打回 422（Codex adversarial review 指出）。真正權威的判斷仍然是
+            // 下面 per-file transaction 內、鎖住車輛 row 之後的即時計數；這裡
+            // 刻意保守，只用來擋掉「就算等其他並發請求結算完，容量還是不夠」
+            // 這種確定會失敗的情況。
+            $currentPhotoCount = VehiclePhoto::where('vehicle_id', $vehicle->id)
+                ->where(function ($query) use ($batch) {
+                    $query->whereNull('upload_batch_id')->orWhere('upload_batch_id', $batch->id);
+                })
+                ->count();
             if ($currentPhotoCount + count($filesToProcess) > $config['max_photos_per_vehicle']) {
                 throw ValidationException::withMessages([
                     'photos' => "每台車最多只能有 {$config['max_photos_per_vehicle']} 張照片。",

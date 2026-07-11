@@ -407,4 +407,85 @@ class VehiclePhotoTest extends TestCase
         $secondResponse->assertJsonValidationErrors(['photos']);
         $this->assertSame($maxPerVehicle, VehiclePhoto::where('vehicle_id', $vehicle->id)->count());
     }
+
+    public function test_capacity_preflight_does_not_falsely_reject_during_concurrent_batch_rollback(): void
+    {
+        // Codex adversarial review 指出：容量預檢若把「其他 batch 尚未提交、
+        // 還在處理中」的 hidden row 也算進目前照片數，會讓一個原本可以在那個
+        // 並發請求結算（結算後被復原/soft-delete）後成功的合法請求，在真正開始
+        // 處理圖片之前就被這個便宜的預檢提早、錯誤地打回 422；而按照原本沒有
+        // 這道預檢的流程，這個請求會先花時間做圖片處理，再進到有 row lock 保護
+        // 的 per-file transaction，那時另一個並發 batch 早已結算完畢、釋放了它
+        // 的 hidden 照片，這個請求其實可以成功。
+        //
+        // 這裡模擬：車輛已有 max-1 張正式可見照片，另外還有 1 張屬於「別的、
+        // 尚未完成」batch 的 hidden 照片（upload_batch_id 指向一個不存在於這次
+        // 請求的 batch）。用一個包一層「呼叫 process() 時，把那張 hidden 照片
+        // soft-delete 掉」的 processor 子類別，模擬「這次請求做圖片處理的這段
+        // 時間內，另一個並發 batch 剛好失敗並完成它自己的復原」。
+        //
+        // 驗證重點：
+        // 1. 預檢不能只因為「目前所有非刪除照片數（含其他 batch 的 hidden
+        //    row）+ 這次要處理的檔案數」超過上限就直接丟 422——那樣會在
+        //    processor 完全沒被呼叫之前就打回，永遠等不到並發 batch 結算。
+        // 2. 這次上傳最終必須成功：圖片處理真的被呼叫過，且 per-file
+        //    transaction 是在「其他 batch 的 hidden 照片已經被復原」之後才做
+        //    最終容量判斷，看到的是已經釋放的容量，所以成功建立新照片。
+        Storage::fake('public');
+
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create();
+        $maxPerVehicle = config('vehicle_photos.max_photos_per_vehicle');
+
+        for ($i = 0; $i < $maxPerVehicle - 1; $i++) {
+            $this->makePhoto($vehicle, $admin, 'existing-'.$i, $i === 0, $i);
+        }
+
+        $otherBatch = \App\Models\VehiclePhotoUploadBatch::create([
+            'vehicle_id' => $vehicle->id,
+            'idempotency_key' => 'other-in-flight-batch-'.uniqid(),
+            'idempotency_payload' => 'unrelated-payload',
+            'photo_ids' => [],
+            'processing_lease_expires_at' => now()->addMinutes(10),
+            'claim_token' => (string) \Illuminate\Support\Str::uuid(),
+        ]);
+
+        $hiddenPhoto = $this->makePhoto($vehicle, $admin, 'hidden-in-progress', false, $maxPerVehicle - 1);
+        $hiddenPhoto->update(['upload_batch_id' => $otherBatch->id]);
+
+        $this->app->bind(\App\Services\VehiclePhotoImageProcessor::class, function () use ($hiddenPhoto) {
+            return new class($hiddenPhoto) extends \App\Services\VehiclePhotoImageProcessor
+            {
+                private bool $settled = false;
+
+                public function __construct(private readonly VehiclePhoto $hiddenPhoto)
+                {
+                    parent::__construct();
+                }
+
+                public function process(\Illuminate\Http\UploadedFile $file, int $vehicleId): array
+                {
+                    $data = parent::process($file, $vehicleId);
+
+                    if (! $this->settled) {
+                        $this->settled = true;
+                        $this->hiddenPhoto->delete();
+                    }
+
+                    return $data;
+                }
+            };
+        });
+
+        $response = $this->actingAs($admin, 'web')->postJson("/api/vehicles/{$vehicle->id}/photos", [
+            'idempotency_key' => 'concurrent-with-hidden-batch-'.uniqid(),
+            'photos' => [$this->fakeJpegUploadedFile()],
+        ]);
+
+        $response->assertOk();
+        $this->assertSame(
+            $maxPerVehicle,
+            VehiclePhoto::where('vehicle_id', $vehicle->id)->count()
+        );
+    }
 }
