@@ -117,6 +117,31 @@ class VehiclePhotoService
         // 這個請求已經被取代），整個 transaction（含剛建立的照片）一併 rollback，
         // 不會留下沒被記錄進 batch 的孤兒照片。
         try {
+            // 在真正呼叫 processor->process()（解碼/縮圖，會吃 CPU、記憶體與磁碟
+            // I/O）之前，先用目前已知的照片數量做一次便宜的容量預檢：如果這台車
+            // 現有照片數加上這批還沒處理的檔案數已經確定會超過
+            // max_photos_per_vehicle，代表這通呼叫最終一定會在下面的 per-file
+            // transaction 檢查失敗、並整批 rollback，與其花資源處理完前面幾個
+            // 檔案才在最後一個檔案失敗，不如提早失敗（Codex adversarial review
+            // 指出：先前版本會先把每個檔案都跑完整個圖片處理流程，才在 DB
+            // transaction 內判斷是否超過上限，等於讓一台已滿的車輛可以被重複打去
+            // 消耗圖片處理資源，每次都保證失敗）。這裡刻意放在 try 區塊內、且在
+            // foreach 之前就丟出例外：必須讓下面同一個 catch 區塊接手，用
+            // claim_token fencing 把這次呼叫開始前的 batch.photo_ids／租約復原、
+            // 並清空 processing lease（Codex 第二輪 review 指出：先前把這段預檢放
+            // 在 try 區塊外面，丟出的例外完全繞過復原/清租約邏輯，會讓這個
+            // idempotency_key 的 batch 一路帶著未過期的 lease 卡住，直到 TTL 自然
+            // 到期前，同一把 key 的合法重試都會被誤判成「仍在處理中」而被拒絕）。
+            // 這裡不需要 lockForUpdate：正確性仍然由下面 per-file transaction 內的
+            // row lock + 上限檢查保證，這裡只是儘早擋掉明顯會失敗的請求，不是
+            // 唯一的把關點。
+            $currentPhotoCount = VehiclePhoto::where('vehicle_id', $vehicle->id)->count();
+            if ($currentPhotoCount + count($filesToProcess) > $config['max_photos_per_vehicle']) {
+                throw ValidationException::withMessages([
+                    'photos' => "每台車最多只能有 {$config['max_photos_per_vehicle']} 張照片。",
+                ]);
+            }
+
             foreach ($filesToProcess as $file) {
                 $data = $this->processor->process($file, $vehicle->id);
 

@@ -332,4 +332,79 @@ class VehiclePhotoTest extends TestCase
         $response->assertJsonValidationErrors(['photos']);
         $this->assertSame($maxPerVehicle, VehiclePhoto::where('vehicle_id', $vehicle->id)->count());
     }
+
+    public function test_uploading_to_full_vehicle_does_not_process_images(): void
+    {
+        // Codex adversarial review 指出：先前版本在檢查 max_photos_per_vehicle
+        // 之前就先呼叫 processor->process() 解碼/縮圖，讓已滿的車輛可以被重複
+        // 打去消耗圖片處理資源、每次都保證失敗。這裡用 spy 斷言容量預檢會在
+        // process() 之前就擋掉整批請求，process() 完全不會被呼叫。
+        Storage::fake('public');
+
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create();
+        $maxPerVehicle = config('vehicle_photos.max_photos_per_vehicle');
+
+        for ($i = 0; $i < $maxPerVehicle; $i++) {
+            $this->makePhoto($vehicle, $admin, 'existing-'.$i, $i === 0, $i);
+        }
+
+        $spy = $this->spy(\App\Services\VehiclePhotoImageProcessor::class);
+
+        $response = $this->actingAs($admin, 'web')->postJson("/api/vehicles/{$vehicle->id}/photos", [
+            'idempotency_key' => 'over-vehicle-limit-no-processing-'.uniqid(),
+            'photos' => [$this->fakeJpegUploadedFile()],
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['photos']);
+        $spy->shouldNotHaveReceived('process');
+        $this->assertSame($maxPerVehicle, VehiclePhoto::where('vehicle_id', $vehicle->id)->count());
+    }
+
+    public function test_capacity_rejection_releases_upload_batch_lease_for_immediate_retry(): void
+    {
+        // Codex adversarial review 第二輪指出：容量預檢若丟在 try 區塊外面，
+        // 會繞過既有的 batch 復原/清租約邏輯，讓這把 idempotency_key 的
+        // processing lease 卡在未過期狀態，直到 TTL 自然到期前，同一把 key
+        // 的合法重試都會被誤判成「仍在處理中」而被拒絕。這裡驗證容量預檢
+        // 失敗後，同一把 idempotency_key 可以立刻重試（不會卡在 lease 未清空
+        // 的狀態），且第二次請求依然正確地因為容量已滿被拒絕，而不是被誤判
+        // 成「仍在處理中」。
+        Storage::fake('public');
+
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create();
+        $maxPerVehicle = config('vehicle_photos.max_photos_per_vehicle');
+
+        for ($i = 0; $i < $maxPerVehicle; $i++) {
+            $this->makePhoto($vehicle, $admin, 'existing-'.$i, $i === 0, $i);
+        }
+
+        $idempotencyKey = 'over-vehicle-limit-retry-'.uniqid();
+
+        // 兩次請求必須是完全相同的檔案內容（同一份 sha256），才會落在
+        // beginUploadBatch() 的「payload 相符」分支，進而真正驗證到 lease 是否
+        // 已被釋放；若內容不同，會先被「idempotency_key 已用於內容不同的請求」
+        // 擋下，測不到 lease 釋放與否。這裡重複使用同一個 UploadedFile 物件：
+        // 它是 test-mode UploadedFile（建構子最後一個參數 true），store 時走
+        // copy 而非 move，原始暫存檔在兩次呼叫之間不會被清掉。
+        $file = $this->fakeJpegUploadedFile();
+
+        $firstResponse = $this->actingAs($admin, 'web')->postJson("/api/vehicles/{$vehicle->id}/photos", [
+            'idempotency_key' => $idempotencyKey,
+            'photos' => [$file],
+        ]);
+        $firstResponse->assertStatus(422);
+        $firstResponse->assertJsonValidationErrors(['photos']);
+
+        $secondResponse = $this->actingAs($admin, 'web')->postJson("/api/vehicles/{$vehicle->id}/photos", [
+            'idempotency_key' => $idempotencyKey,
+            'photos' => [$file],
+        ]);
+
+        $secondResponse->assertStatus(422);
+        $secondResponse->assertJsonValidationErrors(['photos']);
+        $this->assertSame($maxPerVehicle, VehiclePhoto::where('vehicle_id', $vehicle->id)->count());
+    }
 }
