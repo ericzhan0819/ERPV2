@@ -11,7 +11,7 @@
 ```text
 1.0：工程 MVP 已完成，核心 CRUD、車輛流程、收支、資金帳戶、列印與文件已可運作。
 v1.1：實務工作流補強已完成 smoke，並以 v1.1-smoke-passed tag 封版。
-v1.2：進入車輛圖片與官網公開車輛資料前置階段，目標是補上車輛照片管理與安全 public vehicle API。
+v1.2：車輛圖片與官網公開車輛資料前置階段已完成 manual smoke，待以 v1.2-smoke-passed tag 封版；車輛照片管理與安全 public vehicle API 已可運作。
 ```
 
 核心目標不是擴張成完整 ERP，而是讓中古車行日常營運能穩定落地：車輛進來、建檔、整備、上架、保留、收款、成交、列印收支明細與查看營運摘要。
@@ -48,9 +48,11 @@ v1.2 任務必須閱讀：
 2. `PLAN_v1.2.md`
 3. `docs/current-state.md`
 4. `docs/v1.1-smoke-report.md`
-5. `backend/API.md`
-6. `UI.md`
-7. 相關 backend / frontend 既有程式碼
+5. `docs/v1.2-smoke-report.md`
+6. `docs/v1.2-handoff.md`
+7. `backend/API.md`
+8. `UI.md`
+9. 相關 backend / frontend 既有程式碼
 
 不得只看單一檔案就直接大量改碼。實作前必須先檢查既有目錄、路由、Service、Request、Resource、測試與前端 API 型別。
 
@@ -140,6 +142,8 @@ v1.2 允許實作：
 * API 文件、README、current-state 與 smoke 文件更新
 
 v1.2 不代表直接實作完整官網、CMS、SEO 後台、線上付款、預約試乘或通用附件系統。
+
+v1.2 已完成並封板。除非使用者明確要求 v1.2.x hotfix，否則完整官網或後續功能必須另立企劃書與 PLAN，不得繼續塞入 `PLAN_v1.2.md`。
 
 ---
 

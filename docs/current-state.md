@@ -1,9 +1,10 @@
-# ERPV2 current-state — v1.1 smoke passed，v1.2 進行中
+# ERPV2 current-state — v1.2 smoke passed，待建立封版 tag
 
-日期：2026-07-10
+日期：2026-07-12
 專案：ERPV2 / 中古車行內部營運系統
-目前穩定點：`c6bd826 fix: 車輛照片刷新的過期請求改為呼叫時直接擋下，避免污染目前車輛的請求序號`
-狀態：v1.1 已以 `v1.1-smoke-passed` 封版。v1.2（車輛圖片與官網前置基礎）後端資料模型／Service／Policy／Request／Resource／API routes、前端車輛詳情頁照片管理 UI 已完成；`backend/API.md` 已補上 Vehicle Photos 與 Public Vehicles 章節。尚待完成：`PLAN_v1.2.md` 第 7～9 節 backend/frontend 測試與 manual smoke，尚未打 v1.2 完成 tag。
+目前程式穩定點：`fdb5da5 fix: 修復 MySQL 環境下車輛照片上傳因 database cache lock refresh 誤判逾時而 100% 失敗的問題`
+目前文件穩定點：`f236fed docs: 勾選 PLAN_v1.2 第10-11部分，確認不做事項與完成定義（manual smoke UI 待使用者確認）`
+狀態：v1.1 已以 `v1.1-smoke-passed` 封版。v1.2（車輛圖片與官網公開車輛資料前置基礎）功能、自動測試、瀏覽器 manual smoke 與文件整理均已完成；待提交本輪封版文件並建立 `v1.2-smoke-passed` tag。完整結果見 `docs/v1.2-smoke-report.md`，後續交接見 `docs/v1.2-handoff.md`。
 
 ---
 
@@ -53,7 +54,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-最新驗證結果見 `docs/v1.1-smoke-report.md`。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。
 
 ---
 
@@ -279,42 +280,36 @@ sales 不可以看到：
 
 目前已知技術限制：
 
-- 全站表單仍多為 submit-time validation，尚未統一改成 on-blur per-field validation
-- 列印頁已由測試覆蓋資料結構，但仍建議在正式使用前肉眼檢查紙本排版
-- MySQL/MariaDB 真並發測試需要專用資料庫環境；一般 SQLite/PHPUnit full suite 會 skip 4 個 MySQL-only tests
+- 全站表單仍多為 submit-time validation，尚未統一改成 on-blur per-field validation。
+- 列印頁已由測試覆蓋資料結構，但仍建議在正式使用前肉眼檢查紙本排版。
+- MySQL/MariaDB 真並發測試需要專用資料庫環境；一般 PHPUnit full suite 會 skip 4 個既有 MySQL-only tests。
+- v1.2 照片排序採左右按鈕，未做拖曳排序。
+- 圖片目前使用 Laravel public disk，尚未實作 Cloudflare R2 driver。
+- `php artisan storage:link` 是部署必要步驟；缺少 symlink 時圖片 URL 無法公開讀取。
+- 真實雙連線 MySQL 封面競態壓力測試保留給 v1.2.x 視需要補強。
 
 ---
 
-## 7. 下一階段建議
-
-v1.1 已封版。v1.2（車輛圖片管理 + 官網公開車輛資料前置基礎）進行中：
-
-```text
-車輛圖片管理 + 官網公開車輛資料前置基礎
-```
-
-v1.2 必讀文件：
-
-- `企劃書_v1.2.md`
-- `PLAN_v1.2.md`
+## 7. v1.2 封版狀態與下一階段
 
 v1.2 已完成：
 
-- 車輛照片資料模型（`vehicle_photos`，含 soft delete tombstone、封面唯一性 DB 約束）
-- 後台車輛照片上傳 / 刪除 / 排序 / 設封面（`VehiclePhotoService` + `VehiclePhotoController`）
-- 車輛詳情頁照片管理 UI（admin/manager 可管理，sales 唯讀）
-- sales 可看照片但不可管理（`VehiclePolicy::viewPhotos()` / `managePhotos()`）
-- public vehicles read-only API（`GET /api/public/vehicles`、`GET /api/public/vehicles/{id}`）
-- public API 僅公開已上架車輛、公開價格與照片，並加上 IP throttle 防匿名放大攻擊
-- storage 設計先用 Laravel public disk，預留未來 Cloudflare R2（`config/vehicle_photos.php` 的 `disk`）
-- `backend/API.md`、`README.md`、本檔已補上 v1.2 對應內容
+- 車輛照片資料模型（`vehicle_photos`，含 soft delete tombstone、封面唯一性 DB 約束）。
+- durable upload batch、idempotency replay-or-reject、processing lease 與 fencing token。
+- 後台照片上傳、刪除、排序、設封面與失敗復原。
+- 車輛詳情頁照片管理 UI。
+- admin／manager 可管理，sales 唯讀。
+- public vehicles read-only API。
+- public API 僅公開已上架車輛與白名單欄位，列表只載入封面，並加上 IP throttle。
+- public storage 與未來 Cloudflare R2 可切換的 disk/path 設計。
+- backend tests、frontend typecheck/build 與瀏覽器 manual smoke 全部通過。
+- Smoke 過程修復 MySQL database cache lock refresh 誤判問題。
 
-v1.2 尚待完成：
+v1.2 封版文件：
 
-- `PLAN_v1.2.md` 第 7 節 backend tests（`VehiclePhotoTest`、`PublicVehicleApiTest`，含 MySQL 並發測試）
-- `PLAN_v1.2.md` 第 8 節 frontend tests / build 驗證
-- `PLAN_v1.2.md` 第 9 節 manual smoke 全項執行並記錄
-- v1.2 完成後補 smoke report 並打 tag（比照 `v1.1-smoke-passed`）
+- `PLAN_v1.2.md`
+- `docs/v1.2-smoke-report.md`
+- `docs/v1.2-handoff.md`
 
 v1.2 不做：
 
@@ -322,12 +317,12 @@ v1.2 不做：
 - CMS
 - SEO 管理後台
 - 線上付款
-- 預約試乘
+- 預約試乘／lead form
 - 通用附件系統
 - OCR
 - 直接把 Cloudflare R2 作為必做項
 
-v1.1.1 只保留給 v1.1 試跑後的小修，例如文案、按鈕位置、欄位命名、錯誤提示與手機畫面。
+下一階段不得繼續塞入 `PLAN_v1.2.md`，應另立企劃與 PLAN。優先候選為 Website MVP：首頁、公開車輛列表、公開車輛詳情、車行介紹與聯絡方式，直接讀取 v1.2 public API。另一候選為薪資／佣金規格，但必須先鎖定計算規則，不直接擴張成完整薪資模組。
 
 ---
 

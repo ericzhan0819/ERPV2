@@ -1,6 +1,6 @@
 # 中古車行內部營運系統（1.0 + v1.1 + v1.2）
 
-小型中古車行內部使用的前後端分離營運管理系統。v1.1 新增角色（`admin`／`manager`／`sales`）、敏感金額遮蔽、一般收支審核、客戶模組與建車入庫欄位補強，另依使用者需求追加管理員稽核紀錄。v1.1 已完成 smoke，封版狀態詳見 `docs/current-state.md`、`docs/v1.1-smoke-report.md`。v1.2 新增車輛照片管理（`vehicle_photos`：上傳、縮圖、排序、封面、刪除，admin/manager 管理、sales 唯讀）與官網公開唯讀車輛 API（`GET /api/public/vehicles`、`GET /api/public/vehicles/{id}`，僅回傳已上架車輛的安全欄位），詳見 `企劃書_v1.2.md`、`PLAN_v1.2.md`。官網前端本身不在 v1.2 範圍內。API 與既有計畫細節見 `backend/API.md`、`PLAN_v1.1.md`。
+小型中古車行內部使用的前後端分離營運管理系統。v1.1 新增角色（`admin`／`manager`／`sales`）、敏感金額遮蔽、一般收支審核、客戶模組與建車入庫欄位補強，另依使用者需求追加管理員稽核紀錄。v1.1 已完成 smoke 並以 `v1.1-smoke-passed` 封版。v1.2 新增車輛照片管理（`vehicle_photos`：上傳、縮圖、排序、封面、刪除，admin/manager 管理、sales 唯讀）與官網公開唯讀車輛 API（`GET /api/public/vehicles`、`GET /api/public/vehicles/{id}`，僅回傳已上架車輛的安全欄位），自動測試與瀏覽器 manual smoke 已通過，待建立 `v1.2-smoke-passed` tag。完整狀態見 `docs/current-state.md`、`docs/v1.2-smoke-report.md` 與 `docs/v1.2-handoff.md`。官網前端本身不在 v1.2 範圍內。API 與計畫細節見 `backend/API.md`、`PLAN_v1.2.md`。
 
 ## 環境需求
 
@@ -93,14 +93,14 @@ php artisan migrate:fresh --seed
 
 ## 測試方式
 
-後端自動化測試（PHPUnit，涵蓋登入/登出、車輛、車輛流程、收支、資金帳戶、使用者、列印等模組）：
+後端自動化測試（PHPUnit，涵蓋登入／登出、車輛、車輛流程、收支、資金帳戶、使用者、列印、車輛照片與公開 API 等模組）：
 
 ```bash
 cd backend
 php artisan test
 ```
 
-手動驗證（依 `PLAN.md` / `企劃書.md` 第 19 章逐項確認）：
+手動驗證（v1.2 已完成一次完整 browser smoke，結果見 `docs/v1.2-smoke-report.md`；重新部署或重大修改後依下列項目複查）：
 
 1. `php artisan serve` 啟動後端、`npm run dev` 啟動前端。
 2. 用預設管理員帳號登入，確認未登入無法進入後台頁面。

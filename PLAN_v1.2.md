@@ -314,7 +314,7 @@ Resource 原則：
 - [x] `VehicleWorkflowTest` 不被破壞
 - [x] `MoneyEntryApprovalTest` 不被破壞
 - [x] `VehicleMoneyShortcutTest` 不被破壞
-- [x] full backend suite 通過或只有既有 MySQL-only tests skipped（331 tests：327 passed、4 skipped，皆為既有 MySQL-only tests）
+- [x] full backend suite 通過或只有既有 MySQL-only tests skipped（封版前最終驗證：334 tests、1372 assertions、4 skipped，皆為既有 MySQL-only tests）
 
 ---
 
@@ -331,11 +331,11 @@ Resource 原則：
 
 ## 9. Manual smoke
 
-以下項目已於本機 dev 環境（既有 `php artisan serve` + MySQL）以 API 層級（curl + Sanctum token，admin/manager/sales 三種角色）驗證通過；UI 點擊層級因本環境無瀏覽器自動化工具（未安裝 playwright/chromium）尚待使用者在瀏覽器實際操作一次確認。
+以下項目已於本機 dev 環境（既有 `php artisan serve` + MySQL）完成 API 與瀏覽器 manual smoke。API 層級使用 curl + Sanctum token 驗證 admin／manager／sales 權限與 public API；瀏覽器層級由使用者實際操作照片上傳、封面、排序、刪除、重新整理持久化與 sales 唯讀畫面。完整紀錄見 `docs/v1.2-smoke-report.md`。
 
 ### Admin / Manager
 
-- [ ] 開啟車輛詳情頁可看到照片區塊（UI 層級待使用者於瀏覽器確認）
+- [x] 開啟車輛詳情頁可看到照片區塊（使用者於瀏覽器確認縮圖、封面 badge 與管理操作正常）
 - [x] 可上傳多張照片（admin、manager 皆以 API 驗證成功）
 - [x] 第一張自動為封面
 - [x] 可設定另一張為封面
@@ -350,7 +350,7 @@ Resource 原則：
 - [x] 看不到上傳按鈕（API 層級：上傳回 403）
 - [x] 看不到刪除按鈕（API 層級：刪除回 403）
 - [x] 看不到設封面與排序操作（API 層級：設封面回 403）
-- [ ] 仍看不到收購價、成本、毛利、資金帳戶（v1.1 既有 RoleAccessTest 已覆蓋，本次未重複以 UI 檢查）
+- [x] 仍看不到收購價、成本、毛利、資金帳戶（本項由 v1.1 `RoleAccessTest` 與本次 334-test regression suite 驗證；v1.2 瀏覽器 smoke 聚焦照片管理按鈕的 sales 唯讀狀態）
 
 ### Public API
 
@@ -360,7 +360,7 @@ Resource 原則：
 - [x] 不回傳底價 / 成交價 / 收購價 / 客戶 / 收支 / 毛利（逐欄位比對 JSON key，確認無洩漏）
 - [x] 額外驗證：`throttle:60,1` 限流生效（第 61 次請求起回 429）
 
-**重大發現與修復**：manual smoke 過程中發現車輛照片上傳在真實 MySQL 環境下 100% 失敗（`照片處理逾時，請重新上傳`），即使沒有任何並發。根因：Laravel `Cache::lock()` 搭配 `CACHE_STORE=database` 時，`DatabaseLock::refresh()` 用 UPDATE 影響列數 `>= 1` 判斷續約是否成功；MySQL PDO 預設「影響列數」只計算「值真的改變」的列，若 `refresh()` 剛好在 `acquire()` 的同一秒內呼叫（本案的 decode/encode 只需數十毫秒，幾乎必然落在同一秒），新舊 `expiration` 相同，MySQL 回報 0 rows affected，讓程式誤判鎖已遺失並中止上傳。測試環境用 `CACHE_STORE=array`（不受此限制）所以先前 `VehiclePhotoTest` 全數通過但沒踩到這個問題，直到這次對著真實 MySQL 走 manual smoke 才暴露。修復方式：在 `backend/config/database.php` 的 `mysql` / `mariadb` 連線 `options` 加上 `Mysql::ATTR_FOUND_ROWS => true`，讓 PDO 回報「WHERE 條件有 match 到的列數」而非「值有改變的列數」，這是這個 MySQL 特有行為的標準修法。修復後重新以 API 完整走過上傳／封面／刪除／排序流程皆正確，`php artisan test` 330 passed / 4 skipped（既有 MySQL-only skip）不受影響。
+**重大發現與修復**：manual smoke 過程中發現車輛照片上傳在真實 MySQL 環境下 100% 失敗（`照片處理逾時，請重新上傳`），即使沒有任何並發。根因：Laravel `Cache::lock()` 搭配 `CACHE_STORE=database` 時，`DatabaseLock::refresh()` 用 UPDATE 影響列數 `>= 1` 判斷續約是否成功；MySQL PDO 預設「影響列數」只計算「值真的改變」的列，若 `refresh()` 剛好在 `acquire()` 的同一秒內呼叫（本案的 decode/encode 只需數十毫秒，幾乎必然落在同一秒），新舊 `expiration` 相同，MySQL 回報 0 rows affected，讓程式誤判鎖已遺失並中止上傳。測試環境用 `CACHE_STORE=array`（不受此限制）所以先前 `VehiclePhotoTest` 全數通過但沒踩到這個問題，直到這次對著真實 MySQL 走 manual smoke 才暴露。修復方式：在 `backend/config/database.php` 的 `mysql` / `mariadb` 連線 `options` 加上 `Mysql::ATTR_FOUND_ROWS => true`，讓 PDO 回報「WHERE 條件有 match 到的列數」而非「值有改變的列數」，這是這個 MySQL 特有行為的標準修法。修復後重新以 API 完整走過上傳／封面／刪除／排序流程皆正確；封版前最終 `php artisan test` 為 334 tests、1372 assertions、4 skipped（皆為既有 MySQL-only tests）。
 
 ---
 
@@ -402,7 +402,7 @@ v1.2 視為完成，必須同時滿足：
 - [x] backend tests 通過
 - [x] frontend typecheck / build 通過
 - [x] 文件更新完成
-- [ ] 使用者完成 v1.2 manual smoke（第 9 節仍有兩項待使用者於瀏覽器實際操作確認：照片區塊 UI 層級檢視、sales 看不到收購價/成本/毛利/資金帳戶的 UI 層級複查；API 層級已驗證通過）
+- [x] 使用者完成 v1.2 manual smoke（照片上傳、封面、排序、刪除、刪除封面自動補封面、重新整理持久化、sales 唯讀與公開 API 均通過）
 
 ---
 
