@@ -320,12 +320,12 @@ Resource 原則：
 
 ## 8. Frontend tests / build
 
-- [ ] TypeScript typecheck 通過：`npx tsc -b`
-- [ ] Production build 通過：`./node_modules/.bin/vite build`
-- [ ] VehicleDetail 無照片狀態可編譯
-- [ ] VehicleDetail 有照片狀態可編譯
-- [ ] 權限按鈕依 role 顯示/隱藏
-- [ ] API error path 有使用者可讀訊息
+- [x] TypeScript typecheck 通過：`npx tsc -b`
+- [x] Production build 通過：`./node_modules/.bin/vite build`
+- [x] VehicleDetail 無照片狀態可編譯
+- [x] VehicleDetail 有照片狀態可編譯
+- [x] 權限按鈕依 role 顯示/隱藏
+- [x] API error path 有使用者可讀訊息
 
 ---
 
