@@ -368,22 +368,22 @@ Resource 原則：
 
 v1.2 不做：
 
-- [ ] 完整官網前端
-- [ ] CMS
-- [ ] SEO 管理後台
-- [ ] 線上付款
-- [ ] 會員系統
-- [ ] 預約試乘流程
-- [ ] lead form / 名單管理
-- [ ] 貸款試算
-- [ ] 多語系
-- [ ] 圖片 AI 辨識
-- [ ] 浮水印系統
-- [ ] 複雜裁切器
-- [ ] 直接導入 Cloudflare R2 作為必做項
-- [ ] 通用附件系統
-- [ ] OCR
-- [ ] Sales 上傳照片（暫不開放，避免初期資料治理混亂；未來若需要，建議設計為待審核模式再開放）
+- [x] 完整官網前端
+- [x] CMS
+- [x] SEO 管理後台
+- [x] 線上付款
+- [x] 會員系統
+- [x] 預約試乘流程
+- [x] lead form / 名單管理
+- [x] 貸款試算
+- [x] 多語系
+- [x] 圖片 AI 辨識
+- [x] 浮水印系統
+- [x] 複雜裁切器
+- [x] 直接導入 Cloudflare R2 作為必做項（`disk` 保留 env 可調整，但未實作 R2 driver）
+- [x] 通用附件系統
+- [x] OCR
+- [x] Sales 上傳照片（`VehiclePolicy::managePhotos()` 僅限 admin / manager，sales 上傳一律 403）
 
 ---
 
@@ -391,18 +391,18 @@ v1.2 不做：
 
 v1.2 視為完成，必須同時滿足：
 
-- [ ] 後台可以管理車輛照片
-- [ ] 每台車可有多張照片
-- [ ] 每台車有且只有一張封面照
-- [ ] 照片可排序
-- [ ] admin / manager 可管理照片
-- [ ] sales 可看照片但不可管理
-- [ ] public API 可安全輸出已上架車輛與照片
-- [ ] public API 不洩漏任何內部敏感資料
-- [ ] backend tests 通過
-- [ ] frontend typecheck / build 通過
-- [ ] 文件更新完成
-- [ ] 使用者完成 v1.2 manual smoke
+- [x] 後台可以管理車輛照片
+- [x] 每台車可有多張照片
+- [x] 每台車有且只有一張封面照
+- [x] 照片可排序
+- [x] admin / manager 可管理照片
+- [x] sales 可看照片但不可管理
+- [x] public API 可安全輸出已上架車輛與照片
+- [x] public API 不洩漏任何內部敏感資料
+- [x] backend tests 通過
+- [x] frontend typecheck / build 通過
+- [x] 文件更新完成
+- [ ] 使用者完成 v1.2 manual smoke（第 9 節仍有兩項待使用者於瀏覽器實際操作確認：照片區塊 UI 層級檢視、sales 看不到收購價/成本/毛利/資金帳戶的 UI 層級複查；API 層級已驗證通過）
 
 ---
 
