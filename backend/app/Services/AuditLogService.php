@@ -82,8 +82,31 @@ class AuditLogService
         return $query->newest()->paginate($filters['per_page'] ?? 30);
     }
 
-    public function recordModelEvent(Model $model, string $action): AuditLog
-    {
+    /**
+     * @param  User|null  $actor  記錄事件的實際負責人。預設 null 時沿用
+     *     Auth::user()（一般 request 內同步觸發的事件，例如 AuditObserver 或
+     *     使用者當下操作）。呼叫端在補記「不是這次請求本人做的」歷史事件時
+     *     （例如 VehiclePhotoService 的 replay/resume 補上傳稽核），必須明確
+     *     傳入事件真正的負責人，不能讓這裡預設抓目前登入者，否則之後任何人
+     *     replay 同一把 idempotency_key 都會把稽核紀錄的 actor 蓋成自己
+     *     （Codex adversarial review 指出）。
+     * @param  array<string, mixed>|null  $originalOverride  'updated' 事件計算
+     *     before_values 時要拿來跟 getChanges() 取交集的原始值快照。預設 null
+     *     時使用 $model->getRawOriginal()，適用於在 Eloquent 事件監聽器內、
+     *     save() 尚未完成 syncOriginal() 之前呼叫的情況（例如 AuditObserver）。
+     *     呼叫端如果是在 save() 已經返回之後才呼叫這個方法，這時
+     *     getRawOriginal() 已經被 syncOriginal() 覆寫成新值，必須自己在
+     *     save() 之前先擷取原始值並從這個參數傳入，否則 before_values 會被
+     *     誤記成跟 after_values 一樣（Codex adversarial review 指出：
+     *     VehiclePhotoService::setCover() 在 save() 後才呼叫，导致换封面的
+     *     稽核紀錄 before/after 都是新值）。
+     */
+    public function recordModelEvent(
+        Model $model,
+        string $action,
+        ?User $actor = null,
+        ?array $originalOverride = null,
+    ): AuditLog {
         $beforeValues = null;
         $afterValues = null;
 
@@ -91,7 +114,8 @@ class AuditLogService
             $afterValues = $this->sanitizeValues($model->getAttributes());
         } elseif ($action === AuditLog::ACTION_UPDATED) {
             $changes = $model->getChanges();
-            $beforeValues = $this->sanitizeValues(array_intersect_key($model->getRawOriginal(), $changes));
+            $original = $originalOverride ?? $model->getRawOriginal();
+            $beforeValues = $this->sanitizeValues(array_intersect_key($original, $changes));
             $afterValues = $this->sanitizeValues($changes);
         } elseif ($action === AuditLog::ACTION_DELETED) {
             $beforeValues = $this->sanitizeValues($model->getAttributes());
@@ -104,6 +128,7 @@ class AuditLogService
             subjectLabel: $this->subjectLabel($model),
             beforeValues: $beforeValues ?: null,
             afterValues: $afterValues ?: null,
+            actor: $actor,
         );
     }
 

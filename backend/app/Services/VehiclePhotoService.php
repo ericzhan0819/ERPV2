@@ -431,10 +431,27 @@ class VehiclePhotoService
             ->pluck('subject_id')
             ->all();
 
-        foreach ($photos as $photo) {
-            if (! in_array($photo->id, $alreadyLoggedIds, true)) {
-                $this->auditLogService->recordModelEvent($photo, AuditLog::ACTION_CREATED);
-            }
+        $missingPhotos = $photos->filter(
+            fn (VehiclePhoto $photo) => ! in_array($photo->id, $alreadyLoggedIds, true)
+        );
+
+        if ($missingPhotos->isEmpty()) {
+            return;
+        }
+
+        // 這裡是補記「不是這次請求本人做的」歷史事件：真正建立這張照片的請求可能
+        // 是完全不同的 PHP process、甚至是不同使用者（例如另一個 admin/manager
+        // 重打同一把 idempotency_key 觸發 replay）。稽核紀錄的 actor 必須是真正
+        // 上傳當下記錄在 uploaded_by 的那個人，不能讓 recordModelEvent() 預設抓
+        // Auth::user()，否則會把 created 稽核紀錄的負責人蓋成這次來 replay 的人
+        // （Codex adversarial review 指出）。
+        $uploaderIds = $missingPhotos->pluck('uploaded_by')->filter()->unique()->all();
+        $uploadersById = User::query()->whereIn('id', $uploaderIds)->get()->keyBy('id');
+
+        foreach ($missingPhotos as $photo) {
+            $uploader = $photo->uploaded_by !== null ? $uploadersById->get($photo->uploaded_by) : null;
+
+            $this->auditLogService->recordModelEvent($photo, AuditLog::ACTION_CREATED, actor: $uploader);
         }
     }
 
@@ -1179,7 +1196,9 @@ class VehiclePhotoService
     {
         $this->assertBelongsToVehicle($vehicle, $photo);
 
-        $freshPhoto = DB::transaction(function () use ($vehicle, $photo) {
+        $originalBeforeSave = null;
+
+        $freshPhoto = DB::transaction(function () use ($vehicle, $photo, &$originalBeforeSave) {
             Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
 
             // 拿到 lock 前載入的 $photo 可能已經過期：如果這張照片在「載入」與「拿到
@@ -1196,16 +1215,26 @@ class VehiclePhotoService
                 ->update(['is_cover' => false]);
 
             $freshPhoto->is_cover = true;
+
+            // 必須在 save() 之前擷取原始值：save() 內部的 finishSave() 會在回傳前
+            // 呼叫 syncOriginal()，把 getRawOriginal() 覆寫成剛寫入的新值。若在
+            // save() 之後才讀 getRawOriginal() 當作 before_values，會把「換封面
+            // 前」誤記成跟「換封面後」一樣，稽核紀錄的 diff 會被寫壞（Codex
+            // adversarial review 指出）。
+            $originalBeforeSave = $freshPhoto->getRawOriginal();
             $freshPhoto->save();
 
             return $freshPhoto;
         });
 
-        // $freshPhoto 是 transaction 內 save() 過的同一個記憶體實例，Eloquent 的
-        // dirty-tracking（getChanges()／getRawOriginal()）仍然有效，recordModelEvent()
-        // 的 'updated' 分支可以正確算出 before/after 只含這次真的改變的欄位
-        // （is_cover 等），不需要另外重新從 DB 讀一次。
-        $this->auditLogService->recordModelEvent($freshPhoto, AuditLog::ACTION_UPDATED);
+        // getChanges() 是 save() 當下算出來、還沒被 syncOriginal() 影響的欄位清單，
+        // 仍然可以拿來跟上面在 save() 之前擷取的 $originalBeforeSave 取交集，算出
+        // 正確的 before/after（is_cover 等）。
+        $this->auditLogService->recordModelEvent(
+            $freshPhoto,
+            AuditLog::ACTION_UPDATED,
+            originalOverride: $originalBeforeSave,
+        );
 
         return $freshPhoto;
     }

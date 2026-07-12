@@ -1010,6 +1010,63 @@ class VehiclePhotoServiceTest extends TestCase
     }
 
     /**
+     * Codex adversarial review 指出：先前版本補記 created 稽核紀錄時直接用
+     * Auth::user()，等於把 actor 記成「這次來 replay 的人」，而不是真正上傳
+     * 這張照片的人（uploaded_by）。這裡模擬一個跟原始上傳者不同的 admin 重打
+     * 同一把 idempotency_key 觸發 replay，斷言補記出來的稽核紀錄 actor 仍然是
+     * 原始上傳者，不會被 replay 呼叫者蓋掉。
+     */
+    public function test_upload_photos_replay_attributes_backfilled_audit_log_to_original_uploader(): void
+    {
+        Storage::fake('public');
+
+        $vehicle = Vehicle::factory()->create();
+        $originalUploader = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
+        $replayer = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
+        $service = app(VehiclePhotoService::class);
+        $key = 'test-upload-key-'.uniqid();
+        $file = $this->fakeJpegUploadedFile();
+
+        $completedPhoto = $this->makePhoto(
+            $vehicle,
+            $originalUploader,
+            'vehicles/'.$vehicle->id.'/completed.webp',
+            'vehicles/'.$vehicle->id.'/completed_thumb.webp',
+        );
+
+        VehiclePhotoUploadBatch::create([
+            'vehicle_id' => $vehicle->id,
+            'idempotency_key' => $key,
+            'idempotency_payload' => json_encode([
+                'vehicle_id' => $vehicle->id,
+                'files' => [[
+                    'sha256' => hash_file('sha256', $file->getRealPath()),
+                    'size' => $file->getSize(),
+                    'original_filename' => $file->getClientOriginalName(),
+                ]],
+            ], JSON_THROW_ON_ERROR),
+            'photo_ids' => [$completedPhoto->id],
+            'processing_lease_expires_at' => null,
+        ]);
+
+        $this->actingAs($replayer);
+        $service->uploadPhotos($vehicle, $replayer, [$file], $key);
+
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => AuditLog::ACTION_CREATED,
+            'subject_type' => 'vehicle_photo',
+            'subject_id' => $completedPhoto->id,
+            'actor_id' => $originalUploader->id,
+        ]);
+        $this->assertDatabaseMissing('audit_logs', [
+            'action' => AuditLog::ACTION_CREATED,
+            'subject_type' => 'vehicle_photo',
+            'subject_id' => $completedPhoto->id,
+            'actor_id' => $replayer->id,
+        ]);
+    }
+
+    /**
      * 對照上一個測試：租約仍在未來的「真的還在處理中」狀態不能被誤判成放棄並續傳，
      * 否則會跟真的還在跑的並發請求打架，同一批檔案被建立兩次。
      */

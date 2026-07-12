@@ -298,6 +298,21 @@ class VehiclePhotoTest extends TestCase
             'subject_type' => 'vehicle_photo',
             'subject_id' => $second->id,
         ]);
+
+        // Codex adversarial review 指出：setCover() 在 save() 已經回傳之後才呼叫
+        // recordModelEvent()，此時 Eloquent 已經把 getRawOriginal() 同步成新值，
+        // 若沒有先擷取 save() 之前的原始值，這裡記下的 before_values.is_cover 會
+        // 被誤記成跟 after_values 一樣的 true，而不是換封面前真正的 false。
+        $auditLog = AuditLog::query()
+            ->where('subject_type', 'vehicle_photo')
+            ->where('action', AuditLog::ACTION_UPDATED)
+            ->where('subject_id', $second->id)
+            ->firstOrFail();
+
+        // before_values／after_values 是從 getRawOriginal()／getChanges() 取的未經
+        // is_cover cast 的原始 DB 值（0/1），不是 Eloquent boolean cast 過的值。
+        $this->assertEquals(0, $auditLog->before_values['is_cover']);
+        $this->assertEquals(1, $auditLog->after_values['is_cover']);
     }
 
     public function test_reordering_photos_writes_audit_log_entry(): void
