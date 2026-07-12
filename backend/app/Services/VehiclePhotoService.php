@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Exceptions\VehiclePhotoUploadBatchSupersededException;
+use App\Models\AuditLog;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehiclePhoto;
@@ -20,6 +21,7 @@ class VehiclePhotoService
 {
     public function __construct(
         private readonly VehiclePhotoImageProcessor $processor,
+        private readonly AuditLogService $auditLogService,
     ) {}
 
     public function listPhotos(Vehicle $vehicle): Collection
@@ -64,12 +66,38 @@ class VehiclePhotoService
             // 副作用的健康檢查；只有真的卡在舊有中斷情境時，才會在這裡自動修復，
             // 不需要使用者知道也不需要人工介入。鎖住車輛 row 後才執行，確保跟
             // 另一個並發請求的封面判斷序列化、不會互相踩踏。
-            DB::transaction(function () use ($vehicle, $batch) {
+            // 稽核回填（見下方 auditLogMissingUploadEvents() 的說明）必須跟
+            // finalizeBatchVisibility() 包在同一個、由 lockForUpdate() 鎖住這台車
+            // row 的 transaction 內完成，不能等 transaction commit 之後才另外做
+            // 「查詢是否已記錄 → 沒有就補插入」。若查詢與插入這兩步之間沒有鎖保護，
+            // 兩個幾乎同時抵達的並發 replay 請求（例如同一把 idempotency_key 被
+            // 瀏覽器或 proxy 重試）可能都在對方插入之前完成查詢、都判斷「還沒有
+            // 紀錄」，最終各自补插入一筆，讓同一張照片產生兩筆重複的 created 稽核
+            // 紀錄（Codex stop-time review 指出）。用同一個車輛 row lock 把「回放
+            // 曝光/補封面」與「稽核回填」序列化，確保後到的並發請求一定會在自己的
+            // 查詢時就看到前一個請求已經 commit 的稽核紀錄。
+            $replayedPhotos = DB::transaction(function () use ($vehicle, $batch) {
                 Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
                 $this->finalizeBatchVisibility($vehicle, $batch->photo_ids ?? []);
+
+                $photos = $this->photosInOrder($batch->photo_ids ?? []);
+
+                // 這批照片有可能是「上一次真正建立它們的那次呼叫」在跑到函式最後面
+                // 的稽核記錄之前就被中止（worker 被強制中止、fatal error、伺服器
+                // 重啟）：照片本身透過逐檔 transaction 已經真的 commit 到 DB，但
+                // 那次呼叫從未執行到底部的 recordModelEvent()，導致這些照片永久
+                // 沒有 'created' 稽核紀錄，即使之後每一次 replay 都只會回放既有
+                // row、不會再有機會補記（Codex stop-time review 指出：先前版本
+                // replay 分支完全沒有呼叫任何稽核邏輯）。用「這張照片是否已經有
+                // 一筆 created 稽核紀錄」查 DB 判斷，而不是任何記憶體旗標，才能
+                // 涵蓋「建立它的那次呼叫」與「這次 replay」是兩個完全不同的 PHP
+                // process 這種情況。
+                $this->auditLogMissingUploadEvents($photos);
+
+                return $photos;
             });
 
-            return $this->photosInOrder($batch->photo_ids ?? []);
+            return $replayedPhotos;
         }
 
         // claim_token 是這次呼叫「認領」這筆 batch 時核發的 fencing token（見
@@ -349,7 +377,65 @@ class VehiclePhotoService
         // 直接寫 DB，不會回頭同步更新這裡持有的 $photo 物件，回傳前必須重新從 DB
         // 讀一次，否則呼叫端看到的 upload_batch_id／is_cover 會是曝光、指定封面
         // 之前的過期值。
-        return $this->photosInOrder(array_map(fn (VehiclePhoto $photo) => $photo->id, $created));
+        $result = $this->photosInOrder(array_map(fn (VehiclePhoto $photo) => $photo->id, $created));
+
+        // 記稽核紀錄時刻意用「DB 裡是否已經有這張照片的 created 紀錄」判斷，而不是
+        // 只看 $newlyCreatedThisCall（這次呼叫自己記憶體裡建立的照片）：resume 模式
+        // 下 $alreadyDonePhotos 是前一次呼叫已經真的 commit 到 DB 的照片，但那次呼叫
+        // 有可能在跑到這裡（函式最後面）之前就被中止，導致它們從未被記錄過。若只
+        // 檢查這次呼叫新建立的部分，這些 resume 帶進來的照片會永久沒有稽核紀錄
+        // （Codex stop-time review 指出：partial upload resume 可能讓照片曝光卻沒有
+        // created 稽核紀錄）。用 DB 查詢判斷則不論是這次呼叫新建立、還是前一次呼叫
+        // 建立但沒記到、或多次 resume 疊加，都能補上唯一一筆紀錄，且對已經記過的
+        // 照片是安全的空操作。
+        //
+        // 「查詢是否已記錄」與「沒有就補插入」這兩步包在同一個、由 lockForUpdate()
+        // 鎖住這台車 row 的 transaction 內完成，不能在 transaction 外面單純呼叫。
+        // 若不鎖，這次呼叫跟另一個幾乎同時抵達、對同一批照片做 replay 的並發請求
+        // 可能都在對方插入之前完成查詢、都判斷「還沒有紀錄」，最終各自补插入一筆
+        // 重複的 created 稽核紀錄（Codex stop-time review 指出：concurrent replay
+        // can duplicate upload audit backfills）。
+        DB::transaction(function () use ($vehicle, $result) {
+            Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
+            $this->auditLogMissingUploadEvents($result);
+        });
+
+        return $result;
+    }
+
+    /**
+     * 對集合裡「DB 中還沒有任何 created 稽核紀錄」的照片各補記一筆。用來覆蓋
+     * uploadPhotos() 的 resume／replay 路徑：建立照片的那次呼叫與最終把稽核紀錄
+     * 補齊的那次呼叫，可能是完全不同的 PHP process（前一次呼叫在寫入稽核紀錄之前
+     * 就被中止），單純用記憶體裡「這次呼叫是否新建立」判斷無法涵蓋這種情況，必須
+     * 實際查 DB 才能知道哪些照片真的還沒有紀錄。
+     *
+     * 呼叫端必須已經在同一個 DB transaction 內用 lockForUpdate() 鎖住對應車輛的
+     * row，確保「查詢是否已記錄」與「沒有就補插入」對同一台車的並發呼叫是序列化
+     * 的，這個方法本身不開自己的 transaction（見兩處呼叫點的說明）。
+     *
+     * @param  Collection<int, VehiclePhoto>  $photos
+     */
+    private function auditLogMissingUploadEvents(Collection $photos): void
+    {
+        if ($photos->isEmpty()) {
+            return;
+        }
+
+        $photoIds = $photos->map(fn (VehiclePhoto $photo) => $photo->id)->all();
+
+        $alreadyLoggedIds = AuditLog::query()
+            ->where('subject_type', 'vehicle_photo')
+            ->where('action', AuditLog::ACTION_CREATED)
+            ->whereIn('subject_id', $photoIds)
+            ->pluck('subject_id')
+            ->all();
+
+        foreach ($photos as $photo) {
+            if (! in_array($photo->id, $alreadyLoggedIds, true)) {
+                $this->auditLogService->recordModelEvent($photo, AuditLog::ACTION_CREATED);
+            }
+        }
     }
 
     /**
@@ -816,6 +902,12 @@ class VehiclePhotoService
             }
         });
 
+        // 稽核紀錄放在上面 transaction commit 之後、storage 實體清理之前：對使用者
+        // 而言「刪除」在 DB transaction commit 那一刻就已經真正生效，此時 $photo
+        // 已經是 soft-deleted 之後的狀態（refresh() 過的最新 is_cover/deleted_at），
+        // 不需要等 storage 清理這個 best-effort 收尾動作完成才記錄。
+        $this->auditLogService->recordModelEvent($photo, AuditLog::ACTION_DELETED);
+
         // 對使用者而言，「刪除」這個動作在上面的 transaction commit 那一刻就已經
         // 真正、永久生效：這張照片從此不會出現在任何查詢、任何 API 回應中。這裡的
         // storage 實體清理只是收尾動作，失敗時不能讓呼叫端看到「刪除失敗」——因為
@@ -1087,7 +1179,7 @@ class VehiclePhotoService
     {
         $this->assertBelongsToVehicle($vehicle, $photo);
 
-        return DB::transaction(function () use ($vehicle, $photo) {
+        $freshPhoto = DB::transaction(function () use ($vehicle, $photo) {
             Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
 
             // 拿到 lock 前載入的 $photo 可能已經過期：如果這張照片在「載入」與「拿到
@@ -1108,6 +1200,14 @@ class VehiclePhotoService
 
             return $freshPhoto;
         });
+
+        // $freshPhoto 是 transaction 內 save() 過的同一個記憶體實例，Eloquent 的
+        // dirty-tracking（getChanges()／getRawOriginal()）仍然有效，recordModelEvent()
+        // 的 'updated' 分支可以正確算出 before/after 只含這次真的改變的欄位
+        // （is_cover 等），不需要另外重新從 DB 讀一次。
+        $this->auditLogService->recordModelEvent($freshPhoto, AuditLog::ACTION_UPDATED);
+
+        return $freshPhoto;
     }
 
     /**
@@ -1115,7 +1215,9 @@ class VehiclePhotoService
      */
     public function reorder(Vehicle $vehicle, array $photoIds): Collection
     {
-        return DB::transaction(function () use ($vehicle, $photoIds) {
+        $submittedIds = array_map('intval', $photoIds);
+
+        $result = DB::transaction(function () use ($vehicle, $submittedIds) {
             Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
 
             // 鎖定車輛 row 之後才在 transaction 內重新讀取「此刻」這台車的完整照片
@@ -1126,7 +1228,6 @@ class VehiclePhotoService
             // 排序結果變得不確定（Codex adversarial review 指出）。在鎖定後才讀取
             // 目前清單，也避免用 lock 之前、可能已過期的照片集合做驗證。
             $currentPhotos = $vehicle->photos()->get()->keyBy('id');
-            $submittedIds = array_map('intval', $photoIds);
 
             $isExactSet = count($submittedIds) === count(array_unique($submittedIds))
                 && count($submittedIds) === $currentPhotos->count()
@@ -1144,6 +1245,14 @@ class VehiclePhotoService
 
             return $vehicle->photos()->get();
         });
+
+        // 排序一次會影響這台車全部照片的 sort_order（最多 60 張），若比照上傳/刪除
+        // 對每筆 VehiclePhoto 各記一筆 'updated'，一次排序動作就會在稽核紀錄裡灌入
+        // 多達 60 筆幾乎沒有個別意義的雜訊。改成記一筆代表「這次排序動作」本身的
+        // 紀錄，afterValues 完整記下最終順序，足以重建這次操作實際做了什麼。
+        $this->auditLogService->recordVehiclePhotoReorder($vehicle, $submittedIds);
+
+        return $result;
     }
 
     private function assertBelongsToVehicle(Vehicle $vehicle, VehiclePhoto $photo): void

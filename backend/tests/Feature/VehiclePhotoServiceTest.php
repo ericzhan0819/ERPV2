@@ -2,10 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\AuditLog;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehiclePhoto;
 use App\Models\VehiclePhotoUploadBatch;
+use App\Services\AuditLogService;
 use App\Services\VehiclePhotoImageProcessor;
 use App\Services\VehiclePhotoService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -774,7 +776,7 @@ class VehiclePhotoServiceTest extends TestCase
             });
         $this->app->instance(VehiclePhotoImageProcessor::class, $processor);
 
-        $service = new class(app(VehiclePhotoImageProcessor::class)) extends VehiclePhotoService
+        $service = new class(app(VehiclePhotoImageProcessor::class), app(AuditLogService::class)) extends VehiclePhotoService
         {
             protected function restoreBatchAndSoftDeleteRolledBackPhotos(
                 Vehicle $vehicle,
@@ -923,6 +925,88 @@ class VehiclePhotoServiceTest extends TestCase
         $this->assertCount(2, $result);
         $this->assertSame($existingPhoto->id, $result->first()->id);
         $this->assertSame(2, VehiclePhoto::where('vehicle_id', $vehicle->id)->count());
+
+        // $existingPhoto 代表「前一次處理程序建立完照片後、程序才被中止」的情境：
+        // 它從未走到前一次呼叫的稽核記錄邏輯，DB 裡完全沒有它的 created 稽核紀錄
+        // （見上面手刻的 batch row，只插入了照片本身，沒有任何 AuditLog）。這次續傳
+        // 呼叫必須把這筆遺漏的紀錄補上，不能只記這次呼叫真正新建立的 fileB（Codex
+        // stop-time review 指出：partial upload resume 可能讓照片曝光卻沒有 created
+        // 稽核紀錄）。
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => AuditLog::ACTION_CREATED,
+            'subject_type' => 'vehicle_photo',
+            'subject_id' => $existingPhoto->id,
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => AuditLog::ACTION_CREATED,
+            'subject_type' => 'vehicle_photo',
+            'subject_id' => $result->last()->id,
+        ]);
+        $this->assertSame(
+            2,
+            AuditLog::query()->where('subject_type', 'vehicle_photo')->where('action', AuditLog::ACTION_CREATED)->count(),
+        );
+    }
+
+    /**
+     * Codex stop-time review 指出的另一半情境：一批照片全部處理完成、也已曝光，
+     * 但建立它們的那次呼叫在跑到稽核記錄之前就被中止，之後每一次帶著同一把
+     * idempotency_key 的請求都只會走 'replay' 分支直接回放既有 row，若 replay
+     * 分支完全不管稽核紀錄，這些照片就永久不會有 created 紀錄。
+     */
+    public function test_upload_photos_replay_backfills_missing_audit_log_for_already_completed_batch(): void
+    {
+        Storage::fake('public');
+
+        $vehicle = Vehicle::factory()->create();
+        $user = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
+        $service = app(VehiclePhotoService::class);
+        $key = 'test-upload-key-'.uniqid();
+        $file = $this->fakeJpegUploadedFile();
+
+        $completedPhoto = $this->makePhoto(
+            $vehicle,
+            $user,
+            'vehicles/'.$vehicle->id.'/completed.webp',
+            'vehicles/'.$vehicle->id.'/completed_thumb.webp',
+        );
+
+        VehiclePhotoUploadBatch::create([
+            'vehicle_id' => $vehicle->id,
+            'idempotency_key' => $key,
+            'idempotency_payload' => json_encode([
+                'vehicle_id' => $vehicle->id,
+                'files' => [[
+                    'sha256' => hash_file('sha256', $file->getRealPath()),
+                    'size' => $file->getSize(),
+                    'original_filename' => $file->getClientOriginalName(),
+                ]],
+            ], JSON_THROW_ON_ERROR),
+            // photo_ids 長度已達檔案總數（1），會被 beginUploadBatch() 判定為
+            // 'replay' 模式；完全沒有任何 audit_logs row，模擬建立它的那次呼叫
+            // 從未跑到稽核記錄就被中止。
+            'photo_ids' => [$completedPhoto->id],
+            'processing_lease_expires_at' => null,
+        ]);
+
+        $this->assertSame(0, AuditLog::query()->where('subject_type', 'vehicle_photo')->count());
+
+        $result = $service->uploadPhotos($vehicle, $user, [$file], $key);
+
+        $this->assertCount(1, $result);
+        $this->assertSame($completedPhoto->id, $result->first()->id);
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => AuditLog::ACTION_CREATED,
+            'subject_type' => 'vehicle_photo',
+            'subject_id' => $completedPhoto->id,
+        ]);
+
+        // 再 replay 一次，確認不會補記出第二筆重複紀錄。
+        $service->uploadPhotos($vehicle, $user, [$file], $key);
+        $this->assertSame(
+            1,
+            AuditLog::query()->where('subject_type', 'vehicle_photo')->where('action', AuditLog::ACTION_CREATED)->count(),
+        );
     }
 
     /**

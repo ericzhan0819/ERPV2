@@ -19,6 +19,7 @@ const actionLabels: Record<AuditAction, string> = {
 const subjectLabels: Record<AuditSubjectType, string> = {
   user: '員工帳號',
   vehicle: '車輛',
+  vehicle_photo: '車輛照片',
   money_entry: '收支',
   cash_account: '資金帳戶',
   customer: '客戶',

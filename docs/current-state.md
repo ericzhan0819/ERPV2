@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後最新結果：340 tests、1391 assertions、4 skipped。
 
 ---
 
@@ -133,6 +133,7 @@ v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend 
 - 敏感金額不寫入 audit log
 - 稽核紀錄 append-only
 - 登入 / 登出也有紀錄
+- 車輛照片上傳 / 刪除 / 換封面 / 排序也有紀錄（`subject_type=vehicle_photo`）；v1.2.x hotfix（2026-07-12）修復 `VehiclePhoto` 從未被稽核追蹤的問題，見 `PLAN_v1.2.md` 第 9 節 hotfix 說明。排序一次動作只記一筆（`subject_id` 為 null，`after_values` 記完整順序），不逐張照片記錄
 
 ---
 

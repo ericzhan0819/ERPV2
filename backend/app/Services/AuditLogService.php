@@ -8,6 +8,7 @@ use App\Models\Customer;
 use App\Models\MoneyEntry;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Models\VehiclePhoto;
 use DateTimeInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Model;
@@ -36,6 +37,7 @@ class AuditLogService
     private const SUBJECT_TYPE_MAP = [
         User::class => 'user',
         Vehicle::class => 'vehicle',
+        VehiclePhoto::class => 'vehicle_photo',
         MoneyEntry::class => 'money_entry',
         CashAccount::class => 'cash_account',
         Customer::class => 'customer',
@@ -117,6 +119,29 @@ class AuditLogService
     }
 
     /**
+     * VehiclePhoto 沒有註冊通用的 AuditObserver：一次上傳批次會建立多筆「尚未提交、
+     * 暫不可見」的中途 row，idempotency 失敗回滾、批次放棄清理（sweep）、tombstone
+     * 重試清理（purge）都會觸發大量 model create/update/delete 事件，若照搬其他
+     * model 的做法全部自動記錄，稽核紀錄會被系統內部狀態機雜訊淹沒，真正的使用者
+     * 操作（上傳、刪除、排序、換封面）反而被稀釋掉。因此排序這個動作改由呼叫端
+     * （VehiclePhotoService::reorder()）在真正完成後手動呼叫這個方法記一筆，而不是
+     * 依賴 Eloquent 事件；上傳／刪除／換封面則由呼叫端在確定動作真正生效後直接呼叫
+     * recordModelEvent()。
+     *
+     * @param  array<int, int>  $photoIds
+     */
+    public function recordVehiclePhotoReorder(Vehicle $vehicle, array $photoIds): AuditLog
+    {
+        return $this->record(
+            action: AuditLog::ACTION_UPDATED,
+            subjectType: 'vehicle_photo',
+            subjectId: null,
+            subjectLabel: '車輛照片排序：'.$this->subjectLabel($vehicle),
+            afterValues: ['vehicle_id' => $vehicle->id, 'photo_order' => $photoIds],
+        );
+    }
+
+    /**
      * @param  array<string, mixed>|null  $beforeValues
      * @param  array<string, mixed>|null  $afterValues
      */
@@ -181,6 +206,7 @@ class AuditLogService
         return match (true) {
             $model instanceof User => $model->name.'（'.$model->email.'）',
             $model instanceof Vehicle => trim($model->stock_no.' '.$model->brand.' '.$model->model),
+            $model instanceof VehiclePhoto => trim(($model->vehicle?->stock_no ?? ('vehicle#'.$model->vehicle_id)).' '.$model->original_filename),
             $model instanceof MoneyEntry => $model->category.' #'.$model->getKey(),
             $model instanceof CashAccount => $model->name,
             $model instanceof Customer => $model->name,

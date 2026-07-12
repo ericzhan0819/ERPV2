@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AuditLog;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehiclePhoto;
@@ -214,6 +215,110 @@ class VehiclePhotoTest extends TestCase
         $response->assertOk();
         $this->assertSame(0, $second->fresh()->sort_order);
         $this->assertSame(1, $first->fresh()->sort_order);
+    }
+
+    public function test_uploading_photo_writes_audit_log_entry(): void
+    {
+        Storage::fake('public');
+
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create();
+
+        $this->actingAs($admin, 'web')->postJson("/api/vehicles/{$vehicle->id}/photos", [
+            'idempotency_key' => 'audit-upload-'.uniqid(),
+            'photos' => [$this->fakeJpegUploadedFile()],
+        ])->assertOk();
+
+        $photo = VehiclePhoto::where('vehicle_id', $vehicle->id)->firstOrFail();
+
+        $this->assertDatabaseHas('audit_logs', [
+            'actor_id' => $admin->id,
+            'action' => AuditLog::ACTION_CREATED,
+            'subject_type' => 'vehicle_photo',
+            'subject_id' => $photo->id,
+        ]);
+    }
+
+    public function test_idempotent_replay_of_photo_upload_does_not_duplicate_audit_log_entry(): void
+    {
+        Storage::fake('public');
+
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create();
+        $key = 'audit-replay-'.uniqid();
+
+        $this->actingAs($admin, 'web')->postJson("/api/vehicles/{$vehicle->id}/photos", [
+            'idempotency_key' => $key,
+            'photos' => [$this->fakeJpegUploadedFile()],
+        ])->assertOk();
+
+        $this->actingAs($admin, 'web')->postJson("/api/vehicles/{$vehicle->id}/photos", [
+            'idempotency_key' => $key,
+            'photos' => [$this->fakeJpegUploadedFile()],
+        ])->assertOk();
+
+        $this->assertSame(
+            1,
+            AuditLog::query()->where('subject_type', 'vehicle_photo')->where('action', AuditLog::ACTION_CREATED)->count(),
+        );
+    }
+
+    public function test_deleting_photo_writes_audit_log_entry(): void
+    {
+        Storage::fake('public');
+
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create();
+        $photo = $this->makePhoto($vehicle, $admin, 'a', true, 0);
+
+        $this->actingAs($admin, 'web')->deleteJson("/api/vehicles/{$vehicle->id}/photos/{$photo->id}")->assertOk();
+
+        $this->assertDatabaseHas('audit_logs', [
+            'actor_id' => $admin->id,
+            'action' => AuditLog::ACTION_DELETED,
+            'subject_type' => 'vehicle_photo',
+            'subject_id' => $photo->id,
+        ]);
+    }
+
+    public function test_setting_cover_writes_audit_log_entry(): void
+    {
+        Storage::fake('public');
+
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create();
+        $this->makePhoto($vehicle, $admin, 'a', true, 0);
+        $second = $this->makePhoto($vehicle, $admin, 'b', false, 1);
+
+        $this->actingAs($admin, 'web')->patchJson("/api/vehicles/{$vehicle->id}/photos/{$second->id}/cover")->assertOk();
+
+        $this->assertDatabaseHas('audit_logs', [
+            'actor_id' => $admin->id,
+            'action' => AuditLog::ACTION_UPDATED,
+            'subject_type' => 'vehicle_photo',
+            'subject_id' => $second->id,
+        ]);
+    }
+
+    public function test_reordering_photos_writes_audit_log_entry(): void
+    {
+        Storage::fake('public');
+
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create();
+        $first = $this->makePhoto($vehicle, $admin, 'a', true, 0);
+        $second = $this->makePhoto($vehicle, $admin, 'b', false, 1);
+
+        $this->actingAs($admin, 'web')->patchJson("/api/vehicles/{$vehicle->id}/photos/reorder", [
+            'photo_ids' => [$second->id, $first->id],
+        ])->assertOk();
+
+        $this->assertDatabaseHas('audit_logs', [
+            'actor_id' => $admin->id,
+            'action' => AuditLog::ACTION_UPDATED,
+            'subject_type' => 'vehicle_photo',
+            'subject_id' => null,
+        ]);
     }
 
     public function test_reorder_with_photo_id_from_another_vehicle_is_rejected(): void

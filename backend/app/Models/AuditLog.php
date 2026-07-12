@@ -27,6 +27,7 @@ class AuditLog extends Model
     public const SUBJECT_TYPES = [
         'user',
         'vehicle',
+        'vehicle_photo',
         'money_entry',
         'cash_account',
         'customer',

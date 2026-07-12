@@ -362,6 +362,14 @@ Resource 原則：
 
 **重大發現與修復**：manual smoke 過程中發現車輛照片上傳在真實 MySQL 環境下 100% 失敗（`照片處理逾時，請重新上傳`），即使沒有任何並發。根因：Laravel `Cache::lock()` 搭配 `CACHE_STORE=database` 時，`DatabaseLock::refresh()` 用 UPDATE 影響列數 `>= 1` 判斷續約是否成功；MySQL PDO 預設「影響列數」只計算「值真的改變」的列，若 `refresh()` 剛好在 `acquire()` 的同一秒內呼叫（本案的 decode/encode 只需數十毫秒，幾乎必然落在同一秒），新舊 `expiration` 相同，MySQL 回報 0 rows affected，讓程式誤判鎖已遺失並中止上傳。測試環境用 `CACHE_STORE=array`（不受此限制）所以先前 `VehiclePhotoTest` 全數通過但沒踩到這個問題，直到這次對著真實 MySQL 走 manual smoke 才暴露。修復方式：在 `backend/config/database.php` 的 `mysql` / `mariadb` 連線 `options` 加上 `Mysql::ATTR_FOUND_ROWS => true`，讓 PDO 回報「WHERE 條件有 match 到的列數」而非「值有改變的列數」，這是這個 MySQL 特有行為的標準修法。修復後重新以 API 完整走過上傳／封面／刪除／排序流程皆正確；封版前最終 `php artisan test` 為 334 tests、1372 assertions、4 skipped（皆為既有 MySQL-only tests）。
 
+**v1.2.x hotfix（2026-07-12）：稽核模組沒有正確追蹤車輛照片操作紀錄**。根因：`VehiclePhoto` model 從未加入 `AppServiceProvider::boot()` 的 `AuditObserver` 註冊清單（該清單只有 `User` / `Vehicle` / `MoneyEntry` / `CashAccount` / `Customer`），也沒有任何程式碼呼叫 `AuditLogService`，導致照片上傳／刪除／排序／換封面完全不會寫入 `audit_logs`。修復時刻意不直接把 `VehiclePhoto` 加進通用 `AuditObserver` 清單：一次上傳批次會先建立多筆「尚未提交、暫不可見」的中途 row（`upload_batch_id` 不為 NULL），idempotency 失敗回滾、批次放棄清理（sweep）、tombstone 重試清理（purge）都會觸發大量與使用者操作無關的 model create/update/delete 事件，若照搬會讓稽核紀錄被系統內部狀態機雜訊淹沒。改成在 `VehiclePhotoService` 的四個真正代表使用者操作的完成點手動呼叫 `AuditLogService::recordModelEvent()` / 新增的 `recordVehiclePhotoReorder()`：`deletePhoto()` 在 DB transaction commit 之後記 `deleted`、`setCover()` 記 `updated`、`reorder()` 因為一次會影響整台車所有照片的 `sort_order`（最多 60 張）改成記一筆代表整個排序動作的 `updated`（`subject_id` 為 null，`after_values` 記完整最終順序），不逐張記錄以免雜訊。同時把 `vehicle_photo` 加入 `AuditLog::SUBJECT_TYPES`，讓稽核紀錄查詢頁可以用這個 subject_type 篩選。
+
+`uploadPhotos()` 的稽核記錄第一版實作（只對「這次呼叫記憶體裡真正新建立」的照片記 `created`）被 Codex stop-time review 抓出遺漏：partial upload resume 情境下，前一次呼叫可能已經把照片真的 commit 到 DB、甚至整批已完成並曝光，卻在跑到函式最後面的稽核記錄之前就被中止（worker 被強制中止、fatal error、伺服器重啟）；之後的 resume／replay 呼叫只會接續處理剩餘檔案或直接回放既有 row，若只看「這次呼叫是否新建立」，那些屬於前一次呼叫、已經曝光的照片會永久沒有 `created` 稽核紀錄。修正為 `auditLogMissingUploadEvents()`：改用「DB 裡這張照片是否已經有一筆 `created` 稽核紀錄」判斷要不要補記，而不是任何記憶體旗標，讓 resume 分支與 replay 分支都能用同一個方法補齊遺漏、且對已經記過的照片是安全的空操作。新增 `test_upload_photos_replay_backfills_missing_audit_log_for_already_completed_batch` 與擴充既有 resume 測試驗證這個回填行為。
+
+第二輪 Codex stop-time review 再指出：`auditLogMissingUploadEvents()`「查詢是否已記錄 → 沒有就補插入」這兩步若沒有鎖保護，兩個幾乎同時抵達的並發 replay 請求（例如同一把 idempotency_key 被瀏覽器或 proxy 重試）可能都在對方 commit 之前完成查詢、都判斷「還沒有紀錄」，最終各自补插入一筆重複的 `created` 稽核紀錄。修正為：呼叫端（replay 分支與主完成路徑）都改成在同一個、以 `lockForUpdate()` 鎖住對應車輛 row 的 `DB::transaction` 內才呼叫 `auditLogMissingUploadEvents()`，沿用這個檔案其餘地方（`deletePhoto()`／`setCover()`／`reorder()`）一致的「鎖車輛 row 序列化並發操作」模式，讓查詢與插入對同一台車的並發呼叫序列化，不會重複記錄。
+
+新增 `VehiclePhotoTest` 五筆稽核相關測試（上傳、idempotent replay 不重複記錄、刪除、換封面、排序），加上 resume/replay 回填測試，修復後 `php artisan test` 為 340 tests、1391 assertions、4 skipped，全數通過。真正跨 DB 連線的並發 replay 競態未另補 fork-based MySQL 測試（沿用既有的 row lock 序列化模式，風險等級遠低於資料遺失／毀損類競態，未在本次範圍內新增獨立的跨連線測試）。
+
 ---
 
 ## 10. 不做事項

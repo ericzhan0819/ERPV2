@@ -3,6 +3,7 @@ export type AuditAction = 'created' | 'updated' | 'deleted' | 'login' | 'logout'
 export type AuditSubjectType =
   | 'user'
   | 'vehicle'
+  | 'vehicle_photo'
   | 'money_entry'
   | 'cash_account'
   | 'customer'
