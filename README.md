@@ -1,6 +1,24 @@
-# 中古車行內部營運系統（1.0 + v1.1 + v1.2）
+# 中古車行內部營運系統（1.0 + v1.1 + v1.2；v1.3 規劃中）
 
-小型中古車行內部使用的前後端分離營運管理系統。v1.1 新增角色（`admin`／`manager`／`sales`）、敏感金額遮蔽、一般收支審核、客戶模組與建車入庫欄位補強，另依使用者需求追加管理員稽核紀錄。v1.1 已完成 smoke 並以 `v1.1-smoke-passed` 封版。v1.2 新增車輛照片管理（`vehicle_photos`：上傳、縮圖、排序、封面、刪除，admin/manager 管理、sales 唯讀）與官網公開唯讀車輛 API（`GET /api/public/vehicles`、`GET /api/public/vehicles/{id}`，僅回傳已上架車輛的安全欄位），自動測試與瀏覽器 manual smoke 已通過，待建立 `v1.2-smoke-passed` tag。完整狀態見 `docs/current-state.md`、`docs/v1.2-smoke-report.md` 與 `docs/v1.2-handoff.md`。官網前端本身不在 v1.2 範圍內。API 與計畫細節見 `backend/API.md`、`PLAN_v1.2.md`。
+小型中古車行內部使用的前後端分離營運管理系統。v1.1 新增角色（`admin`／`manager`／`sales`）、敏感金額遮蔽、一般收支審核、客戶模組與建車入庫欄位補強，並以 `v1.1-smoke-passed` 封版。v1.2 新增車輛照片管理與官網公開唯讀車輛 API，已完成自動測試、瀏覽器 manual smoke，並以 `v1.2-smoke-passed` 封版。完整穩定狀態見 `docs/current-state.md`、`docs/v1.2-smoke-report.md` 與 `docs/v1.2-handoff.md`。
+
+v1.3 目前只有企劃與執行計畫，尚未實作。目標是建立 admin-only「薪資結算」：依正式成交、approved-only 單車毛利、收車人／賣車人與整月跨級獎金，彙總底薪、固定津貼、勞保、健保及手動加扣項，確認發薪後自動建立 `薪資 / 佣金` 支出。規格見 `企劃書_v1.3.md`，執行清單見 `PLAN_v1.3.md`。
+
+### v1.3 預定公式
+
+```text
+單車毛利
+→ 公司營運保留 40%
+→ 剩餘 60% 為可分配獎金池
+   ├─ 收車獎金：分配池 20%
+   ├─ 賣車獎金：依賣車人當月成交台數整月跨級
+   │  ├─ 1～2 台：20%
+   │  ├─ 3～4 台：30%
+   │  └─ 5 台以上：50%
+   └─ 其餘為公司剩餘分配額
+```
+
+v1.3 不做打卡、排班、請假、官方勞健保費率引擎、所得稅扣繳、銀行薪轉檔或完整 HR／正式會計。
 
 ## 環境需求
 

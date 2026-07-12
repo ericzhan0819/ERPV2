@@ -11,7 +11,8 @@
 ```text
 1.0：工程 MVP 已完成，核心 CRUD、車輛流程、收支、資金帳戶、列印與文件已可運作。
 v1.1：實務工作流補強已完成 smoke，並以 v1.1-smoke-passed tag 封版。
-v1.2：車輛圖片與官網公開車輛資料前置階段已完成 manual smoke，待以 v1.2-smoke-passed tag 封版；車輛照片管理與安全 public vehicle API 已可運作。
+v1.2：車輛圖片與官網公開車輛資料前置階段已完成 smoke，並以 v1.2-smoke-passed tag 封版。
+v1.3：薪資結算已完成企劃與 PLAN，尚未開始實作；目標是依成交、approved-only 毛利、跨級獎金、底薪與勞健保扣款，自動算出每月實發薪資並在發薪後建立正式支出。
 ```
 
 核心目標不是擴張成完整 ERP，而是讓中古車行日常營運能穩定落地：車輛進來、建檔、整備、上架、保留、收款、成交、列印收支明細與查看營運摘要。
@@ -53,6 +54,24 @@ v1.2 任務必須閱讀：
 7. `backend/API.md`
 8. `UI.md`
 9. 相關 backend / frontend 既有程式碼
+
+### v1.3 薪資結算文件
+
+v1.3 任務必須閱讀：
+
+1. `企劃書_v1.3.md`
+2. `PLAN_v1.3.md`
+3. `docs/current-state.md`
+4. `docs/v1.2-smoke-report.md`
+5. `docs/v1.2-handoff.md`
+6. `backend/API.md`
+7. `UI.md`
+8. `backend/app/Models/User.php`
+9. `backend/app/Models/Vehicle.php`
+10. `backend/app/Models/MoneyEntry.php`
+11. `backend/app/Services/VehicleService.php`
+12. `backend/app/Services/MoneyEntryService.php`
+13. 相關 Policy、Request、Resource、routes、tests 與前端 API 型別
 
 不得只看單一檔案就直接大量改碼。實作前必須先檢查既有目錄、路由、Service、Request、Resource、測試與前端 API 型別。
 
@@ -144,6 +163,36 @@ v1.2 允許實作：
 v1.2 不代表直接實作完整官網、CMS、SEO 後台、線上付款、預約試乘或通用附件系統。
 
 v1.2 已完成並封板。除非使用者明確要求 v1.2.x hotfix，否則完整官網或後續功能必須另立企劃書與 PLAN，不得繼續塞入 `PLAN_v1.2.md`。
+
+---
+
+## v1.3 實作範圍
+
+v1.3 只做 `企劃書_v1.3.md` 與 `PLAN_v1.3.md` 明確列出的薪資結算。
+
+v1.3 允許實作：
+
+* 員工薪資設定：底薪、固定津貼、勞保扣款、健保扣款、是否啟用佣金
+* 車輛正式收車人 `purchase_agent_id` 與賣車人 `sales_agent_id`
+* 可版本化的獎金方案與跨級賣車獎金階梯
+* approved-only 單車毛利獎金計算
+* 公司營運保留 40%、分配池 60%、收車獎金分配池 20%
+* 賣車獎金採整月跨級：1～2 台 20%、3～4 台 30%、5 台以上 50%
+* 每月薪資草稿、重算、手動加扣項、確認鎖定與發薪
+* 發薪後建立 `薪資 / 佣金` Money Entry，並以專用 `salary_settlement` source type 保護
+* admin-only 薪資 API、頁面、Dashboard 摘要與稽核
+* v1.3 tests、manual smoke、API 文件與交接文件
+
+v1.3 重要邊界：
+
+* 不得用 `created_by`、`updated_by`、收款建立者或最後操作者推定歷史收車人／賣車人。
+* pending／rejected 收支不得進入毛利與獎金。
+* 已確認或已發薪的規則、歸屬與薪資快照不得被後續設定回改。
+* 所有金額使用整數，比例使用 basis points 或等價整數設計，不得使用 float。
+* 跨級後同一賣車人當月所有符合資格車輛套用同一最高級距，不採逐台邊際級距。
+* 薪資資料初版只開放 admin；manager／sales 不得讀取任何薪資 API 或畫面。
+
+v1.3 不代表開放完整 HR、打卡、排班、請假、官方勞健保級距計算、所得稅扣繳、銀行薪轉檔或正式會計。
 
 ---
 
@@ -447,8 +496,8 @@ UI 風格遵守 `UI.md`：
 
 1. 閱讀相關文件。
 2. 檢查目前目錄與既有程式碼。
-3. 確認任務屬於 1.0 維護或 v1.1 補強。
-4. 1.0 任務依 `企劃書.md` / `PLAN.md`；v1.1 任務依 `企劃書_v1.1.md` / `PLAN_v1.1.md`。
+3. 確認任務屬於既有版本 hotfix，或目前明確規劃中的版本。
+4. 依任務版本閱讀對應企劃書與 PLAN；v1.3 任務以 `企劃書_v1.3.md` / `PLAN_v1.3.md` 為正式範圍。
 5. 如果任務超出範圍，不要實作，先在回覆中說明原因。
 6. 優先小步修改，避免一次大範圍重構。
 7. 保持模組邊界清楚。
@@ -460,6 +509,12 @@ UI 風格遵守 `UI.md`：
 ## 驗證要求
 
 完成修改後，至少依任務範圍確認：
+
+資料庫重建規則：
+
+* 任何會清空或重建開發資料庫的操作（例如 `php artisan migrate:fresh`、`php artisan db:wipe`）完成後，必須立即重新執行種子資料，優先使用 `php artisan migrate:fresh --seed` 或接續執行 `php artisan db:seed`。
+* 必須確認 `DatabaseSeeder` 所要求的基礎資料已補回，目前至少包含管理員帳號與資金帳戶；不得把開發環境留在空資料庫狀態。
+* 清空非測試資料庫前必須先取得使用者明確同意，不得把測試用重建流程誤用於正式或開發中的真實資料。
 
 * backend 可以 migrate
 * backend 可以 seed
