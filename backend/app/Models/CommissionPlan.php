@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\SalaryPeriodMonth;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -45,8 +46,10 @@ class CommissionPlan extends Model
 
     public function scopeActiveForMonth(Builder $query, string $periodMonth): Builder
     {
+        $periodFirstDay = SalaryPeriodMonth::firstDay($periodMonth);
+
         return $query
             ->where('is_active', true)
-            ->whereDate('effective_from', '<=', $periodMonth);
+            ->whereDate('effective_from', '<=', $periodFirstDay);
     }
 }

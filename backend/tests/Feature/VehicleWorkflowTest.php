@@ -108,6 +108,30 @@ class VehicleWorkflowTest extends TestCase
         $this->assertNotNull($vehicle->sold_at);
     }
 
+    public function test_close_sale_normalizes_offset_timestamp_to_taipei_business_time(): void
+    {
+        $user = User::factory()->admin()->create(['is_active' => true]);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/final-payment", [
+                'amount' => 380000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => (string) Str::uuid(),
+            ])
+            ->assertSuccessful();
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/close-sale", [
+                'sold_at' => '2026-06-30T16:30:00Z',
+            ])
+            ->assertSuccessful()
+            ->assertJsonPath('data.sold_at', '2026-07-01T00:30:00+08:00');
+
+        $this->assertSame('2026-07-01 00:30:00', $vehicle->fresh()->sold_at?->format('Y-m-d H:i:s'));
+    }
+
     /**
      * 老闆身兼會計：sales 收訂金/尾款只會建立 pending 收款，成交結案前必須先由 admin
      * 核准入帳，且核准後的收款總額需達成交價，pending 金額不可直接關帳。

@@ -7,6 +7,7 @@ use App\Models\CommissionPlanTier;
 use App\Models\MoneyEntry;
 use App\Models\Vehicle;
 use App\Support\CommissionPlanRules;
+use App\Support\SalaryPeriodMonth;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
 use OverflowException;
@@ -14,6 +15,8 @@ use OverflowException;
 final class SalaryCommissionCalculator
 {
     private const BASIS_POINTS_DENOMINATOR = 10000;
+
+    public function __construct(private readonly CommissionPlanService $commissionPlanService) {}
 
     /**
      * Calculate commissions for one month's already-eligible sold vehicles.
@@ -37,15 +40,27 @@ final class SalaryCommissionCalculator
         iterable $vehicles,
         iterable $commissionEnabledAgentIds,
     ): array {
+        $periodMonth = SalaryPeriodMonth::normalize($periodMonth);
+        $this->assertPlanIsEffectiveForMonth($plan, $periodMonth);
         $tiers = $this->validatedTiers($plan);
-        $periodMonth = $this->validatedPeriodMonth($periodMonth);
         $vehicles = collect($vehicles)->values()->sortBy('id')->values();
         $this->assertValidVehicleSet($vehicles, $periodMonth);
         $commissionEnabledAgentIds = $this->commissionEnabledAgentIdSet($commissionEnabledAgentIds);
 
         $moneyTotals = $this->approvedMoneyTotals($vehicles->pluck('id')->all());
         $salesCounts = $vehicles
-            ->filter(fn (Vehicle $vehicle): bool => isset($commissionEnabledAgentIds[(int) $vehicle->sales_agent_id]))
+            ->filter(function (Vehicle $vehicle) use ($commissionEnabledAgentIds, $moneyTotals): bool {
+                if (! isset($commissionEnabledAgentIds[(int) $vehicle->sales_agent_id])) {
+                    return false;
+                }
+
+                $vehicleId = (int) $vehicle->id;
+
+                return $this->safeSubtract(
+                    $moneyTotals[$vehicleId]['income'] ?? 0,
+                    $moneyTotals[$vehicleId]['expense'] ?? 0,
+                ) > 0;
+            })
             ->countBy(fn (Vehicle $vehicle): int => (int) $vehicle->sales_agent_id);
 
         $salesAgents = [];
@@ -282,13 +297,13 @@ final class SalaryCommissionCalculator
         return $totals;
     }
 
-    private function validatedPeriodMonth(string $periodMonth): string
+    private function assertPlanIsEffectiveForMonth(CommissionPlan $plan, string $periodMonth): void
     {
-        if (preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $periodMonth) !== 1) {
-            throw new InvalidArgumentException('結算月份必須使用 YYYY-MM 格式');
-        }
+        $effectivePlan = $this->commissionPlanService->findEffectiveForMonth($periodMonth);
 
-        return $periodMonth;
+        if ($effectivePlan === null || ! $plan->exists || $effectivePlan->getKey() !== $plan->getKey()) {
+            throw new InvalidArgumentException("獎金方案不適用於 {$periodMonth} 結算月份");
+        }
     }
 
     /**

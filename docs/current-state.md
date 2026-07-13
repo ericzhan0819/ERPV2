@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 5 部分 review 修正後最新完整回歸為 420 tests、1745 assertions、6 skipped，其中 6 個 skipped 是需專用環境或安全旗標的既有測試。第 5 部分未修改前端；最近一次第 4 部分 frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 5 部分決策修正後最新完整回歸為 427 tests、1772 assertions、6 skipped，其中 6 個 skipped 是需專用環境或安全旗標的既有測試。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
 
 ---
 
@@ -372,7 +372,11 @@ v1.3 第 1～5 部分已補齊：
 - 大額比例以商數／餘數拆算，避免 `amount × bps` 中間乘法 overflow；超出 PHP 安全整數範圍的彙總會明確拒絕，不會靜默截斷。
 - 混合盈虧批次另回傳 `loss_total` 與 `company_net`；`company_total` 表示獲利車分配給公司的正額合計，正式公司淨得應使用 `company_net`，並維持 `company_net + purchase_bonus + sales_bonus = gross_profit`。
 - 計算器要求明確傳入 `YYYY-MM` 結算月份與啟用佣金的 agent IDs；月份不符會拒絕，未啟用佣金的人員只將自己對應的收車／賣車 bps 歸零，不會犧牲另一位人員的合法獎金。
-- 虧損／零毛利成交車是否計入賣車跨級台數仍待使用者產品決策；現有企劃字面規則是符合其他資格即計入，未定案前不得開始第 7 部分 snapshot。
+- `CommissionPlanService::findEffectiveForMonth()` 與計算器共用 `SalaryPeriodMonth` 的 `YYYY-MM` 契約；查詢會明確轉成月首日，計算器另核對正式最新有效方案 ID，拒絕停用、未生效或被新版取代的方案。
+- `SalaryProfile.user_id` 明確 cast 為 integer，後續傳入佣金資格集合時不依賴 PDO／driver 回傳型別。
+- 使用者已決策：`gross_profit <= 0` 車輛仍列入月份明細與公司淨損益，但不增加賣車跨級台數；只有正毛利車計入 `eligible_sales_count`。
+- 全系統業務日期與月份邊界統一為 `Asia/Taipei`。Laravel app timezone、MySQL／MariaDB session timezone、Dashboard 月統計、預設收支日期、成交時間正規化、列印／稽核前端顯示及 API datetime offset 均採台北時間。
+- 既有 MySQL／MariaDB `TIMESTAMP` 由資料庫依 `+08:00` session timezone 顯示，不做推測式資料搬移；正式環境須保留 `APP_TIMEZONE=Asia/Taipei` 與 `DB_TIMEZONE=+08:00`。持久化 SQLite 不是正式部署目標，既有 UTC-naive 開發資料需重建，不做不安全回填。
 
 後續仍待實作：
 

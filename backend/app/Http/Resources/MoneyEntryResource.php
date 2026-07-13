@@ -35,7 +35,7 @@ class MoneyEntryResource extends JsonResource
             'description' => $this->when($canSeeSalaryDetails, $this->description),
             'approval_status' => $this->when($canSeeSalaryDetails, $this->approval_status),
             'approved_by' => $this->when($canSeeSalaryDetails, $this->approved_by),
-            'approved_at' => $this->when($canSeeSalaryDetails, $this->approved_at?->toISOString()),
+            'approved_at' => $this->when($canSeeSalaryDetails, $this->approved_at?->toIso8601String()),
             'vehicle' => $this->whenLoaded('vehicle', fn () => $this->vehicle ? [
                 'id' => $this->vehicle->id,
                 'stock_no' => $this->vehicle->stock_no,
@@ -47,8 +47,8 @@ class MoneyEntryResource extends JsonResource
                 'name' => $this->cashAccount->name,
                 'type' => $this->cashAccount->type,
             ] : null)),
-            'created_at' => $this->created_at?->toISOString(),
-            'updated_at' => $this->updated_at?->toISOString(),
+            'created_at' => $this->created_at?->toIso8601String(),
+            'updated_at' => $this->updated_at?->toIso8601String(),
         ];
     }
 }

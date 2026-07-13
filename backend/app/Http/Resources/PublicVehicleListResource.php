@@ -32,7 +32,7 @@ class PublicVehicleListResource extends JsonResource
             'asking_price' => $this->asking_price,
             'cover_photo' => $cover !== null ? new PublicVehiclePhotoResource($cover) : null,
             'listing_date' => $this->listing_date?->toDateString(),
-            'created_at' => $this->created_at?->toISOString(),
+            'created_at' => $this->created_at?->toIso8601String(),
         ];
     }
 }

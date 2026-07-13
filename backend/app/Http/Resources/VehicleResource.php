@@ -51,8 +51,8 @@ class VehicleResource extends JsonResource
             'floor_price' => $this->when($canSeeSalesPricing, $this->floor_price),
             'listing_date' => $this->listing_date?->toDateString(),
             'sales_note' => $this->sales_note,
-            'reserved_at' => $this->reserved_at?->toISOString(),
-            'sold_at' => $this->sold_at?->toISOString(),
+            'reserved_at' => $this->reserved_at?->toIso8601String(),
+            'sold_at' => $this->sold_at?->toIso8601String(),
             'sold_price' => $this->when($canSeeSalesPricing, $this->sold_price),
             'sales_agent_id' => $this->when($canSeeCommissionAttribution, $this->sales_agent_id),
             'sales_agent' => $this->when($canSeeCommissionAttribution, fn () => $this->whenLoaded('salesAgent', fn () => $this->salesAgent ? [
@@ -63,8 +63,8 @@ class VehicleResource extends JsonResource
             'buyer_phone' => $this->buyer_phone,
             'buyer_customer_id' => $this->buyer_customer_id,
             'notes' => $this->notes,
-            'created_at' => $this->created_at?->toISOString(),
-            'updated_at' => $this->updated_at?->toISOString(),
+            'created_at' => $this->created_at?->toIso8601String(),
+            'updated_at' => $this->updated_at?->toIso8601String(),
         ];
     }
 }

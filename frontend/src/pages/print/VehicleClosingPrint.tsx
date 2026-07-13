@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getVehiclePrintClosing } from '../../api/vehicles'
 import type { VehiclePrintClosingResponse } from '../../types/vehicle'
+import { formatBusinessDateTime } from '../../utils/dateTime'
 import './print.css'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
@@ -43,7 +44,7 @@ export function VehicleClosingPrint() {
       </div>
 
       <div className="print-title">成交結案收支明細</div>
-      <div className="print-meta">列印日期：{new Date(printedAt).toLocaleString('zh-TW')}</div>
+      <div className="print-meta">列印日期：{formatBusinessDateTime(printedAt)}</div>
 
       <div className="print-section">
         <h2>車輛基本資料</h2>

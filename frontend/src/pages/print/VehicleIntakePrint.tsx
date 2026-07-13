@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getVehiclePrintIntake } from '../../api/vehicles'
 import type { VehiclePrintIntakeResponse } from '../../types/vehicle'
+import { formatBusinessDateTime } from '../../utils/dateTime'
 import { vehicleStatusLabels } from '../../utils/vehicleStatus'
 import './print.css'
 
@@ -42,7 +43,7 @@ export function VehicleIntakePrint() {
       </div>
 
       <div className="print-title">車輛建檔資料</div>
-      <div className="print-meta">列印日期：{new Date(printedAt).toLocaleString('zh-TW')}</div>
+      <div className="print-meta">列印日期：{formatBusinessDateTime(printedAt)}</div>
 
       <div className="print-section">
         <h2>基本資料</h2>

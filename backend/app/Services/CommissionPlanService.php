@@ -36,7 +36,8 @@ class CommissionPlanService
     /**
      * The plan effective for a month is the active plan with the latest
      * effective_from on or before that month's first day. If two plans share
-     * that date, the newest id wins deterministically.
+     * that date, the newest id wins deterministically. periodMonth must use
+     * the shared YYYY-MM salary month contract.
      */
     public function findEffectiveForMonth(string $periodMonth): ?CommissionPlan
     {

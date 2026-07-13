@@ -86,12 +86,22 @@ class CommissionPlanTest extends TestCase
         $sameDateOlderId = $service->createPlan($admin, $this->payload(['name' => '同日方案 A', 'effective_from' => '2026-06-01']));
         $sameDateNewestId = $service->createPlan($admin, $this->payload(['name' => '同日方案 B', 'effective_from' => '2026-06-01']));
         $service->createPlan($admin, $this->payload(['name' => '停用方案', 'effective_from' => '2026-07-01', 'is_active' => false]));
+        $exactMonthPlan = $service->createPlan($admin, $this->payload(['name' => '七月方案', 'effective_from' => '2026-07-01']));
         $service->createPlan($admin, $this->payload(['name' => '未來方案', 'effective_from' => '2027-01-01']));
 
-        $this->assertSame($sameDateNewestId->id, $service->findEffectiveForMonth('2026-07-01')?->id);
-        $this->assertNotSame($sameDateOlderId->id, $service->findEffectiveForMonth('2026-07-01')?->id);
-        $this->assertSame($older->id, $service->findEffectiveForMonth('2026-03-01')?->id);
-        $this->assertNull($service->findEffectiveForMonth('2025-12-01'));
+        $this->assertSame($sameDateNewestId->id, $service->findEffectiveForMonth('2026-06')?->id);
+        $this->assertNotSame($sameDateOlderId->id, $service->findEffectiveForMonth('2026-06')?->id);
+        $this->assertSame($exactMonthPlan->id, $service->findEffectiveForMonth('2026-07')?->id);
+        $this->assertSame($older->id, $service->findEffectiveForMonth('2026-03')?->id);
+        $this->assertNull($service->findEffectiveForMonth('2025-12'));
+    }
+
+    public function test_effective_plan_selection_rejects_noncanonical_month_format(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('YYYY-MM');
+
+        app(CommissionPlanService::class)->findEffectiveForMonth('2026-07-01');
     }
 
     public function test_used_plan_has_no_update_or_delete_api_and_database_remains_immutable(): void

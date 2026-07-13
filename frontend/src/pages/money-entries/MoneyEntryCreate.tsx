@@ -9,11 +9,8 @@ import type { CashAccountOption } from '../../types/cashAccount'
 import type { CreateMoneyEntryPayload, MoneyDirection } from '../../types/moneyEntry'
 import type { Vehicle, VehicleListResponse } from '../../types/vehicle'
 import { generateIdempotencyKey } from '../../utils/idempotency'
+import { formatBusinessDate } from '../../utils/dateTime'
 import { categoriesForDirection, directionLabels } from '../../utils/moneyEntryCategory'
-
-function today(): string {
-  return new Date().toISOString().slice(0, 10)
-}
 
 function extractErrorMessage(err: unknown, fallback: string): string {
   if (isAxiosError(err)) {
@@ -35,7 +32,7 @@ export function MoneyEntryCreate() {
   const [cashAccounts, setCashAccounts] = useState<CashAccountOption[]>([])
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
 
-  const [entryDate, setEntryDate] = useState(today())
+  const [entryDate, setEntryDate] = useState(formatBusinessDate())
   const [direction, setDirection] = useState<MoneyDirection>(initialDirection)
   const [category, setCategory] = useState('')
   const [amount, setAmount] = useState('')

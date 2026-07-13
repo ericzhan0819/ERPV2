@@ -20,6 +20,7 @@ class SalaryProfile extends Model
     protected function casts(): array
     {
         return [
+            'user_id' => 'integer',
             'base_salary' => 'integer',
             'fixed_allowance' => 'integer',
             'labor_insurance_deduction' => 'integer',

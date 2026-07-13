@@ -182,6 +182,37 @@ class SalaryCommissionCalculatorTest extends TestCase
         );
     }
 
+    public function test_zero_and_loss_vehicles_do_not_raise_sales_tier_count(): void
+    {
+        [$plan, $agent] = $this->standardPlanAndAgent();
+        $profitVehicles = collect(range(1, 4))->map(function () use ($agent) {
+            $vehicle = $this->vehicle($agent, $agent);
+            $this->moneyEntry($vehicle, 'income', 100000, MoneyEntry::APPROVAL_APPROVED);
+
+            return $vehicle;
+        });
+        $zeroProfitVehicle = $this->vehicle($agent, $agent);
+        $lossVehicle = $this->vehicle($agent, $agent);
+        $this->moneyEntry($zeroProfitVehicle, 'income', 50000, MoneyEntry::APPROVAL_APPROVED);
+        $this->moneyEntry($zeroProfitVehicle, 'expense', 50000, MoneyEntry::APPROVAL_APPROVED);
+        $this->moneyEntry($lossVehicle, 'income', 40000, MoneyEntry::APPROVAL_APPROVED);
+        $this->moneyEntry($lossVehicle, 'expense', 50000, MoneyEntry::APPROVAL_APPROVED);
+
+        $result = $this->calculator->calculate(
+            $plan,
+            '2026-06',
+            [...$profitVehicles, $zeroProfitVehicle, $lossVehicle],
+            [$agent->id],
+        );
+        $summary = $result['sales_agents'][$agent->id];
+
+        $this->assertSame(4, $summary['eligible_sales_count']);
+        $this->assertSame(3000, $summary['sales_bonus_bps']);
+        $this->assertSame(72000, $summary['sales_bonus_total']);
+        $this->assertSame(0, $result['vehicles'][$zeroProfitVehicle->id]['sales_bonus']);
+        $this->assertSame(0, $result['vehicles'][$lossVehicle->id]['sales_bonus']);
+    }
+
     public function test_commission_enabled_agents_are_applied_per_role_without_dropping_vehicle(): void
     {
         [$plan, $enabledAgent] = $this->standardPlanAndAgent();
@@ -237,6 +268,27 @@ class SalaryCommissionCalculatorTest extends TestCase
         $this->calculator->calculate($plan, '2026-6', [], []);
     }
 
+    public function test_calculator_rejects_inactive_future_and_superseded_plans(): void
+    {
+        [$supersededPlan, $agent] = $this->standardPlanAndAgent();
+        $admin = User::factory()->admin()->create();
+        $currentPlan = $this->plan($admin, '目前方案', '2026-06-01');
+        $inactivePlan = $this->plan($admin, '停用方案', '2026-06-01', false);
+        $futurePlan = $this->plan($admin, '未來方案', '2026-07-01');
+
+        foreach ([$supersededPlan, $inactivePlan, $futurePlan] as $invalidPlan) {
+            try {
+                $this->calculator->calculate($invalidPlan, '2026-06', [], [$agent->id]);
+                $this->fail("方案 {$invalidPlan->id} 不應可用於 2026-06");
+            } catch (InvalidArgumentException $exception) {
+                $this->assertStringContainsString('不適用於 2026-06', $exception->getMessage());
+            }
+        }
+
+        $result = $this->calculator->calculate($currentPlan, '2026-06', [], [$agent->id]);
+        $this->assertSame([], $result['vehicles']);
+    }
+
     public function test_large_amount_formula_does_not_overflow_intermediate_multiplication(): void
     {
         $result = $this->calculator->calculateVehicleAmounts(PHP_INT_MAX, 0, 4000, 2000, 5000);
@@ -274,12 +326,19 @@ class SalaryCommissionCalculatorTest extends TestCase
     {
         $creator = User::factory()->create(['role' => User::ROLE_ADMIN, 'is_admin' => true]);
         $agent = User::factory()->create();
+        $plan = $this->plan($creator, '標準方案 '.fake()->uuid(), '2026-01-01');
+
+        return [$plan, $agent];
+    }
+
+    private function plan(User $creator, string $name, string $effectiveFrom, bool $isActive = true): CommissionPlan
+    {
         $plan = CommissionPlan::query()->create([
-            'name' => '標準方案 '.fake()->uuid(),
-            'effective_from' => '2026-01-01',
+            'name' => $name,
+            'effective_from' => $effectiveFrom,
             'company_reserve_bps' => 4000,
             'purchase_bonus_bps' => 2000,
-            'is_active' => true,
+            'is_active' => $isActive,
             'created_by' => $creator->id,
         ]);
         $plan->tiers()->createMany([
@@ -288,7 +347,7 @@ class SalaryCommissionCalculatorTest extends TestCase
             ['min_sales_count' => 5, 'sales_bonus_bps' => 5000, 'sort_order' => 3],
         ]);
 
-        return [$plan->load('tiers'), $agent];
+        return $plan->load('tiers');
     }
 
     private function vehicle(User $purchaseAgent, User $salesAgent): Vehicle

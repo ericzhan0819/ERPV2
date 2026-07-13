@@ -23,8 +23,8 @@ class VehiclePhotoResource extends JsonResource
             'sort_order' => $this->sort_order,
             'is_cover' => $this->is_cover,
             'uploaded_by' => $this->uploaded_by,
-            'created_at' => $this->created_at?->toISOString(),
-            'updated_at' => $this->updated_at?->toISOString(),
+            'created_at' => $this->created_at?->toIso8601String(),
+            'updated_at' => $this->updated_at?->toIso8601String(),
         ];
     }
 }

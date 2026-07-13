@@ -59,6 +59,7 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
+            'timezone' => env('DB_TIMEZONE', '+08:00'),
             // ATTR_FOUND_ROWS：Laravel 的 database cache lock（Cache::lock() 搭配
             // CACHE_STORE=database）用「UPDATE ... WHERE owner=? AND expiration>?」
             // 的 affected-rows 是否 >= 1 判斷 acquire()/refresh() 是否成功。MySQL
@@ -91,6 +92,7 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
+            'timezone' => env('DB_TIMEZONE', '+08:00'),
             // 同上 mysql 連線的 ATTR_FOUND_ROWS 說明：mariadb 走同一顆 pdo_mysql
             // driver，database cache lock 的 refresh() 同樣需要 affected-rows 反映
             // 「match 到的列數」而非「值有變化的列數」。

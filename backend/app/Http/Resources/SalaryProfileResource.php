@@ -25,8 +25,8 @@ class SalaryProfileResource extends JsonResource
             'health_insurance_deduction' => $this->health_insurance_deduction,
             'commission_enabled' => $this->commission_enabled,
             'is_active' => $this->is_active,
-            'created_at' => $this->created_at?->toISOString(),
-            'updated_at' => $this->updated_at?->toISOString(),
+            'created_at' => $this->created_at?->toIso8601String(),
+            'updated_at' => $this->updated_at?->toIso8601String(),
         ];
     }
 }

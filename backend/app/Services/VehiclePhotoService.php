@@ -827,7 +827,7 @@ class VehiclePhotoService
                     'batch_id' => $existing->id,
                     'done_count' => $doneCount,
                     'total_count' => $totalCount,
-                    'previous_lease_expires_at' => $existing->processing_lease_expires_at?->toISOString(),
+                    'previous_lease_expires_at' => $existing->processing_lease_expires_at?->toIso8601String(),
                 ]);
 
                 // 續傳認領：核發一把新的 claim_token 並重新核發租約，photo_ids／

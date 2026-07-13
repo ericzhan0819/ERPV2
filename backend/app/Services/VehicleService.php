@@ -1026,7 +1026,9 @@ class VehicleService
             }
 
             $lockedVehicle->status = 'sold';
-            $lockedVehicle->sold_at = $data['sold_at'] ?? now();
+            $lockedVehicle->sold_at = isset($data['sold_at'])
+                ? Carbon::parse($data['sold_at'])->setTimezone(config('app.timezone'))
+                : now();
             $lockedVehicle->updated_by = $userId;
             $lockedVehicle->save();
 
@@ -1345,7 +1347,7 @@ class VehicleService
     public function printIntakeData(Vehicle $vehicle): array
     {
         return [
-            'printed_at' => now()->toISOString(),
+            'printed_at' => now()->toIso8601String(),
             'vehicle' => $vehicle,
         ];
     }
@@ -1365,7 +1367,7 @@ class VehicleService
             ->get();
 
         return [
-            'printed_at' => now()->toISOString(),
+            'printed_at' => now()->toIso8601String(),
             'vehicle' => $vehicle,
             'summary' => $this->financialSummary($vehicle),
             'money_entries' => $entries,

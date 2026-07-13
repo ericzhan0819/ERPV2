@@ -25,7 +25,7 @@ class AuditLogResource extends JsonResource
             'user_agent' => $this->user_agent,
             'request_method' => $this->request_method,
             'request_path' => $this->request_path,
-            'created_at' => $this->created_at?->toISOString(),
+            'created_at' => $this->created_at?->toIso8601String(),
         ];
     }
 }

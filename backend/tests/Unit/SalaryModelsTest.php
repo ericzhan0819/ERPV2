@@ -44,4 +44,11 @@ class SalaryModelsTest extends TestCase
         $this->assertInstanceOf(HasMany::class, (new SalarySettlement)->items());
         $this->assertInstanceOf(BelongsTo::class, (new SalarySettlementItem)->settlement());
     }
+
+    public function test_salary_profile_user_id_is_cast_to_integer(): void
+    {
+        $profile = (new SalaryProfile)->setRawAttributes(['user_id' => '42']);
+
+        $this->assertSame(42, $profile->user_id);
+    }
 }

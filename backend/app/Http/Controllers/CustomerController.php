@@ -41,7 +41,7 @@ class CustomerController extends Controller
                 'status' => $vehicle->status,
                 'brand' => $vehicle->brand,
                 'model' => $vehicle->model,
-                'sold_at' => $vehicle->sold_at?->toISOString(),
+                'sold_at' => $vehicle->sold_at?->toIso8601String(),
             ];
 
             if ($canSeeSalesPricing) {

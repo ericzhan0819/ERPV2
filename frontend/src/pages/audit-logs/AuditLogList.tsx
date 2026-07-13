@@ -7,6 +7,7 @@ import type {
   AuditLogListMeta,
   AuditSubjectType,
 } from '../../types/auditLog'
+import { formatBusinessDateTime } from '../../utils/dateTime'
 
 const actionLabels: Record<AuditAction, string> = {
   created: '新增',
@@ -33,15 +34,7 @@ const roleLabels: Record<string, string> = {
 }
 
 function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat('zh-TW', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  }).format(new Date(value))
+  return formatBusinessDateTime(value)
 }
 
 function formatValue(value: unknown): string {
