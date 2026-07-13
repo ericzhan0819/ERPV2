@@ -157,6 +157,33 @@ class UserTest extends TestCase
         $this->assertDatabaseHas('users', ['id' => $other->id]);
     }
 
+    #[DataProvider('vehicleAgentColumnProvider')]
+    public function test_admin_cannot_delete_user_assigned_as_vehicle_agent(string $agentColumn): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $agent = User::factory()->sales()->create(['is_active' => true]);
+        Vehicle::factory()->create([
+            'created_by' => null,
+            'updated_by' => null,
+            $agentColumn => $agent->id,
+        ]);
+
+        $this->actingAs($admin, 'web')->deleteJson("/api/users/{$agent->id}")
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('user')
+            ->assertJsonPath('errors.user.0', '此使用者已有相關紀錄，不得刪除，請改為停用');
+
+        $this->assertDatabaseHas('users', ['id' => $agent->id]);
+    }
+
+    public static function vehicleAgentColumnProvider(): array
+    {
+        return [
+            'purchase agent' => ['purchase_agent_id'],
+            'sales agent' => ['sales_agent_id'],
+        ];
+    }
+
     // The HTTP layer can never manufacture "actingUser demotes someone else
     // and it's the last admin" sequentially, since a non-self actingUser who
     // passes the `admin` middleware is themselves an active admin and is

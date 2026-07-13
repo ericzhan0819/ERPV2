@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 Phase 1 完成後最新完整回歸為 368 tests、1486 assertions、4 skipped，frontend lint／typecheck／production build 通過。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 Phase 1 完成後最新完整回歸為 370 tests、1496 assertions、4 skipped，frontend lint／typecheck／production build 通過。
 
 ---
 
@@ -352,6 +352,7 @@ v1.3 Phase 1 已補齊：
 
 - `salary_profiles`、`commission_plans`／`commission_plan_tiers`、`salary_periods`、`salary_settlements`、`salary_settlement_items`。
 - Vehicle 正式 `purchase_agent_id`／`sales_agent_id`，歷史資料保持空值，不做 heuristic backfill。
+- 使用者刪除前置檢查涵蓋 Vehicle 的收車／賣車歸屬，已有歸屬時回傳 422 並要求改為停用。
 - `2026 標準薪資方案` Seeder，可重跑且已使用方案不會被覆寫。
 - `salary_settlement` MoneyEntry source type、一般 CRUD／approval 保護與 manager／sales 查詢遮蔽。
 

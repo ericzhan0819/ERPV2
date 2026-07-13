@@ -182,7 +182,13 @@ class UserService
             // adversarial review 指出）。下面雖然已有 QueryException 防線把這種失敗
             // 轉成友善 422，但這裡先用 withTrashed() 照到 tombstone，能更準確、更早
             // 給出正確訊息，而不是依賴防線兜底。
-            $hasRelatedRecords = Vehicle::query()->where('created_by', $user->id)->orWhere('updated_by', $user->id)->lockForUpdate()->exists()
+            $hasRelatedRecords = Vehicle::query()
+                ->where('created_by', $user->id)
+                ->orWhere('updated_by', $user->id)
+                ->orWhere('purchase_agent_id', $user->id)
+                ->orWhere('sales_agent_id', $user->id)
+                ->lockForUpdate()
+                ->exists()
                 || MoneyEntry::query()->where('created_by', $user->id)->orWhere('updated_by', $user->id)->lockForUpdate()->exists()
                 || VehiclePhoto::withTrashed()->where('uploaded_by', $user->id)->lockForUpdate()->exists();
 
