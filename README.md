@@ -1,8 +1,8 @@
-# 中古車行內部營運系統（1.0 + v1.1 + v1.2；v1.3 規劃中）
+# 中古車行內部營運系統（1.0 + v1.1 + v1.2；v1.3 開發中）
 
 小型中古車行內部使用的前後端分離營運管理系統。v1.1 新增角色（`admin`／`manager`／`sales`）、敏感金額遮蔽、一般收支審核、客戶模組與建車入庫欄位補強，並以 `v1.1-smoke-passed` 封版。v1.2 新增車輛照片管理與官網公開唯讀車輛 API，已完成自動測試、瀏覽器 manual smoke，並以 `v1.2-smoke-passed` 封版。完整穩定狀態見 `docs/current-state.md`、`docs/v1.2-smoke-report.md` 與 `docs/v1.2-handoff.md`。
 
-v1.3 目前只有企劃與執行計畫，尚未實作。目標是建立 admin-only「薪資結算」：依正式成交、approved-only 單車毛利、收車人／賣車人與整月跨級獎金，彙總底薪、固定津貼、勞保、健保及手動加扣項，確認發薪後自動建立 `薪資 / 佣金` 支出。規格見 `企劃書_v1.3.md`，執行清單見 `PLAN_v1.3.md`。
+v1.3 已完成 `PLAN_v1.3.md` 第 0、1 部分：薪資資料模型、版本化獎金方案、車輛收／賣車人欄位、月份與結算 snapshot schema，以及受保護的 `salary_settlement` MoneyEntry 來源。後續 Model／Service／API／UI 尚未實作。完整規格見 `企劃書_v1.3.md`，進度見 `PLAN_v1.3.md`，本階段交接見 `docs/v1.3-phase1-handoff.md`。
 
 ### v1.3 預定公式
 
@@ -92,6 +92,7 @@ php artisan db:seed
 
 - `AdminUserSeeder`：建立預設管理員帳號
 - `CashAccountSeeder`：建立預設資金帳戶（現金／主要銀行／其他，期初餘額皆為 0）
+- `CommissionPlanSeeder`：建立可重跑且不重複的 `2026 標準薪資方案`（4000 bps 公司保留、2000 bps 收車獎金、1／3／5 台賣車級距）
 
 若要重建資料庫（開發環境）：
 

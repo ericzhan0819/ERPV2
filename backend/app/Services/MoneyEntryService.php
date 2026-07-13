@@ -84,6 +84,13 @@ class MoneyEntryService
     {
         $query = MoneyEntry::query()->with(['vehicle:id,stock_no,brand,model', 'cashAccount:id,name,type']);
 
+        // 薪資支出雖然也是 MoneyEntry，counterparty_name 與 amount 足以反推出個人
+        // 薪資，初版只能由 admin 查看。不能只在 Resource 隱藏欄位，否則 manager
+        // 仍可從筆數、分類、日期等側面枚舉薪資紀錄。
+        if (! ($user?->isAdmin() ?? false)) {
+            $query->where('source_type', '!=', MoneyEntry::SOURCE_SALARY_SETTLEMENT);
+        }
+
         // sales 不應在收支列表看到全公司所有成本紀錄的分類、對象、描述：只能看到
         // 自己建立的收支申請，或訂金/尾款/退款等銷售收款安全紀錄（不論由誰建立）。
         if ($user?->isSales()) {

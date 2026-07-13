@@ -61,7 +61,10 @@ class VehicleService
      */
     public function listVehicles(array $filters): LengthAwarePaginator
     {
-        $query = Vehicle::query();
+        $query = Vehicle::query()->with([
+            'purchaseAgent:id,name',
+            'salesAgent:id,name',
+        ]);
 
         if (! empty($filters['search'])) {
             $search = $filters['search'];

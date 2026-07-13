@@ -35,6 +35,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'seller_phone',
     'seller_customer_id',
     'purchase_price',
+    'purchase_agent_id',
     'asking_price',
     'floor_price',
     'listing_date',
@@ -42,6 +43,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'reserved_at',
     'sold_at',
     'sold_price',
+    'sales_agent_id',
     'buyer_name',
     'buyer_phone',
     'buyer_customer_id',
@@ -83,6 +85,21 @@ class Vehicle extends Model
     public function moneyEntries(): HasMany
     {
         return $this->hasMany(MoneyEntry::class);
+    }
+
+    public function purchaseAgent(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'purchase_agent_id');
+    }
+
+    public function salesAgent(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'sales_agent_id');
+    }
+
+    public function salarySettlementItems(): HasMany
+    {
+        return $this->hasMany(SalarySettlementItem::class);
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -11,6 +12,7 @@ class VehicleResource extends JsonResource
     {
         $canSeeFinancials = $request->user()?->canViewFinancials() ?? false;
         $canSeeSalesPricing = $request->user()?->canViewSalesPricing() ?? false;
+        $canSeeCommissionAttribution = $request->user()?->hasAnyRole(User::ROLES) ?? false;
 
         return [
             'id' => $this->id,
@@ -40,6 +42,11 @@ class VehicleResource extends JsonResource
             'seller_phone' => $this->seller_phone,
             'seller_customer_id' => $this->seller_customer_id,
             'purchase_price' => $this->when($canSeeFinancials, $this->purchase_price),
+            'purchase_agent_id' => $this->when($canSeeCommissionAttribution, $this->purchase_agent_id),
+            'purchase_agent' => $this->when($canSeeCommissionAttribution, fn () => $this->whenLoaded('purchaseAgent', fn () => $this->purchaseAgent ? [
+                'id' => $this->purchaseAgent->id,
+                'name' => $this->purchaseAgent->name,
+            ] : null)),
             'asking_price' => $this->when($canSeeSalesPricing, $this->asking_price),
             'floor_price' => $this->when($canSeeSalesPricing, $this->floor_price),
             'listing_date' => $this->listing_date?->toDateString(),
@@ -47,6 +54,11 @@ class VehicleResource extends JsonResource
             'reserved_at' => $this->reserved_at?->toISOString(),
             'sold_at' => $this->sold_at?->toISOString(),
             'sold_price' => $this->when($canSeeSalesPricing, $this->sold_price),
+            'sales_agent_id' => $this->when($canSeeCommissionAttribution, $this->sales_agent_id),
+            'sales_agent' => $this->when($canSeeCommissionAttribution, fn () => $this->whenLoaded('salesAgent', fn () => $this->salesAgent ? [
+                'id' => $this->salesAgent->id,
+                'name' => $this->salesAgent->name,
+            ] : null)),
             'buyer_name' => $this->buyer_name,
             'buyer_phone' => $this->buyer_phone,
             'buyer_customer_id' => $this->buyer_customer_id,

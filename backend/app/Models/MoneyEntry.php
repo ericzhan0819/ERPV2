@@ -46,6 +46,19 @@ class MoneyEntry extends Model
     public const SOURCE_LEGACY_UNKNOWN = 'legacy_unknown';
 
     /**
+     * 由 admin 發薪流程建立並直接核准；不得透過一般收支 CRUD 或審核流程異動。
+     */
+    public const SOURCE_SALARY_SETTLEMENT = 'salary_settlement';
+
+    public const SOURCE_TYPES = [
+        self::SOURCE_MANUAL,
+        self::SOURCE_VEHICLE_SHORTCUT,
+        self::SOURCE_VEHICLE_WORKFLOW,
+        self::SOURCE_LEGACY_UNKNOWN,
+        self::SOURCE_SALARY_SETTLEMENT,
+    ];
+
+    /**
      * 一般收支尚待 admin 審核，不計入正式餘額。
      */
     public const APPROVAL_PENDING = 'pending';

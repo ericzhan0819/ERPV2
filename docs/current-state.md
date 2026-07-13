@@ -1,10 +1,10 @@
-# ERPV2 current-state — v1.2 已封版，v1.3 薪資結算規劃完成
+# ERPV2 current-state — v1.2 已封版，v1.3 薪資資料模型完成
 
-日期：2026-07-12
+日期：2026-07-13
 專案：ERPV2 / 中古車行內部營運系統
 目前穩定點：`b1edffa docs: 完成 v1.2 smoke 封版與交接文件`
 目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`
-狀態：v1.2 已完成並封版。v1.3「薪資結算」已完成 `企劃書_v1.3.md` 與 `PLAN_v1.3.md`，尚未開始程式實作。v1.3 目標是依正式成交、approved-only 單車毛利、收車人／賣車人、整月跨級獎金、底薪與勞健保扣款，自動算出每月實發薪資，確認發薪後建立正式薪資支出。
+狀態：v1.2 已完成並封版。v1.3「薪資結算」已完成 `PLAN_v1.3.md` 第 0、1 部分：前置盤點、薪資 schema、初始獎金方案、車輛收／賣車人欄位與 salary MoneyEntry 保護；第 2 部分之後的完整 Model、Service、API、前端與 Smoke 尚未開始。
 
 ---
 
@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後最新結果：340 tests、1391 assertions、4 skipped。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 Phase 1 完成後最新完整回歸為 368 tests、1486 assertions、4 skipped，frontend lint／typecheck／production build 通過。
 
 ---
 
@@ -348,11 +348,19 @@ v1.3 已鎖定為「薪資結算」，不是完整 HR。核心規則：
 
 v1.3 另包含底薪、固定津貼、勞保扣款、健保扣款、手動加扣項、每月草稿／確認／發薪，以及發薪後自動建立 `薪資 / 佣金` Money Entry。
 
-目前實作前已確認的資料缺口：
+v1.3 Phase 1 已補齊：
 
-- Vehicle 尚無正式 `purchase_agent_id`／`sales_agent_id`。
-- 不得用 `created_by`／`updated_by` heuristic 推定歷史獎金歸屬。
-- MoneyEntry 已有「薪資 / 佣金」分類，但尚無 `salary_settlement` source type、月份快照與防重複發薪機制。
+- `salary_profiles`、`commission_plans`／`commission_plan_tiers`、`salary_periods`、`salary_settlements`、`salary_settlement_items`。
+- Vehicle 正式 `purchase_agent_id`／`sales_agent_id`，歷史資料保持空值，不做 heuristic backfill。
+- `2026 標準薪資方案` Seeder，可重跑且已使用方案不會被覆寫。
+- `salary_settlement` MoneyEntry source type、一般 CRUD／approval 保護與 manager／sales 查詢遮蔽。
+
+後續仍待實作：
+
+- 薪資 Models 完整 casts／關聯、設定與獎金方案 Service／API。
+- 新車／銷售流程歸屬寫入、歷史車輛 admin 人工補資料流程。
+- approved-only 計算器、月份草稿／確認／發薪與批次 idempotency。
+- 薪資管理前端與完整 manual smoke。
 
 Website MVP 延後到 v1.3 完成或進入正式部署準備時再獨立規劃，不得混入薪資結算。
 

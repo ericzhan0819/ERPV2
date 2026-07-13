@@ -21,6 +21,10 @@ class MoneyEntryPolicy
      */
     public function view(User $user, MoneyEntry $moneyEntry): bool
     {
+        if ($moneyEntry->source_type === MoneyEntry::SOURCE_SALARY_SETTLEMENT) {
+            return $user->isAdmin();
+        }
+
         if ($user->hasAnyRole([User::ROLE_ADMIN, User::ROLE_MANAGER])) {
             return true;
         }

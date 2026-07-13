@@ -46,6 +46,7 @@ class VehicleController extends Controller
 
     public function show(Vehicle $vehicle, Request $request): JsonResponse
     {
+        $vehicle->loadMissing(['purchaseAgent:id,name', 'salesAgent:id,name']);
         $user = $request->user();
         $canSeeFinancials = $user?->canViewFinancials() ?? false;
 
