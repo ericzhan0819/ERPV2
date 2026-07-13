@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 3 部分完成後最新完整回歸為 394 tests、1608 assertions、4 skipped，frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 3 部分審查修正後最新完整回歸為 396 tests、1617 assertions、4 skipped，frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
 
 ---
 
@@ -360,6 +360,7 @@ v1.3 第 1～3 部分已補齊：
 - Salary Profile 只接受非負整數金額；停用使用者不能啟用薪資設定，且既有 confirmed／paid snapshot 不受目前設定修改影響。
 - Commission Plan tiers 由集中規則驗證，方案不提供修改／刪除 API；月份採「最新有效生效日、同日較新 id」的 deterministic 選取規則。
 - 薪資設定稽核只記對象與異動欄位名稱，不複製底薪、津貼、保險扣款金額值。
+- Salary Profile 首次建立與 Commission Plan 重名建立的 duplicate-key race 皆會在 rollback 後開新 transaction 讀取 winner；相同 profile payload 可 replay，不同內容／重名方案回 422，不再外洩成 500。
 
 後續仍待實作：
 

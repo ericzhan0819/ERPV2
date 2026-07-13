@@ -5,11 +5,16 @@ namespace Tests\Feature;
 use App\Models\AuditLog;
 use App\Models\CommissionPlan;
 use App\Models\SalaryPeriod;
+use App\Models\SalaryProfile;
 use App\Models\SalarySettlement;
 use App\Models\User;
+use App\Services\SalaryProfileService;
 use Database\Seeders\CommissionPlanSeeder;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
+use ReflectionMethod;
 use Tests\TestCase;
 
 class SalaryProfileTest extends TestCase
@@ -154,6 +159,39 @@ class SalaryProfileTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonValidationErrors('user');
         $this->assertDatabaseHas('users', ['id' => $employee->id]);
+    }
+
+    public function test_duplicate_key_recovery_replays_same_winner_and_rejects_different_payload(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $employee = User::factory()->sales()->create();
+        $service = app(SalaryProfileService::class);
+        $winner = $service->upsertProfile($admin, $employee, $this->payload());
+
+        try {
+            SalaryProfile::query()->create(array_merge(
+                ['user_id' => $employee->id],
+                $this->payload(),
+            ));
+            $this->fail('測試前置應觸發 salary_profiles.user_id unique violation');
+        } catch (QueryException $duplicate) {
+            $classifier = new ReflectionMethod($service, 'isSalaryProfileUserUniqueViolation');
+            $this->assertTrue($classifier->invoke($service, $duplicate));
+
+            $recover = new ReflectionMethod($service, 'replayRacedProfileUpsertAfterRollback');
+            $replayed = $recover->invoke($service, $duplicate, $employee, $this->payload());
+            $this->assertSame($winner->id, $replayed->id);
+
+            try {
+                $recover->invoke($service, $duplicate, $employee, $this->payload(['base_salary' => 36000]));
+                $this->fail('不同 payload 應回傳 422 ValidationException');
+            } catch (ValidationException $exception) {
+                $this->assertArrayHasKey('user', $exception->errors());
+            }
+        }
+
+        $this->assertSame(1, SalaryProfile::query()->where('user_id', $employee->id)->count());
+        $this->assertSame(1, AuditLog::query()->where('subject_type', 'salary_profile')->count());
     }
 
     /** @param array<string, mixed> $overrides */

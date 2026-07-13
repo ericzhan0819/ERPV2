@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\CommissionPlanService;
 use Database\Seeders\CommissionPlanSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
@@ -135,6 +136,24 @@ class CommissionPlanTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonValidationErrors('user');
         $this->assertDatabaseHas('users', ['id' => $owner->id]);
+    }
+
+    public function test_service_duplicate_name_is_converted_to_validation_error_after_fresh_winner_read(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $service = app(CommissionPlanService::class);
+        $service->createPlan($admin, $this->payload());
+
+        try {
+            $service->createPlan($admin, $this->payload());
+            $this->fail('重名方案應回傳 ValidationException');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('name', $exception->errors());
+        }
+
+        $this->assertSame(1, CommissionPlan::query()->where('name', '2027 新方案')->count());
+        $this->assertSame(3, CommissionPlan::query()->where('name', '2027 新方案')->firstOrFail()->tiers()->count());
+        $this->assertSame(1, AuditLog::query()->where('subject_type', 'commission_plan')->count());
     }
 
     /** @param array<string, mixed> $overrides */

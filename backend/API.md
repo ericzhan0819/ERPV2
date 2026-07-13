@@ -922,6 +922,8 @@ Request body：
 
 所有欄位必填；四個金額欄位必須是大於等於 0 的整數。`user_id`、結算 totals、歷史 snapshot 等系統欄位禁止由前端寫入。修改目前設定不會回改既有 confirmed／paid settlement snapshot。
 
+若兩個首次建立請求同時送達並撞上 `user_id` unique constraint，輸家會先 rollback，再於新 transaction 鎖定讀取已提交的 winner：payload 相同時 replay winner；payload 不同時回傳 `422`，不會將底層 duplicate-key 例外變成 `500`。
+
 異動會寫入 `subject_type=salary_profile` 的 Audit Log；metadata 只記錄對象與異動欄位名稱，不複製底薪、津貼或扣款金額值。
 
 ### GET /api/commission-plans
@@ -950,6 +952,8 @@ Request body：
 ```
 
 比例皆使用 0～10000 basis points。tiers 至少一級、第一級必須從 1 台開始，`min_sales_count` 必須依序遞增且不可重複；任一級的 `purchase_bonus_bps + sales_bonus_bps` 不得超過分配池 100%。`sort_order` 由後端依陣列順序產生，禁止前端寫入。
+
+若 request 層 unique 驗證後仍因並發撞上方案名稱 unique constraint，Service 會先 rollback，再於新 transaction 確認已提交的同名 winner，並回傳 `422 name` 驗證錯誤；其他 QueryException 不會被誤轉成重名錯誤。
 
 月份選取規則：只考慮 `is_active=true` 且 `effective_from <= period_month` 的方案，選擇生效日最新者；若同一生效日有多個方案，以較新的 `id` 決定，確保結果 deterministic。
 
