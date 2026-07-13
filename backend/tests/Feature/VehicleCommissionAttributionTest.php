@@ -12,6 +12,7 @@ use App\Models\SalarySettlement;
 use App\Models\SalarySettlementItem;
 use App\Models\User;
 use App\Models\Vehicle;
+use Database\Seeders\AdminUserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
@@ -21,29 +22,43 @@ class VehicleCommissionAttributionTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_agent_options_only_include_active_users_with_active_commission_profiles(): void
+    public function test_agent_options_include_active_users_without_exposing_commission_status_and_sales_cannot_read(): void
     {
         $admin = User::factory()->admin()->create();
-        $eligible = $this->eligibleAgent(['name' => '符合資格']);
-        $disabledCommission = $this->eligibleAgent(['name' => '不參與獎金']);
-        $disabledCommission->salaryProfile->update(['commission_enabled' => false]);
-        $inactiveUser = $this->eligibleAgent(['name' => '停用帳號', 'is_active' => false]);
-        $inactiveProfile = $this->eligibleAgent(['name' => '停用薪資設定']);
-        $inactiveProfile->salaryProfile->update(['is_active' => false]);
+        $withoutProfile = User::factory()->create(['name' => '尚未設定薪資']);
+        $disabledCommission = User::factory()->create(['name' => '不參與獎金']);
+        SalaryProfile::query()->create([
+            'user_id' => $disabledCommission->id,
+            'commission_enabled' => false,
+            'is_active' => true,
+        ]);
+        $inactiveUser = User::factory()->create(['name' => '停用帳號', 'is_active' => false]);
+        $sales = User::factory()->sales()->create();
+        $manager = User::factory()->manager()->create();
 
         $response = $this->actingAs($admin, 'web')
             ->getJson('/api/vehicles/commission-agent-options')
             ->assertOk();
 
-        $this->assertSame([$eligible->id], collect($response->json('data'))->pluck('id')->all());
-        $this->assertNotContains($inactiveUser->id, collect($response->json('data'))->pluck('id')->all());
+        $ids = collect($response->json('data'))->pluck('id');
+        $this->assertContains($withoutProfile->id, $ids);
+        $this->assertContains($disabledCommission->id, $ids);
+        $this->assertNotContains($inactiveUser->id, $ids);
+        $response->assertJsonMissingPath('data.0.commission_enabled');
+
+        Auth::forgetGuards();
+        $this->actingAs($sales, 'web')->getJson('/api/vehicles/commission-agent-options')->assertForbidden();
+
+        Auth::forgetGuards();
+        $this->actingAs($manager, 'web')->getJson('/api/vehicles/commission-agent-options')->assertOk();
     }
 
-    public function test_vehicle_creation_requires_eligible_purchase_agent_and_idempotency_compares_agent(): void
+    public function test_vehicle_creation_accepts_active_agent_without_salary_profile_and_idempotency_compares_agent(): void
     {
         $admin = User::factory()->admin()->create();
-        $firstAgent = $this->eligibleAgent();
-        $secondAgent = $this->eligibleAgent();
+        $firstAgent = User::factory()->create();
+        $secondAgent = User::factory()->create();
+        $inactiveAgent = User::factory()->create(['is_active' => false]);
         $key = (string) Str::uuid();
         $payload = [
             'brand' => 'Toyota',
@@ -67,14 +82,35 @@ class VehicleCommissionAttributionTest extends TestCase
             ...$payload,
             'license_plate' => 'ATTR-002',
             'idempotency_key' => (string) Str::uuid(),
-            'purchase_agent_id' => $admin->id,
+            'purchase_agent_id' => $inactiveAgent->id,
         ])->assertUnprocessable()->assertJsonValidationErrors('purchase_agent_id');
     }
 
-    public function test_sales_reservation_assigns_self_and_admin_must_choose_agent_with_idempotency_conflict_protection(): void
+    public function test_fresh_seeded_admin_can_create_first_vehicle_without_salary_profile_bootstrap(): void
     {
-        $sales = $this->eligibleAgent(['role' => User::ROLE_SALES]);
-        $otherAgent = $this->eligibleAgent();
+        $this->seed(AdminUserSeeder::class);
+        $admin = User::query()->where('email', 'admin@example.com')->firstOrFail();
+
+        $this->assertDatabaseMissing('salary_profiles', ['user_id' => $admin->id]);
+
+        $this->actingAs($admin, 'web')->postJson('/api/vehicles', [
+            'brand' => 'Toyota',
+            'model' => 'Camry',
+            'license_plate' => 'BOOT-001',
+            'purchase_agent_id' => $admin->id,
+            'idempotency_key' => (string) Str::uuid(),
+        ])->assertCreated()->assertJsonPath('data.purchase_agent_id', $admin->id);
+    }
+
+    public function test_non_commission_sales_can_reserve_as_self_and_admin_must_choose_active_agent_with_idempotency_protection(): void
+    {
+        $sales = User::factory()->sales()->create();
+        SalaryProfile::query()->create([
+            'user_id' => $sales->id,
+            'commission_enabled' => false,
+            'is_active' => true,
+        ]);
+        $otherAgent = User::factory()->create();
         $admin = User::factory()->admin()->create();
         $manager = User::factory()->manager()->create();
         $account = CashAccount::factory()->create(['is_active' => true]);
@@ -84,6 +120,14 @@ class VehicleCommissionAttributionTest extends TestCase
         $this->actingAs($sales, 'web')->postJson("/api/vehicles/{$salesVehicle->id}/reserve", $payload)
             ->assertSuccessful()
             ->assertJsonPath('data.sales_agent_id', $sales->id);
+
+        Auth::forgetGuards();
+        $salesWithoutProfile = User::factory()->sales()->create();
+        $salesWithoutProfileVehicle = Vehicle::factory()->create(['status' => 'listed']);
+        $this->actingAs($salesWithoutProfile, 'web')
+            ->postJson("/api/vehicles/{$salesWithoutProfileVehicle->id}/reserve", $this->reservationPayload($account))
+            ->assertSuccessful()
+            ->assertJsonPath('data.sales_agent_id', $salesWithoutProfile->id);
 
         $adminVehicle = Vehicle::factory()->create(['status' => 'listed']);
         Auth::forgetGuards();
@@ -161,8 +205,8 @@ class VehicleCommissionAttributionTest extends TestCase
         $admin = User::factory()->admin()->create();
         $manager = User::factory()->manager()->create();
         $sales = User::factory()->sales()->create();
-        $purchaseAgent = $this->eligibleAgent();
-        $salesAgent = $this->eligibleAgent();
+        $purchaseAgent = User::factory()->create();
+        $salesAgent = User::factory()->create();
         $vehicle = Vehicle::factory()->create([
             'status' => 'sold',
             'sold_at' => '2026-06-15',
@@ -201,7 +245,7 @@ class VehicleCommissionAttributionTest extends TestCase
     public function test_confirmed_or_paid_salary_period_reference_locks_vehicle_attribution(): void
     {
         $admin = User::factory()->admin()->create();
-        $agent = $this->eligibleAgent();
+        $agent = User::factory()->create();
         $vehicle = Vehicle::factory()->create(['status' => 'sold']);
         $plan = CommissionPlan::query()->create([
             'name' => '測試方案',
@@ -232,22 +276,6 @@ class VehicleCommissionAttributionTest extends TestCase
         $this->actingAs($admin, 'web')->patchJson("/api/vehicles/{$vehicle->id}/commission-attribution", [
             'purchase_agent_id' => $agent->id,
         ])->assertUnprocessable()->assertJsonValidationErrors('commission_attribution');
-    }
-
-    private function eligibleAgent(array $attributes = []): User
-    {
-        $user = User::factory()->create($attributes);
-        SalaryProfile::query()->create([
-            'user_id' => $user->id,
-            'base_salary' => 0,
-            'fixed_allowance' => 0,
-            'labor_insurance_deduction' => 0,
-            'health_insurance_deduction' => 0,
-            'commission_enabled' => true,
-            'is_active' => true,
-        ]);
-
-        return $user->load('salaryProfile');
     }
 
     private function reservationPayload(CashAccount $account): array

@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\CashAccount;
 use App\Models\MoneyEntry;
-use App\Models\SalaryProfile;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Services\VehicleService;
@@ -34,11 +33,6 @@ class VehicleCreateMysqlConcurrencyTest extends TestCase
         $this->artisan('migrate:fresh')->run();
 
         $user = User::factory()->create(['is_active' => true]);
-        SalaryProfile::query()->create([
-            'user_id' => $user->id,
-            'commission_enabled' => true,
-            'is_active' => true,
-        ]);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
         $payload = [
             'brand' => 'Toyota',

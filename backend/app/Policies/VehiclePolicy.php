@@ -94,7 +94,7 @@ class VehiclePolicy
 
     public function viewCommissionAgentOptions(User $user): bool
     {
-        return $user->hasAnyRole(User::ROLES);
+        return $user->hasAnyRole([User::ROLE_ADMIN, User::ROLE_MANAGER]);
     }
 
     public function viewPendingCommissionAttribution(User $user): bool

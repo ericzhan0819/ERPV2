@@ -194,9 +194,11 @@ export function VehicleDetail() {
     listCashAccountOptions()
       .then(setCashAccounts)
       .catch(() => undefined)
-    listCommissionAgentOptions()
-      .then(setCommissionAgents)
-      .catch(() => setCommissionAgents([]))
+    if (user?.role === 'admin' || user?.role === 'manager') {
+      listCommissionAgentOptions()
+        .then(setCommissionAgents)
+        .catch(() => setCommissionAgents([]))
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 

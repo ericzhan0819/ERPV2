@@ -2,7 +2,6 @@
 
 namespace Tests\Concerns;
 
-use App\Models\SalaryProfile;
 use App\Models\User;
 use App\Models\Vehicle;
 
@@ -13,7 +12,6 @@ trait UsesCommissionAttributionFixtures
     protected function setUpCommissionAttributionFixtures(): void
     {
         $this->defaultCommissionAgent = User::factory()->manager()->create();
-        $this->enableCommissionFor($this->defaultCommissionAgent);
     }
 
     /** @param array<string, mixed> $data */
@@ -26,7 +24,6 @@ trait UsesCommissionAttributionFixtures
         if (preg_match('#^/api/vehicles/(\d+)/reserve$#', $uri)) {
             $actor = auth()->user();
             if ($actor instanceof User) {
-                $this->enableCommissionFor($actor);
                 if (! $actor->isSales()) {
                     $data['sales_agent_id'] ??= $this->defaultCommissionAgent->id;
                 }
@@ -40,17 +37,5 @@ trait UsesCommissionAttributionFixtures
         }
 
         return $data;
-    }
-
-    protected function enableCommissionFor(User $user): void
-    {
-        SalaryProfile::query()->firstOrCreate(['user_id' => $user->id], [
-            'base_salary' => 0,
-            'fixed_allowance' => 0,
-            'labor_insurance_deduction' => 0,
-            'health_insurance_deduction' => 0,
-            'commission_enabled' => true,
-            'is_active' => true,
-        ]);
     }
 }

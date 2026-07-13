@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 4 部分完成後最新完整回歸為 405 tests、1658 assertions、6 skipped，其中 6 個 skipped 是需專用環境或安全旗標的既有測試。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 4 部分 review 修正後最新完整回歸為 406 tests、1667 assertions、6 skipped，其中 6 個 skipped 是需專用環境或安全旗標的既有測試。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
 
 ---
 
@@ -362,8 +362,9 @@ v1.3 第 1～4 部分已補齊：
 - 薪資設定稽核只記對象與異動欄位名稱，不複製底薪、津貼、保險扣款金額值。
 - Salary Profile 首次建立與 Commission Plan 重名建立的 duplicate-key race 皆會在 rollback 後開新 transaction 讀取 winner；相同 profile payload 可 replay，不同內容／重名方案回 422，不再外洩成 500。
 - `SalarySettingsMysqlConcurrencyTest` 使用 `pcntl_fork`、socket barrier 與真正獨立 MariaDB connections 驅動兩個 Service 公開方法；只有在測試環境、connection／database allowlist、明確可拋棄資料庫名稱與 `RUN_MYSQL_CONCURRENCY_TESTS=1` 同時成立時才允許 `migrate:fresh`。
-- 建車時 admin／manager 必須指定啟用且參與獎金的收車人；建車冪等快照包含 `purchase_agent_id`。
-- 保留銷售流程由 sales 安全歸屬本人，admin／manager 代登必須指定實際賣車人；reservation 冪等比對包含 `sales_agent_id`，成交結案前不得缺少賣車人。
+- 建車時 admin／manager 必須指定 active 收車人；建車冪等快照包含 `purchase_agent_id`。事實歸屬不依賴 Salary Profile，fresh seed 或 v1.2 升級後不會因尚未設定薪資而鎖死建車。
+- 保留銷售流程由 sales 安全歸屬本人，admin／manager 代登必須指定 active 實際賣車人；reservation 冪等比對包含 `sales_agent_id`，成交結案前不得缺少賣車人。未設定薪資或 `commission_enabled=false` 不阻斷銷售，獎金資格留待結算判斷。
+- 獎金人員選項只開放 admin／manager，sales 不需選人且無法藉此取得薪資設定衍生名單。
 - admin 可由待補清單人工補登歷史已售車輛歸屬；manager／sales 403，confirmed／paid 月份引用後鎖定，異動寫入 Audit Log。
 
 後續仍待實作：

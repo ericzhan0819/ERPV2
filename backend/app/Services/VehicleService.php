@@ -6,7 +6,6 @@ use App\Models\CashAccount;
 use App\Models\Customer;
 use App\Models\MoneyEntry;
 use App\Models\SalaryPeriod;
-use App\Models\SalaryProfile;
 use App\Models\SalarySettlementItem;
 use App\Models\User;
 use App\Models\Vehicle;
@@ -244,7 +243,7 @@ class VehicleService
             return $this->replayOrRejectVehicleCreation($existingVehicle, $effectiveData);
         }
 
-        $this->assertCommissionAgentsEligible([
+        $this->assertCommissionAgentsActive([
             'purchase_agent_id' => (int) $effectiveData['vehicle']['purchase_agent_id'],
         ]);
 
@@ -653,7 +652,7 @@ class VehicleService
             ->firstOrFail();
 
         $this->assertStatus($lockedVehicle, 'listed', '只有上架中的車輛可以收訂金並保留');
-        $this->assertCommissionAgentsEligible(['sales_agent_id' => $effectiveData['sales_agent_id']]);
+        $this->assertCommissionAgentsActive(['sales_agent_id' => $effectiveData['sales_agent_id']]);
         $this->assertCashAccountActive($effectiveData['cash_account_id']);
         $effectiveData = $this->applyBuyerCustomerSnapshot($effectiveData);
 
@@ -1047,9 +1046,6 @@ class VehicleService
         return User::query()
             ->select(['id', 'name', 'role'])
             ->where('is_active', true)
-            ->whereHas('salaryProfile', fn ($query) => $query
-                ->where('is_active', true)
-                ->where('commission_enabled', true))
             ->orderBy('name')
             ->orderBy('id')
             ->get();
@@ -1088,7 +1084,7 @@ class VehicleService
                 ]);
             }
 
-            $this->assertCommissionAgentsEligible($data);
+            $this->assertCommissionAgentsActive($data);
             $lockedVehicle->fill($data);
             $lockedVehicle->updated_by = $userId;
             $lockedVehicle->save();
@@ -1116,17 +1112,11 @@ class VehicleService
     }
 
     /** @param array<string, int> $agentsByField */
-    private function assertCommissionAgentsEligible(array $agentsByField): void
+    private function assertCommissionAgentsActive(array $agentsByField): void
     {
         $agentIds = array_values(array_unique(array_map('intval', $agentsByField)));
         sort($agentIds);
 
-        $profiles = SalaryProfile::query()
-            ->whereIn('user_id', $agentIds)
-            ->orderBy('user_id')
-            ->lockForUpdate()
-            ->get()
-            ->keyBy('user_id');
         $users = User::query()
             ->whereKey($agentIds)
             ->orderBy('id')
@@ -1136,11 +1126,9 @@ class VehicleService
 
         foreach ($agentsByField as $field => $agentId) {
             $user = $users->get((int) $agentId);
-            $profile = $profiles->get((int) $agentId);
-
-            if (! $user?->is_active || ! $profile?->is_active || ! $profile?->commission_enabled) {
+            if (! $user?->is_active) {
                 throw ValidationException::withMessages([
-                    $field => ['指定人員必須為啟用中且已啟用獎金的員工'],
+                    $field => ['指定人員必須為啟用中的員工'],
                 ]);
             }
         }
