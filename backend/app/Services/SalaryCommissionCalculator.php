@@ -8,7 +8,6 @@ use App\Models\MoneyEntry;
 use App\Models\Vehicle;
 use App\Support\CommissionPlanRules;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use OverflowException;
 
@@ -20,24 +19,33 @@ final class SalaryCommissionCalculator
      * Calculate commissions for one month's already-eligible sold vehicles.
      *
      * Eligibility is deliberately outside this calculator. The caller must pass
-     * exactly one period's eligible vehicles; this calculator performs no silent
-     * filtering and only reads approved money entries for those vehicles.
+     * exactly one period's eligible vehicles and the agents whose salary profiles
+     * enable commission. This calculator performs no silent filtering and only
+     * reads approved money entries for those vehicles.
      *
      * @param  iterable<int, Vehicle>  $vehicles
+     * @param  iterable<int, int>  $commissionEnabledAgentIds
      * @return array{
-     *     vehicles: array<int, array<string, int>>,
+     *     vehicles: array<int, array<string, int|bool>>,
      *     sales_agents: array<int, array<string, int|null>>,
      *     totals: array<string, int>
      * }
      */
-    public function calculate(CommissionPlan $plan, iterable $vehicles): array
-    {
+    public function calculate(
+        CommissionPlan $plan,
+        string $periodMonth,
+        iterable $vehicles,
+        iterable $commissionEnabledAgentIds,
+    ): array {
         $tiers = $this->validatedTiers($plan);
+        $periodMonth = $this->validatedPeriodMonth($periodMonth);
         $vehicles = collect($vehicles)->values()->sortBy('id')->values();
-        $this->assertValidVehicleSet($vehicles);
+        $this->assertValidVehicleSet($vehicles, $periodMonth);
+        $commissionEnabledAgentIds = $this->commissionEnabledAgentIdSet($commissionEnabledAgentIds);
 
         $moneyTotals = $this->approvedMoneyTotals($vehicles->pluck('id')->all());
         $salesCounts = $vehicles
+            ->filter(fn (Vehicle $vehicle): bool => isset($commissionEnabledAgentIds[(int) $vehicle->sales_agent_id]))
             ->countBy(fn (Vehicle $vehicle): int => (int) $vehicle->sales_agent_id);
 
         $salesAgents = [];
@@ -58,12 +66,16 @@ final class SalaryCommissionCalculator
             $salesAgentId = (int) $vehicle->sales_agent_id;
             $incomeTotal = $moneyTotals[$vehicleId]['income'] ?? 0;
             $expenseTotal = $moneyTotals[$vehicleId]['expense'] ?? 0;
-            $salesBonusBps = $salesAgents[$salesAgentId]['sales_bonus_bps'];
+            $purchaseBonusEligible = isset($commissionEnabledAgentIds[(int) $vehicle->purchase_agent_id]);
+            $salesBonusEligible = isset($commissionEnabledAgentIds[$salesAgentId]);
+            $salesBonusBps = $salesBonusEligible
+                ? $salesAgents[$salesAgentId]['sales_bonus_bps']
+                : 0;
             $amounts = $this->calculateVehicleAmounts(
                 $incomeTotal,
                 $expenseTotal,
                 (int) $plan->company_reserve_bps,
-                (int) $plan->purchase_bonus_bps,
+                $purchaseBonusEligible ? (int) $plan->purchase_bonus_bps : 0,
                 $salesBonusBps,
             );
 
@@ -71,27 +83,35 @@ final class SalaryCommissionCalculator
                 'vehicle_id' => $vehicleId,
                 'purchase_agent_id' => (int) $vehicle->purchase_agent_id,
                 'sales_agent_id' => $salesAgentId,
+                'purchase_bonus_eligible' => $purchaseBonusEligible,
+                'sales_bonus_eligible' => $salesBonusEligible,
                 ...$amounts,
             ];
 
-            $salesAgents[$salesAgentId]['sales_bonus_total'] = $this->safeAdd(
-                $salesAgents[$salesAgentId]['sales_bonus_total'],
-                $amounts['sales_bonus'],
-            );
-
-            $nextTierBps = $salesAgents[$salesAgentId]['next_tier_sales_bonus_bps'];
-            if ($nextTierBps !== null && $amounts['distributable_pool'] > 0) {
-                $nextTierBonus = $this->basisPointsOf($amounts['distributable_pool'], $nextTierBps);
-                $increase = $nextTierBonus - $amounts['sales_bonus'];
-                $salesAgents[$salesAgentId]['tier_upgrade_estimated_increase'] = $this->safeAdd(
-                    $salesAgents[$salesAgentId]['tier_upgrade_estimated_increase'],
-                    $increase,
+            if ($salesBonusEligible) {
+                $salesAgents[$salesAgentId]['sales_bonus_total'] = $this->safeAdd(
+                    $salesAgents[$salesAgentId]['sales_bonus_total'],
+                    $amounts['sales_bonus'],
                 );
+
+                $nextTierBps = $salesAgents[$salesAgentId]['next_tier_sales_bonus_bps'];
+                if ($nextTierBps !== null && $amounts['distributable_pool'] > 0) {
+                    $nextTierBonus = $this->basisPointsOf($amounts['distributable_pool'], $nextTierBps);
+                    $increase = $nextTierBonus - $amounts['sales_bonus'];
+                    $salesAgents[$salesAgentId]['tier_upgrade_estimated_increase'] = $this->safeAdd(
+                        $salesAgents[$salesAgentId]['tier_upgrade_estimated_increase'],
+                        $increase,
+                    );
+                }
             }
 
             foreach ($totals as $field => $total) {
                 $totals[$field] = $this->safeAdd($total, $amounts[$field]);
             }
+        }
+
+        if ($this->safeAdd($totals['company_net'], $this->safeAdd($totals['purchase_bonus'], $totals['sales_bonus'])) !== $totals['gross_profit']) {
+            throw new OverflowException('批次毛利分配加總不一致');
         }
 
         ksort($vehicleResults);
@@ -143,6 +163,8 @@ final class SalaryCommissionCalculator
 
         $grossProfit = $this->safeSubtract($incomeTotal, $expenseTotal);
         if ($grossProfit <= 0) {
+            $lossTotal = $grossProfit < 0 ? -$grossProfit : 0;
+
             return [
                 'income_total' => $incomeTotal,
                 'expense_total' => $expenseTotal,
@@ -155,6 +177,8 @@ final class SalaryCommissionCalculator
                 'sales_bonus' => 0,
                 'company_remaining' => 0,
                 'company_total' => 0,
+                'loss_total' => $lossTotal,
+                'company_net' => $grossProfit,
             ];
         }
 
@@ -181,6 +205,8 @@ final class SalaryCommissionCalculator
             'sales_bonus' => $salesBonus,
             'company_remaining' => $companyRemaining,
             'company_total' => $companyTotal,
+            'loss_total' => 0,
+            'company_net' => $companyTotal,
         ];
     }
 
@@ -204,7 +230,7 @@ final class SalaryCommissionCalculator
     }
 
     /** @param Collection<int, Vehicle> $vehicles */
-    private function assertValidVehicleSet(Collection $vehicles): void
+    private function assertValidVehicleSet(Collection $vehicles, string $periodMonth): void
     {
         $ids = [];
         foreach ($vehicles as $vehicle) {
@@ -213,6 +239,9 @@ final class SalaryCommissionCalculator
             }
             if ($vehicle->purchase_agent_id === null || $vehicle->sales_agent_id === null) {
                 throw new InvalidArgumentException("車輛 {$vehicle->getKey()} 缺少收車人或賣車人歸屬");
+            }
+            if ($vehicle->sold_at === null || $vehicle->sold_at->format('Y-m') !== $periodMonth) {
+                throw new InvalidArgumentException("車輛 {$vehicle->getKey()} 的成交月份不屬於 {$periodMonth}");
             }
             if (isset($ids[$vehicle->getKey()])) {
                 throw new InvalidArgumentException("車輛 {$vehicle->getKey()} 不可重複計算");
@@ -231,17 +260,15 @@ final class SalaryCommissionCalculator
             return [];
         }
 
-        $rows = DB::table('money_entries')
+        $rows = MoneyEntry::query()
+            ->approved()
             ->whereIn('vehicle_id', $vehicleIds)
-            ->where('approval_status', MoneyEntry::APPROVAL_APPROVED)
+            ->select(['vehicle_id', 'direction'])
+            ->selectRaw('SUM(amount) as total')
             ->groupBy('vehicle_id', 'direction')
             ->orderBy('vehicle_id')
             ->orderBy('direction')
-            ->get([
-                'vehicle_id',
-                'direction',
-                DB::raw('SUM(amount) as total'),
-            ]);
+            ->get();
 
         $totals = [];
         foreach ($rows as $row) {
@@ -253,6 +280,32 @@ final class SalaryCommissionCalculator
         }
 
         return $totals;
+    }
+
+    private function validatedPeriodMonth(string $periodMonth): string
+    {
+        if (preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $periodMonth) !== 1) {
+            throw new InvalidArgumentException('結算月份必須使用 YYYY-MM 格式');
+        }
+
+        return $periodMonth;
+    }
+
+    /**
+     * @param  iterable<int, int>  $agentIds
+     * @return array<int, true>
+     */
+    private function commissionEnabledAgentIdSet(iterable $agentIds): array
+    {
+        $set = [];
+        foreach ($agentIds as $agentId) {
+            if (! is_int($agentId) || $agentId <= 0) {
+                throw new InvalidArgumentException('啟用佣金的人員 ID 必須是正整數');
+            }
+            $set[$agentId] = true;
+        }
+
+        return $set;
     }
 
     /** @param Collection<int, CommissionPlanTier> $tiers */
@@ -351,6 +404,8 @@ final class SalaryCommissionCalculator
             'sales_bonus' => 0,
             'company_remaining' => 0,
             'company_total' => 0,
+            'loss_total' => 0,
+            'company_net' => 0,
         ];
     }
 }
