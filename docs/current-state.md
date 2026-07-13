@@ -1,10 +1,10 @@
-# ERPV2 current-state — v1.2 已封版，v1.3 第 4 部分完成
+# ERPV2 current-state — v1.2 已封版，v1.3 第 5 部分完成
 
 日期：2026-07-13
 專案：ERPV2 / 中古車行內部營運系統
 目前穩定點：`b1edffa docs: 完成 v1.2 smoke 封版與交接文件`
 目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`
-狀態：v1.2 已完成並封版。v1.3「薪資結算」已完成 `PLAN_v1.3.md` 第 0～4 部分：前置盤點、薪資 schema、完整 Model、初始與版本化獎金方案、admin-only 薪資設定／獎金方案 API、車輛收／賣車人正式歸屬流程與 salary MoneyEntry 保護；第 5 部分之後的計算、結算、發薪、薪資管理前端與 Smoke 尚未開始。
+狀態：v1.2 已完成並封版。v1.3「薪資結算」已完成 `PLAN_v1.3.md` 第 0～5 部分：前置盤點、薪資 schema、完整 Model、初始與版本化獎金方案、admin-only 薪資設定／獎金方案 API、車輛收／賣車人正式歸屬流程、salary MoneyEntry 保護與 approved-only 整月跨級獎金計算器；第 6 部分之後的資格檢查、結算、發薪、薪資管理前端與 Smoke 尚未開始。
 
 ---
 
@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 4 部分 review 修正後最新完整回歸為 406 tests、1667 assertions、6 skipped，其中 6 個 skipped 是需專用環境或安全旗標的既有測試。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 5 部分最新完整回歸為 416 tests、1722 assertions、6 skipped，其中 6 個 skipped 是需專用環境或安全旗標的既有測試。第 5 部分未修改前端；最近一次第 4 部分 frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
 
 ---
 
@@ -348,7 +348,7 @@ v1.3 已鎖定為「薪資結算」，不是完整 HR。核心規則：
 
 v1.3 另包含底薪、固定津貼、勞保扣款、健保扣款、手動加扣項、每月草稿／確認／發薪，以及發薪後自動建立 `薪資 / 佣金` Money Entry。
 
-v1.3 第 1～4 部分已補齊：
+v1.3 第 1～5 部分已補齊：
 
 - `salary_profiles`、`commission_plans`／`commission_plan_tiers`、`salary_periods`、`salary_settlements`、`salary_settlement_items`。
 - Vehicle 正式 `purchase_agent_id`／`sales_agent_id`，歷史資料保持空值，不做 heuristic backfill。
@@ -366,10 +366,14 @@ v1.3 第 1～4 部分已補齊：
 - 保留銷售流程由 sales 安全歸屬本人，admin／manager 代登必須指定 active 實際賣車人；reservation 冪等比對包含 `sales_agent_id`，成交結案前不得缺少賣車人。未設定薪資或 `commission_enabled=false` 不阻斷銷售，獎金資格留待結算判斷。
 - 獎金人員選項只開放 admin／manager，sales 不需選人且無法藉此取得薪資設定衍生名單。
 - admin 可由待補清單人工補登歷史已售車輛歸屬；manager／sales 403，confirmed／paid 月份引用後鎖定，異動寫入 Audit Log。
+- `SalaryCommissionCalculator` 只讀取傳入 eligible 車輛的 approved MoneyEntry，集中計算毛利、公司保留、分配池、收車／賣車獎金、公司剩餘與公司最終取得。
+- 賣車級距依同一批月份 eligible 車輛按 `sales_agent_id` 分組，從 `CommissionPlanTier` 選取 0／1／3／5 台級距並整批追溯套用，不採逐台 marginal tier。
+- 計算結果包含距下一級台數與既有車輛跨級後預估增加額；所有比例使用 basis points 並向下取整，餘數歸公司。
+- 大額比例以商數／餘數拆算，避免 `amount × bps` 中間乘法 overflow；超出 PHP 安全整數範圍的彙總會明確拒絕，不會靜默截斷。
 
 後續仍待實作：
 
-- approved-only 計算器、月份草稿／確認／發薪與批次 idempotency。
+- 薪資資格與異常檢查、月份草稿／確認／發薪與批次 idempotency。
 - 薪資管理前端與完整 manual smoke。
 
 Website MVP 延後到 v1.3 完成或進入正式部署準備時再獨立規劃，不得混入薪資結算。
