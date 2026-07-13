@@ -1,10 +1,10 @@
-# ERPV2 current-state — v1.2 已封版，v1.3 薪資資料模型完成
+# ERPV2 current-state — v1.2 已封版，v1.3 第 3 部分完成
 
 日期：2026-07-13
 專案：ERPV2 / 中古車行內部營運系統
 目前穩定點：`b1edffa docs: 完成 v1.2 smoke 封版與交接文件`
 目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`
-狀態：v1.2 已完成並封版。v1.3「薪資結算」已完成 `PLAN_v1.3.md` 第 0、1 部分：前置盤點、薪資 schema、初始獎金方案、車輛收／賣車人欄位與 salary MoneyEntry 保護；第 2 部分之後的完整 Model、Service、API、前端與 Smoke 尚未開始。
+狀態：v1.2 已完成並封版。v1.3「薪資結算」已完成 `PLAN_v1.3.md` 第 0～3 部分：前置盤點、薪資 schema、完整 Model、初始與版本化獎金方案、admin-only 薪資設定／獎金方案 API、車輛收／賣車人欄位與 salary MoneyEntry 保護；第 4 部分之後的車輛歸屬流程、計算、結算、發薪、前端與 Smoke 尚未開始。
 
 ---
 
@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 Phase 1 完成後最新完整回歸為 370 tests、1496 assertions、4 skipped，frontend lint／typecheck／production build 通過。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 3 部分完成後最新完整回歸為 394 tests、1608 assertions、4 skipped，frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
 
 ---
 
@@ -348,17 +348,21 @@ v1.3 已鎖定為「薪資結算」，不是完整 HR。核心規則：
 
 v1.3 另包含底薪、固定津貼、勞保扣款、健保扣款、手動加扣項、每月草稿／確認／發薪，以及發薪後自動建立 `薪資 / 佣金` Money Entry。
 
-v1.3 Phase 1 已補齊：
+v1.3 第 1～3 部分已補齊：
 
 - `salary_profiles`、`commission_plans`／`commission_plan_tiers`、`salary_periods`、`salary_settlements`、`salary_settlement_items`。
 - Vehicle 正式 `purchase_agent_id`／`sales_agent_id`，歷史資料保持空值，不做 heuristic backfill。
 - 使用者刪除前置檢查涵蓋 Vehicle 的收車／賣車歸屬，已有歸屬時回傳 422 並要求改為停用。
 - `2026 標準薪資方案` Seeder，可重跑且已使用方案不會被覆寫。
 - `salary_settlement` MoneyEntry source type、一般 CRUD／approval 保護與 manager／sales 查詢遮蔽。
+- `SalaryProfile`、`CommissionPlan`／Tier、`SalaryPeriod`、`SalarySettlement`／Item 完整 fillable、casts、狀態／type 常數與上下游關聯。
+- admin-only `GET/PUT salary-profiles` 與 `GET/POST commission-plans` API；manager、sales、未知角色皆 fail-closed 403。
+- Salary Profile 只接受非負整數金額；停用使用者不能啟用薪資設定，且既有 confirmed／paid snapshot 不受目前設定修改影響。
+- Commission Plan tiers 由集中規則驗證，方案不提供修改／刪除 API；月份採「最新有效生效日、同日較新 id」的 deterministic 選取規則。
+- 薪資設定稽核只記對象與異動欄位名稱，不複製底薪、津貼、保險扣款金額值。
 
 後續仍待實作：
 
-- 薪資 Models 完整 casts／關聯、設定與獎金方案 Service／API。
 - 新車／銷售流程歸屬寫入、歷史車輛 admin 人工補資料流程。
 - approved-only 計算器、月份草稿／確認／發薪與批次 idempotency。
 - 薪資管理前端與完整 manual smoke。

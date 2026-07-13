@@ -11,9 +11,13 @@ class AuditLog extends Model
     public const UPDATED_AT = null;
 
     public const ACTION_CREATED = 'created';
+
     public const ACTION_UPDATED = 'updated';
+
     public const ACTION_DELETED = 'deleted';
+
     public const ACTION_LOGIN = 'login';
+
     public const ACTION_LOGOUT = 'logout';
 
     public const ACTIONS = [
@@ -32,6 +36,8 @@ class AuditLog extends Model
         'cash_account',
         'customer',
         'authentication',
+        'salary_profile',
+        'commission_plan',
     ];
 
     protected $fillable = [

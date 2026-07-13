@@ -1,4 +1,4 @@
-# API 文件 — 中古車行內部營運系統（1.0 + v1.1 + v1.2 + v1.3 Phase 1）
+# API 文件 — 中古車行內部營運系統（1.0 + v1.1 + v1.2 + v1.3 第 3 部分）
 
 Base URL：`http://localhost:8000`（依 `.env` `APP_URL` 而定）
 
@@ -719,7 +719,7 @@ Query 參數：
 |---|---|---|
 | actor_id | int | 操作者使用者 ID |
 | action | string | `created`／`updated`／`deleted`／`login`／`logout` |
-| subject_type | string | `user`／`vehicle`／`money_entry`／`cash_account`／`customer`／`authentication` |
+| subject_type | string | `user`／`vehicle`／`money_entry`／`cash_account`／`customer`／`salary_profile`／`commission_plan`／`authentication` |
 | date_from | date | 起始日期 |
 | date_to | date | 結束日期，不得早於 `date_from` |
 | search | string | 操作者姓名／Email 或操作對象模糊搜尋 |
@@ -892,3 +892,67 @@ Query 參數：
 ```
 
 `PublicVehicleListResource` 欄位相同，但不含 `photos`（只有 `cover_photo`）。
+
+---
+
+## 15. Salary Profiles 與 Commission Plans（v1.3，僅限管理員）
+
+本節端點皆位於 `auth:sanctum` + `active` + `role:admin` 下，並另由 Policy 採 admin 白名單授權。`manager`、`sales` 與未知角色一律回傳 `403`，無法透過列表或 ID 枚舉取得薪資設定與獎金方案。
+
+### GET /api/salary-profiles
+
+回傳所有已建立的員工薪資設定，依 `user_id` 排序。金額皆為非負整數新台幣；回應只使用 `SalaryProfileResource` 白名單，不含任何結算 snapshot、實發薪資或內部計算結果。
+
+### PUT /api/salary-profiles/{user}
+
+新增或完整更新指定使用者目前的薪資設定。成功固定回傳 `200`。停用中的使用者只能保存 `is_active=false` 的非啟用設定，不可建立／啟用 active salary profile。
+
+Request body：
+
+```json
+{
+  "base_salary": 35000,
+  "fixed_allowance": 1200,
+  "labor_insurance_deduction": 800,
+  "health_insurance_deduction": 600,
+  "commission_enabled": true,
+  "is_active": true
+}
+```
+
+所有欄位必填；四個金額欄位必須是大於等於 0 的整數。`user_id`、結算 totals、歷史 snapshot 等系統欄位禁止由前端寫入。修改目前設定不會回改既有 confirmed／paid settlement snapshot。
+
+異動會寫入 `subject_type=salary_profile` 的 Audit Log；metadata 只記錄對象與異動欄位名稱，不複製底薪、津貼或扣款金額值。
+
+### GET /api/commission-plans
+
+回傳所有獎金方案、tiers、建立者與 `is_used`，依 `effective_from`、`id` 由新到舊排序。已被 salary period 引用的方案 `is_used=true`。
+
+### POST /api/commission-plans
+
+建立新的版本化獎金方案。成功回傳 `201`。方案不提供 update／delete API；規則異動必須建立新名稱、新生效日的方案，避免覆寫歷史。DB trigger 另會阻擋已被 salary period 引用方案的計算欄位或 tiers 異動。
+
+Request body：
+
+```json
+{
+  "name": "2027 薪資方案",
+  "effective_from": "2027-01-01",
+  "company_reserve_bps": 4000,
+  "purchase_bonus_bps": 2000,
+  "is_active": true,
+  "tiers": [
+    { "min_sales_count": 1, "sales_bonus_bps": 2000 },
+    { "min_sales_count": 3, "sales_bonus_bps": 3000 },
+    { "min_sales_count": 5, "sales_bonus_bps": 5000 }
+  ]
+}
+```
+
+比例皆使用 0～10000 basis points。tiers 至少一級、第一級必須從 1 台開始，`min_sales_count` 必須依序遞增且不可重複；任一級的 `purchase_bonus_bps + sales_bonus_bps` 不得超過分配池 100%。`sort_order` 由後端依陣列順序產生，禁止前端寫入。
+
+月份選取規則：只考慮 `is_active=true` 且 `effective_from <= period_month` 的方案，選擇生效日最新者；若同一生效日有多個方案，以較新的 `id` 決定，確保結果 deterministic。
+
+### GET /api/commission-plans/{commissionPlan}
+
+回傳單一 `CommissionPlanResource`，包含依 `sort_order` 排列的 tiers、建立者與 `is_used`。不存在回傳 `404`；非 admin 在進入 Controller 前即回傳 `403`。

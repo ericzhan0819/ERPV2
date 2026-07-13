@@ -3,10 +3,12 @@
 use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CashAccountController;
+use App\Http\Controllers\CommissionPlanController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MoneyEntryController;
 use App\Http\Controllers\PublicVehicleController;
+use App\Http\Controllers\SalaryProfileController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VehicleController;
 use App\Http\Controllers\VehiclePhotoController;
@@ -129,5 +131,17 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         Route::patch('users/{user}/status', [UserController::class, 'updateStatus']);
         Route::patch('users/{user}/role', [UserController::class, 'updateRole']);
         Route::post('users/{user}/reset-password', [UserController::class, 'resetPassword']);
+
+        Route::get('salary-profiles', [SalaryProfileController::class, 'index'])
+            ->middleware('can:viewAny,App\Models\SalaryProfile');
+        Route::put('salary-profiles/{user}', [SalaryProfileController::class, 'upsert'])
+            ->middleware('can:upsert,App\Models\SalaryProfile');
+
+        Route::get('commission-plans', [CommissionPlanController::class, 'index'])
+            ->middleware('can:viewAny,App\Models\CommissionPlan');
+        Route::post('commission-plans', [CommissionPlanController::class, 'store'])
+            ->middleware('can:create,App\Models\CommissionPlan');
+        Route::get('commission-plans/{commissionPlan}', [CommissionPlanController::class, 'show'])
+            ->middleware('can:view,commissionPlan');
     });
 });

@@ -2,7 +2,12 @@
 
 namespace App\Services;
 
+use App\Models\CommissionPlan;
 use App\Models\MoneyEntry;
+use App\Models\SalaryPeriod;
+use App\Models\SalaryProfile;
+use App\Models\SalarySettlement;
+use App\Models\SalarySettlementItem;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehiclePhoto;
@@ -190,7 +195,17 @@ class UserService
                 ->lockForUpdate()
                 ->exists()
                 || MoneyEntry::query()->where('created_by', $user->id)->orWhere('updated_by', $user->id)->lockForUpdate()->exists()
-                || VehiclePhoto::withTrashed()->where('uploaded_by', $user->id)->lockForUpdate()->exists();
+                || VehiclePhoto::withTrashed()->where('uploaded_by', $user->id)->lockForUpdate()->exists()
+                || SalaryProfile::query()->where('user_id', $user->id)->lockForUpdate()->exists()
+                || CommissionPlan::query()->where('created_by', $user->id)->lockForUpdate()->exists()
+                || SalaryPeriod::query()
+                    ->where('created_by', $user->id)
+                    ->orWhere('confirmed_by', $user->id)
+                    ->orWhere('paid_by', $user->id)
+                    ->lockForUpdate()
+                    ->exists()
+                || SalarySettlement::query()->where('user_id', $user->id)->lockForUpdate()->exists()
+                || SalarySettlementItem::query()->where('created_by', $user->id)->lockForUpdate()->exists();
 
             if ($hasRelatedRecords) {
                 throw ValidationException::withMessages([

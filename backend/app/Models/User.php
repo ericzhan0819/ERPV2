@@ -7,6 +7,8 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -92,5 +94,25 @@ class User extends Authenticatable
     public function canViewSalesCollectionAmounts(): bool
     {
         return $this->hasAnyRole([self::ROLE_ADMIN, self::ROLE_MANAGER, self::ROLE_SALES]);
+    }
+
+    public function salaryProfile(): HasOne
+    {
+        return $this->hasOne(SalaryProfile::class);
+    }
+
+    public function salarySettlements(): HasMany
+    {
+        return $this->hasMany(SalarySettlement::class);
+    }
+
+    public function purchaseAgentVehicles(): HasMany
+    {
+        return $this->hasMany(Vehicle::class, 'purchase_agent_id');
+    }
+
+    public function salesAgentVehicles(): HasMany
+    {
+        return $this->hasMany(Vehicle::class, 'sales_agent_id');
     }
 }

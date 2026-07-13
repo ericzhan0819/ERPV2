@@ -2,14 +2,19 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/**
- * Phase 1 needs this model as the target of Vehicle::salarySettlementItems() and
- * centralizes item types so automatic and manual records are unambiguous. Full
- * fillable/casts/relationships belong to PLAN v1.3 section 2; mass assignment is
- * therefore closed for now.
- */
+#[Fillable([
+    'salary_settlement_id',
+    'type',
+    'vehicle_id',
+    'amount',
+    'description',
+    'calculation_snapshot',
+    'created_by',
+])]
 class SalarySettlementItem extends Model
 {
     public const TYPE_BASE_SALARY = 'base_salary';
@@ -42,5 +47,31 @@ class SalarySettlementItem extends Model
         self::TYPE_MANUAL_DEDUCTION,
     ];
 
-    protected $guarded = ['*'];
+    public const TYPES = [
+        ...self::AUTOMATIC_TYPES,
+        ...self::MANUAL_TYPES,
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'amount' => 'integer',
+            'calculation_snapshot' => 'array',
+        ];
+    }
+
+    public function settlement(): BelongsTo
+    {
+        return $this->belongsTo(SalarySettlement::class, 'salary_settlement_id');
+    }
+
+    public function vehicle(): BelongsTo
+    {
+        return $this->belongsTo(Vehicle::class);
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
 }
