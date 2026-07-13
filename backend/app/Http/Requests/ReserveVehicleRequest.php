@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class ReserveVehicleRequest extends FormRequest
 {
@@ -23,6 +25,12 @@ class ReserveVehicleRequest extends FormRequest
             'entry_date' => ['nullable', 'date'],
             'description' => ['nullable', 'string'],
             'idempotency_key' => ['required', 'string', 'max:100'],
+            'sales_agent_id' => [
+                Rule::requiredIf(fn () => $this->user()?->hasAnyRole([User::ROLE_ADMIN, User::ROLE_MANAGER]) ?? false),
+                Rule::prohibitedIf(fn () => $this->user()?->isSales() ?? false),
+                'integer',
+                'exists:users,id',
+            ],
         ];
     }
 }

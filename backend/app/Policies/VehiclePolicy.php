@@ -91,4 +91,19 @@ class VehiclePolicy
     {
         return $user->hasAnyRole([User::ROLE_ADMIN, User::ROLE_MANAGER]);
     }
+
+    public function viewCommissionAgentOptions(User $user): bool
+    {
+        return $user->hasAnyRole(User::ROLES);
+    }
+
+    public function viewPendingCommissionAttribution(User $user): bool
+    {
+        return $user->isAdmin();
+    }
+
+    public function updateCommissionAttribution(User $user, Vehicle $vehicle): bool
+    {
+        return $user->isAdmin();
+    }
 }

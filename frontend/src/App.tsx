@@ -7,6 +7,7 @@ import { Dashboard } from './pages/Dashboard'
 import { VehicleList } from './pages/vehicles/VehicleList'
 import { VehicleCreate } from './pages/vehicles/VehicleCreate'
 import { VehicleDetail } from './pages/vehicles/VehicleDetail'
+import { CommissionAttributionPending } from './pages/vehicles/CommissionAttributionPending'
 import { CustomerList } from './pages/customers/CustomerList'
 import { CustomerCreate } from './pages/customers/CustomerCreate'
 import { CustomerDetail } from './pages/customers/CustomerDetail'
@@ -53,6 +54,14 @@ function App() {
             element={
               <ProtectedRoute allowedRoles={['admin', 'manager']}>
                 <VehicleCreate />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/vehicles/commission-attribution"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <CommissionAttributionPending />
               </ProtectedRoute>
             }
           />

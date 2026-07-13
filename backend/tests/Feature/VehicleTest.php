@@ -11,11 +11,24 @@ use App\Services\VehicleService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Tests\Concerns\UsesCommissionAttributionFixtures;
 use Tests\TestCase;
 
 class VehicleTest extends TestCase
 {
     use RefreshDatabase;
+    use UsesCommissionAttributionFixtures;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->setUpCommissionAttributionFixtures();
+    }
+
+    public function postJson($uri, array $data = [], array $headers = [], $options = 0)
+    {
+        return parent::postJson($uri, $this->addCommissionAttributionFixtures($uri, $data), $headers, $options);
+    }
 
     public function test_creating_a_vehicle_generates_stock_no_and_defaults_status_to_preparing(): void
     {

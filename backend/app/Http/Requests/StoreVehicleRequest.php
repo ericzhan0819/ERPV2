@@ -38,6 +38,7 @@ class StoreVehicleRequest extends FormRequest
             'seller_phone' => ['nullable', 'string', 'max:255'],
             'seller_customer_id' => ['nullable', 'integer', 'exists:customers,id'],
             'purchase_price' => ['nullable', 'integer', 'min:0'],
+            'purchase_agent_id' => ['required', 'integer', 'exists:users,id'],
             'asking_price' => ['nullable', 'integer', 'min:0'],
             'floor_price' => ['nullable', 'integer', 'min:0'],
             'sales_note' => ['nullable', 'string'],

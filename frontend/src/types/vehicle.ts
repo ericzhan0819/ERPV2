@@ -1,4 +1,5 @@
 import type { MoneyEntryApprovalStatus } from './moneyEntry'
+import type { UserRole } from './user'
 
 export type VehicleStatus = 'preparing' | 'listed' | 'reserved' | 'sold' | 'cancelled'
 
@@ -30,6 +31,8 @@ export interface Vehicle {
   seller_phone: string | null
   seller_customer_id: number | null
   purchase_price?: number | null
+  purchase_agent_id?: number | null
+  purchase_agent?: CommissionAgent | null
   asking_price?: number | null
   floor_price?: number | null
   listing_date: string | null
@@ -37,6 +40,8 @@ export interface Vehicle {
   reserved_at: string | null
   sold_at: string | null
   sold_price?: number | null
+  sales_agent_id?: number | null
+  sales_agent?: CommissionAgent | null
   buyer_name: string | null
   buyer_phone: string | null
   buyer_customer_id: number | null
@@ -55,6 +60,20 @@ export interface VehicleListMeta {
 export interface VehicleListResponse {
   data: Vehicle[]
   meta: VehicleListMeta
+}
+
+export interface CommissionAgent {
+  id: number
+  name: string
+  role: UserRole
+}
+
+export interface CommissionAgentOptionsResponse {
+  data: CommissionAgent[]
+}
+
+export interface PendingCommissionAttributionResponse {
+  data: Vehicle[]
 }
 
 export interface VehicleListParams {
@@ -117,6 +136,7 @@ export interface ReserveVehiclePayload {
   entry_date?: string
   description?: string
   idempotency_key: string
+  sales_agent_id?: number
 }
 
 export interface FinalPaymentPayload {
@@ -207,10 +227,16 @@ export interface CreateVehiclePayload {
   seller_phone?: string
   seller_customer_id?: number
   purchase_price?: number
+  purchase_agent_id: number
   asking_price?: number
   floor_price?: number
   sales_note?: string
   notes?: string
   idempotency_key: string
   initial_purchase_payment?: InitialPurchasePaymentPayload
+}
+
+export interface UpdateCommissionAttributionPayload {
+  purchase_agent_id?: number
+  sales_agent_id?: number
 }

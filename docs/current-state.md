@@ -1,10 +1,10 @@
-# ERPV2 current-state — v1.2 已封版，v1.3 第 3 部分完成
+# ERPV2 current-state — v1.2 已封版，v1.3 第 4 部分完成
 
 日期：2026-07-13
 專案：ERPV2 / 中古車行內部營運系統
 目前穩定點：`b1edffa docs: 完成 v1.2 smoke 封版與交接文件`
 目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`
-狀態：v1.2 已完成並封版。v1.3「薪資結算」已完成 `PLAN_v1.3.md` 第 0～3 部分：前置盤點、薪資 schema、完整 Model、初始與版本化獎金方案、admin-only 薪資設定／獎金方案 API、車輛收／賣車人欄位與 salary MoneyEntry 保護；第 4 部分之後的車輛歸屬流程、計算、結算、發薪、前端與 Smoke 尚未開始。
+狀態：v1.2 已完成並封版。v1.3「薪資結算」已完成 `PLAN_v1.3.md` 第 0～4 部分：前置盤點、薪資 schema、完整 Model、初始與版本化獎金方案、admin-only 薪資設定／獎金方案 API、車輛收／賣車人正式歸屬流程與 salary MoneyEntry 保護；第 5 部分之後的計算、結算、發薪、薪資管理前端與 Smoke 尚未開始。
 
 ---
 
@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 3 部分複審修正後最新完整回歸為 398 tests、1617 assertions、6 skipped，其中新增 2 個 skipped 是需安全旗標與可拋棄 MariaDB schema 的真並發測試；另行啟用後為 2 tests、28 assertions 全數通過。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 4 部分完成後最新完整回歸為 405 tests、1658 assertions、6 skipped，其中 6 個 skipped 是需專用環境或安全旗標的既有測試。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
 
 ---
 
@@ -348,7 +348,7 @@ v1.3 已鎖定為「薪資結算」，不是完整 HR。核心規則：
 
 v1.3 另包含底薪、固定津貼、勞保扣款、健保扣款、手動加扣項、每月草稿／確認／發薪，以及發薪後自動建立 `薪資 / 佣金` Money Entry。
 
-v1.3 第 1～3 部分已補齊：
+v1.3 第 1～4 部分已補齊：
 
 - `salary_profiles`、`commission_plans`／`commission_plan_tiers`、`salary_periods`、`salary_settlements`、`salary_settlement_items`。
 - Vehicle 正式 `purchase_agent_id`／`sales_agent_id`，歷史資料保持空值，不做 heuristic backfill。
@@ -362,10 +362,12 @@ v1.3 第 1～3 部分已補齊：
 - 薪資設定稽核只記對象與異動欄位名稱，不複製底薪、津貼、保險扣款金額值。
 - Salary Profile 首次建立與 Commission Plan 重名建立的 duplicate-key race 皆會在 rollback 後開新 transaction 讀取 winner；相同 profile payload 可 replay，不同內容／重名方案回 422，不再外洩成 500。
 - `SalarySettingsMysqlConcurrencyTest` 使用 `pcntl_fork`、socket barrier 與真正獨立 MariaDB connections 驅動兩個 Service 公開方法；只有在測試環境、connection／database allowlist、明確可拋棄資料庫名稱與 `RUN_MYSQL_CONCURRENCY_TESTS=1` 同時成立時才允許 `migrate:fresh`。
+- 建車時 admin／manager 必須指定啟用且參與獎金的收車人；建車冪等快照包含 `purchase_agent_id`。
+- 保留銷售流程由 sales 安全歸屬本人，admin／manager 代登必須指定實際賣車人；reservation 冪等比對包含 `sales_agent_id`，成交結案前不得缺少賣車人。
+- admin 可由待補清單人工補登歷史已售車輛歸屬；manager／sales 403，confirmed／paid 月份引用後鎖定，異動寫入 Audit Log。
 
 後續仍待實作：
 
-- 新車／銷售流程歸屬寫入、歷史車輛 admin 人工補資料流程。
 - approved-only 計算器、月份草稿／確認／發薪與批次 idempotency。
 - 薪資管理前端與完整 manual smoke。
 

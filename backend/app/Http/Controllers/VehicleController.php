@@ -12,8 +12,10 @@ use App\Http\Requests\PurchasePaymentVehicleRequest;
 use App\Http\Requests\RefundVehicleRequest;
 use App\Http\Requests\ReserveVehicleRequest;
 use App\Http\Requests\StoreVehicleRequest;
+use App\Http\Requests\UpdateVehicleCommissionAttributionRequest;
 use App\Http\Requests\UpdateVehicleRequest;
 use App\Http\Requests\VehicleExpenseRequest;
+use App\Http\Resources\CommissionAgentOptionResource;
 use App\Http\Resources\MoneyEntryResource;
 use App\Http\Resources\VehicleResource;
 use App\Models\Vehicle;
@@ -40,6 +42,29 @@ class VehicleController extends Controller
     public function store(StoreVehicleRequest $request): VehicleResource
     {
         $vehicle = $this->vehicleService->createVehicle($request->validated(), $request->user()->id);
+
+        return new VehicleResource($vehicle);
+    }
+
+    public function commissionAgentOptions(): AnonymousResourceCollection
+    {
+        return CommissionAgentOptionResource::collection($this->vehicleService->commissionAgentOptions());
+    }
+
+    public function pendingCommissionAttribution(): AnonymousResourceCollection
+    {
+        return VehicleResource::collection($this->vehicleService->pendingCommissionAttribution());
+    }
+
+    public function updateCommissionAttribution(
+        UpdateVehicleCommissionAttributionRequest $request,
+        Vehicle $vehicle,
+    ): VehicleResource {
+        $vehicle = $this->vehicleService->updateCommissionAttribution(
+            $vehicle,
+            $request->validated(),
+            $request->user()->id,
+        );
 
         return new VehicleResource($vehicle);
     }

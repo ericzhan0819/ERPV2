@@ -6,14 +6,29 @@ use App\Models\CashAccount;
 use App\Models\MoneyEntry;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Services\MoneyEntryService;
+use App\Services\VehicleService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
+use Tests\Concerns\UsesCommissionAttributionFixtures;
 use Tests\TestCase;
 
 class MoneyEntryApprovalTest extends TestCase
 {
     use RefreshDatabase;
+    use UsesCommissionAttributionFixtures;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->setUpCommissionAttributionFixtures();
+    }
+
+    public function postJson($uri, array $data = [], array $headers = [], $options = 0)
+    {
+        return parent::postJson($uri, $this->addCommissionAttributionFixtures($uri, $data), $headers, $options);
+    }
 
     public function test_admin_created_manual_entry_is_approved_immediately(): void
     {
@@ -220,7 +235,7 @@ class MoneyEntryApprovalTest extends TestCase
             'approval_status' => 'rejected',
         ]);
 
-        $balance = app(\App\Services\MoneyEntryService::class)->balanceForAccount($cashAccount->fresh());
+        $balance = app(MoneyEntryService::class)->balanceForAccount($cashAccount->fresh());
         $this->assertSame(0, $balance);
 
         $response = $this->actingAs($admin, 'web')->getJson('/api/dashboard/summary');
@@ -228,7 +243,7 @@ class MoneyEntryApprovalTest extends TestCase
         $response->assertJsonPath('monthly_income', 0);
         $response->assertJsonPath('cash_balance', 0);
 
-        $summary = app(\App\Services\VehicleService::class)->financialSummary($vehicle->fresh());
+        $summary = app(VehicleService::class)->financialSummary($vehicle->fresh());
         $this->assertSame(0, $summary['income_total']);
     }
 
@@ -256,7 +271,7 @@ class MoneyEntryApprovalTest extends TestCase
             'approved_by' => $admin->id,
         ]);
 
-        $balance = app(\App\Services\MoneyEntryService::class)->balanceForAccount($cashAccount->fresh());
+        $balance = app(MoneyEntryService::class)->balanceForAccount($cashAccount->fresh());
         $this->assertSame(8000, $balance);
     }
 
@@ -278,7 +293,7 @@ class MoneyEntryApprovalTest extends TestCase
             ->assertSuccessful()
             ->assertJsonPath('data.approval_status', 'rejected');
 
-        $balance = app(\App\Services\MoneyEntryService::class)->balanceForAccount($cashAccount->fresh());
+        $balance = app(MoneyEntryService::class)->balanceForAccount($cashAccount->fresh());
         $this->assertSame(0, $balance);
     }
 

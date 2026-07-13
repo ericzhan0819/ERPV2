@@ -53,14 +53,24 @@ export function VehicleList() {
           <h1 className="text-xl font-semibold text-fg">車輛管理</h1>
           <p className="mt-1 text-sm text-fg-muted">車輛庫存與銷售狀態總覽</p>
         </div>
-        {canManage && (
-          <Link
-            to="/vehicles/create"
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover"
-          >
-            新增買入車輛
-          </Link>
-        )}
+        <div className="flex gap-3">
+          {user?.role === 'admin' && (
+            <Link
+              to="/vehicles/commission-attribution"
+              className="rounded-lg border border-border-strong px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
+            >
+              待補獎金歸屬
+            </Link>
+          )}
+          {canManage && (
+            <Link
+              to="/vehicles/create"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover"
+            >
+              新增買入車輛
+            </Link>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3">

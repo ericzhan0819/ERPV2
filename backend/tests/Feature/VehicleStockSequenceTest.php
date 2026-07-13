@@ -10,11 +10,19 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Tests\Concerns\UsesCommissionAttributionFixtures;
 use Tests\TestCase;
 
 class VehicleStockSequenceTest extends TestCase
 {
     use RefreshDatabase;
+    use UsesCommissionAttributionFixtures;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->setUpCommissionAttributionFixtures();
+    }
 
     public function test_different_vehicle_requests_receive_distinct_daily_stock_numbers(): void
     {
@@ -88,6 +96,7 @@ class VehicleStockSequenceTest extends TestCase
             'brand' => 'Toyota',
             'model' => 'Camry',
             'license_plate' => $licensePlate,
+            'purchase_agent_id' => $this->defaultCommissionAgent->id,
             'idempotency_key' => (string) Str::uuid(),
         ];
     }

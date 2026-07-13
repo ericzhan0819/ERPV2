@@ -5,6 +5,7 @@ import { isAxiosError } from 'axios'
 import {
   closeSaleVehicle,
   getVehicle,
+  listCommissionAgentOptions,
   listVehicleForSale,
   recordFinalPayment,
   recordVehicleExpense,
@@ -18,7 +19,7 @@ import {
   setCoverVehiclePhoto,
   uploadVehiclePhotos,
 } from '../../api/vehiclePhotos'
-import type { VehicleDetailResponse, VehiclePhoto } from '../../types/vehicle'
+import type { CommissionAgent, VehicleDetailResponse, VehiclePhoto } from '../../types/vehicle'
 import type { CashAccountOption } from '../../types/cashAccount'
 import { generateIdempotencyKey } from '../../utils/idempotency'
 import { vehicleStatusLabels } from '../../utils/vehicleStatus'
@@ -174,6 +175,7 @@ export function VehicleDetail() {
   const vehicleId = Number(id)
   const [detail, setDetail] = useState<VehicleDetailResponse | null>(null)
   const [cashAccounts, setCashAccounts] = useState<CashAccountOption[]>([])
+  const [commissionAgents, setCommissionAgents] = useState<CommissionAgent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [activeModal, setActiveModal] = useState<ActiveModal>(null)
   const [formError, setFormError] = useState<string | null>(null)
@@ -192,6 +194,9 @@ export function VehicleDetail() {
     listCashAccountOptions()
       .then(setCashAccounts)
       .catch(() => undefined)
+    listCommissionAgentOptions()
+      .then(setCommissionAgents)
+      .catch(() => setCommissionAgents([]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
@@ -238,6 +243,7 @@ export function VehicleDetail() {
     cash_account_id: string
     description: string
     idempotency_key: string
+    sales_agent_id: string
   }) {
     setSubmitting(true)
     setFormError(null)
@@ -251,6 +257,7 @@ export function VehicleDetail() {
         cash_account_id: Number(form.cash_account_id),
         description: form.description || undefined,
         idempotency_key: form.idempotency_key,
+        sales_agent_id: form.sales_agent_id ? Number(form.sales_agent_id) : undefined,
       })
       closeModal()
       loadDetail()
@@ -447,6 +454,7 @@ export function VehicleDetail() {
           <InfoRow label="買入來源" value={vehicle.purchase_source_type ?? '-'} />
           <InfoRow label="原車主 / 供應商" value={vehicle.seller_name ?? '-'} />
           {canViewFinance && <InfoRow label="收購價" value={formatCurrency(vehicle.purchase_price)} />}
+          <InfoRow label="收車人" value={vehicle.purchase_agent?.name ?? '-'} />
         </Panel>
 
         <Panel title="銷售資料">
@@ -456,6 +464,7 @@ export function VehicleDetail() {
           <InfoRow label="買方姓名" value={vehicle.buyer_name ?? '-'} />
           <InfoRow label="買方電話" value={vehicle.buyer_phone ?? '-'} />
           <InfoRow label="成交日期" value={vehicle.sold_at ? vehicle.sold_at.slice(0, 10) : '-'} />
+          <InfoRow label="賣車人" value={vehicle.sales_agent?.name ?? '-'} />
         </Panel>
       </div>
 
@@ -573,6 +582,8 @@ export function VehicleDetail() {
           error={formError}
           submitting={submitting}
           cashAccounts={cashAccounts}
+          commissionAgents={commissionAgents}
+          isSales={user?.role === 'sales'}
         />
       )}
       {activeModal === 'final-payment' && (
@@ -656,6 +667,8 @@ function ReserveModal({
   error,
   submitting,
   cashAccounts,
+  commissionAgents,
+  isSales,
 }: {
   onClose: () => void
   onSubmit: (form: {
@@ -667,10 +680,13 @@ function ReserveModal({
     cash_account_id: string
     description: string
     idempotency_key: string
+    sales_agent_id: string
   }) => void
   error: string | null
   submitting: boolean
   cashAccounts: CashAccountOption[]
+  commissionAgents: CommissionAgent[]
+  isSales: boolean
 }) {
   const [buyer_name, setBuyerName] = useState('')
   const [buyer_phone, setBuyerPhone] = useState('')
@@ -680,6 +696,7 @@ function ReserveModal({
   const [deposit_amount, setDepositAmount] = useState('')
   const [cash_account_id, setCashAccountId] = useState('')
   const [description, setDescription] = useState('')
+  const [sales_agent_id, setSalesAgentId] = useState('')
   const idempotencyKeyRef = useRef<string | null>(null)
 
   function handleSubmit(event: FormEvent) {
@@ -698,6 +715,7 @@ function ReserveModal({
       cash_account_id,
       description,
       idempotency_key: idempotencyKey,
+      sales_agent_id,
     })
   }
 
@@ -723,6 +741,22 @@ function ReserveModal({
         <Field label="買方電話" value={buyer_phone} onChange={setBuyerPhone} readOnly={!!buyer_customer_id} />
         <Field label="成交價" value={sold_price} onChange={setSoldPrice} type="number" required />
         <Field label="訂金金額" value={deposit_amount} onChange={setDepositAmount} type="number" required />
+        {!isSales && (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-fg-muted">
+              賣車人<span className="text-error"> *</span>
+            </label>
+            <select
+              required
+              value={sales_agent_id}
+              onChange={(event) => setSalesAgentId(event.target.value)}
+              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+            >
+              <option value="">請選擇實際賣車人</option>
+              {commissionAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
+            </select>
+          </div>
+        )}
         <CashAccountField cashAccounts={cashAccounts} value={cash_account_id} onChange={setCashAccountId} />
         <div>
           <label className="mb-1 block text-sm font-medium text-fg-muted">備註</label>

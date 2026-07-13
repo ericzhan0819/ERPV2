@@ -10,11 +10,24 @@ use App\Models\Vehicle;
 use App\Services\VehicleService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Tests\Concerns\UsesCommissionAttributionFixtures;
 use Tests\TestCase;
 
 class VehicleCreateWithPurchasePaymentTest extends TestCase
 {
     use RefreshDatabase;
+    use UsesCommissionAttributionFixtures;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->setUpCommissionAttributionFixtures();
+    }
+
+    public function postJson($uri, array $data = [], array $headers = [], $options = 0)
+    {
+        return parent::postJson($uri, $this->addCommissionAttributionFixtures($uri, $data), $headers, $options);
+    }
 
     public function test_creating_a_vehicle_without_payment_creates_no_money_entry(): void
     {
@@ -404,6 +417,7 @@ class VehicleCreateWithPurchasePaymentTest extends TestCase
             'model' => 'Camry',
             'license_plate' => 'ABC-1234',
             'purchase_price' => 500000,
+            'purchase_agent_id' => $this->defaultCommissionAgent->id,
         ];
 
         $vehicle = app(VehicleService::class)->createVehicle(array_merge($data, [

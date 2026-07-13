@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\CashAccount;
 use App\Models\MoneyEntry;
+use App\Models\SalaryProfile;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Services\VehicleService;
@@ -17,9 +18,13 @@ use Throwable;
 class VehicleFinalPaymentMysqlConcurrencyTest extends TestCase
 {
     private const CHILD_HANDSHAKE_TIMEOUT_SECONDS = 10;
+
     private const CHILD_EXIT_TIMEOUT_SECONDS = 10;
+
     private const CHILD_STOP_TIMEOUT_SECONDS = 3;
+
     private const CHILD_WAIT_POLL_MICROSECONDS = 100000;
+
     private const SOCKET_TIMEOUT_EXERCISE_MICROSECONDS = 100000;
 
     public function test_final_payment_duplicate_key_loser_replays_after_committed_mysql_winner(): void
@@ -31,6 +36,11 @@ class VehicleFinalPaymentMysqlConcurrencyTest extends TestCase
         $this->artisan('migrate:fresh')->run();
 
         $user = User::factory()->create(['is_active' => true]);
+        SalaryProfile::query()->create([
+            'user_id' => $user->id,
+            'commission_enabled' => true,
+            'is_active' => true,
+        ]);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
         $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
         $payload = [
@@ -399,6 +409,7 @@ class VehicleFinalPaymentMysqlConcurrencyTest extends TestCase
             'cash_account_id' => $cashAccount->id,
             'entry_date' => '2026-01-01',
             'idempotency_key' => (string) Str::uuid(),
+            'sales_agent_id' => $user->id,
         ], $user->id)->refresh();
     }
 }

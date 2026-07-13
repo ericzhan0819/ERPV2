@@ -37,6 +37,10 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
 
     // 車輛列表 / 詳情：所有角色皆可讀（財務欄位由 VehicleResource 依角色遮蔽）
+    Route::get('vehicles/commission-agent-options', [VehicleController::class, 'commissionAgentOptions'])
+        ->middleware('can:viewCommissionAgentOptions,App\Models\Vehicle');
+    Route::get('vehicles/commission-attribution-pending', [VehicleController::class, 'pendingCommissionAttribution'])
+        ->middleware('can:viewPendingCommissionAttribution,App\Models\Vehicle');
     Route::get('vehicles', [VehicleController::class, 'index'])
         ->middleware('can:viewAny,App\Models\Vehicle');
     Route::get('vehicles/{vehicle}', [VehicleController::class, 'show'])
@@ -63,6 +67,8 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
         ->middleware('can:update,vehicle');
     Route::delete('vehicles/{vehicle}', [VehicleController::class, 'destroy'])
         ->middleware('can:delete,vehicle');
+    Route::patch('vehicles/{vehicle}/commission-attribution', [VehicleController::class, 'updateCommissionAttribution'])
+        ->middleware('can:updateCommissionAttribution,vehicle');
     Route::post('vehicles/{vehicle}/list', [VehicleController::class, 'list'])
         ->middleware('can:listVehicle,vehicle');
     Route::post('vehicles/{vehicle}/purchase-payment', [VehicleController::class, 'purchasePayment'])

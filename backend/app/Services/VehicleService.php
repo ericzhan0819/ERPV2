@@ -5,6 +5,9 @@ namespace App\Services;
 use App\Models\CashAccount;
 use App\Models\Customer;
 use App\Models\MoneyEntry;
+use App\Models\SalaryPeriod;
+use App\Models\SalaryProfile;
+use App\Models\SalarySettlementItem;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehiclePhoto;
@@ -43,7 +46,7 @@ class VehicleService
         'is_inspection_completed', 'is_preparation_completed',
         'lien_note', 'condition_note', 'purchase_date', 'purchase_source_type',
         'seller_name', 'seller_phone', 'seller_customer_id',
-        'purchase_price', 'asking_price', 'floor_price', 'sales_note', 'notes',
+        'purchase_price', 'purchase_agent_id', 'asking_price', 'floor_price', 'sales_note', 'notes',
     ];
 
     private const MYSQL_ERROR_FOREIGN_KEY_CONSTRAINT_FAILS = 1451;
@@ -172,7 +175,7 @@ class VehicleService
      */
     private function castVehicleFieldsForComparison(array $data): array
     {
-        foreach (['year', 'mileage_km', 'purchase_price', 'asking_price', 'floor_price', 'seller_customer_id'] as $field) {
+        foreach (['year', 'mileage_km', 'purchase_price', 'purchase_agent_id', 'asking_price', 'floor_price', 'seller_customer_id'] as $field) {
             if (array_key_exists($field, $data) && $data[$field] !== null) {
                 $data[$field] = (int) $data[$field];
             }
@@ -240,6 +243,10 @@ class VehicleService
         if ($existingVehicle) {
             return $this->replayOrRejectVehicleCreation($existingVehicle, $effectiveData);
         }
+
+        $this->assertCommissionAgentsEligible([
+            'purchase_agent_id' => (int) $effectiveData['vehicle']['purchase_agent_id'],
+        ]);
 
         $vehicle = new Vehicle($effectiveData['vehicle']);
         $vehicle->stock_no = $this->generateStockNo();
@@ -608,6 +615,7 @@ class VehicleService
     public function reserveVehicle(Vehicle $vehicle, array $data, int $userId): Vehicle
     {
         $idempotencyKey = (string) $data['idempotency_key'];
+        $data['sales_agent_id'] = $this->resolveReservationSalesAgentId($data, $userId);
         $effectiveData = $this->normalizeReserveData($data);
 
         try {
@@ -627,7 +635,7 @@ class VehicleService
     }
 
     /**
-     * @param  array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
+     * @param  array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, sales_agent_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
      */
     private function createReservationInsideTransaction(Vehicle $vehicle, string $idempotencyKey, array $effectiveData, int $userId): Vehicle
     {
@@ -645,6 +653,7 @@ class VehicleService
             ->firstOrFail();
 
         $this->assertStatus($lockedVehicle, 'listed', '只有上架中的車輛可以收訂金並保留');
+        $this->assertCommissionAgentsEligible(['sales_agent_id' => $effectiveData['sales_agent_id']]);
         $this->assertCashAccountActive($effectiveData['cash_account_id']);
         $effectiveData = $this->applyBuyerCustomerSnapshot($effectiveData);
 
@@ -653,6 +662,7 @@ class VehicleService
             'buyer_phone' => $effectiveData['buyer_phone'],
             'buyer_customer_id' => $effectiveData['buyer_customer_id'],
             'sold_price' => $effectiveData['sold_price'],
+            'sales_agent_id' => $effectiveData['sales_agent_id'],
         ]);
         $lockedVehicle->status = 'reserved';
         $lockedVehicle->reserved_at = now();
@@ -686,7 +696,7 @@ class VehicleService
     }
 
     /**
-     * @param  array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
+     * @param  array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, sales_agent_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
      */
     private function replayRacedReservationAfterRollback(QueryException $original, int $vehicleId, string $idempotencyKey, array $effectiveData): Vehicle
     {
@@ -707,7 +717,7 @@ class VehicleService
     }
 
     /**
-     * @param  array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
+     * @param  array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, sales_agent_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
      */
     private function replayOrRejectReservation(MoneyEntry $entry, int $vehicleId, array $effectiveData): Vehicle
     {
@@ -785,12 +795,16 @@ class VehicleService
             return false;
         }
 
+        if ((int) $vehicle->sales_agent_id !== $effectiveData['sales_agent_id']) {
+            return false;
+        }
+
         return true;
     }
 
     /**
      * @param  array<string, mixed>  $data
-     * @return array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}
+     * @return array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, sales_agent_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}
      */
     private function normalizeReserveData(array $data): array
     {
@@ -803,6 +817,7 @@ class VehicleService
             'sold_price' => (int) $data['sold_price'],
             'deposit_amount' => (int) $data['deposit_amount'],
             'cash_account_id' => (int) $data['cash_account_id'],
+            'sales_agent_id' => (int) $data['sales_agent_id'],
             'description' => $data['description'] ?? null,
             'entry_date' => $entryDateWasSupplied ? $data['entry_date'] : now()->toDateString(),
             'entry_date_was_supplied' => $entryDateWasSupplied,
@@ -814,8 +829,8 @@ class VehicleService
      * 以該客戶目前資料覆寫，避免使用者輸入與所選客戶不一致。套用在 normalize 之後、
      * 進入 transaction 之前，讓建立與 replay 比對看到的都是同一份已解析資料。
      *
-     * @param  array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
-     * @return array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}
+     * @param  array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, sales_agent_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
+     * @return array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, sales_agent_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}
      */
     private function applyBuyerCustomerSnapshot(array $effectiveData): array
     {
@@ -962,6 +977,12 @@ class VehicleService
                 ]);
             }
 
+            if (! $lockedVehicle->sales_agent_id) {
+                throw ValidationException::withMessages([
+                    'sales_agent_id' => ['成交結案前必須指定賣車人'],
+                ]);
+            }
+
             // 關帳後不可再讓車輛的已核准收款總額被追加變動：assertVehicleMutable 已擋掉
             // 已售出車輛「新增」訂金/尾款/退款，但既有、關帳前就存在的 pending 退款仍可能
             // 在關帳後才被 admin 核准，這會在事後把已核准淨收款拉到成交價以下，讓「已關帳
@@ -1018,6 +1039,110 @@ class VehicleService
     {
         if ($vehicle->status !== $expected) {
             throw ValidationException::withMessages(['status' => [$message]]);
+        }
+    }
+
+    public function commissionAgentOptions(): Collection
+    {
+        return User::query()
+            ->select(['id', 'name', 'role'])
+            ->where('is_active', true)
+            ->whereHas('salaryProfile', fn ($query) => $query
+                ->where('is_active', true)
+                ->where('commission_enabled', true))
+            ->orderBy('name')
+            ->orderBy('id')
+            ->get();
+    }
+
+    public function pendingCommissionAttribution(): Collection
+    {
+        return Vehicle::query()
+            ->with(['purchaseAgent:id,name', 'salesAgent:id,name'])
+            ->where('status', 'sold')
+            ->where(function ($query) {
+                $query->whereNull('purchase_agent_id')->orWhereNull('sales_agent_id');
+            })
+            ->orderBy('sold_at')
+            ->orderBy('id')
+            ->get();
+    }
+
+    /** @param array<string, int> $data */
+    public function updateCommissionAttribution(Vehicle $vehicle, array $data, int $userId): Vehicle
+    {
+        return DB::transaction(function () use ($vehicle, $data, $userId) {
+            $lockedVehicle = Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
+
+            $isLockedBySalaryPeriod = SalarySettlementItem::query()
+                ->where('vehicle_id', $lockedVehicle->id)
+                ->whereHas('settlement.period', fn ($query) => $query->whereIn('status', [
+                    SalaryPeriod::STATUS_CONFIRMED,
+                    SalaryPeriod::STATUS_PAID,
+                ]))
+                ->exists();
+
+            if ($isLockedBySalaryPeriod) {
+                throw ValidationException::withMessages([
+                    'commission_attribution' => ['此車輛已被確認或已發薪的薪資月份引用，不得更改獎金歸屬'],
+                ]);
+            }
+
+            $this->assertCommissionAgentsEligible($data);
+            $lockedVehicle->fill($data);
+            $lockedVehicle->updated_by = $userId;
+            $lockedVehicle->save();
+
+            return $lockedVehicle->load(['purchaseAgent:id,name', 'salesAgent:id,name']);
+        });
+    }
+
+    /** @param array<string, mixed> $data */
+    private function resolveReservationSalesAgentId(array $data, int $userId): int
+    {
+        $actor = User::query()->findOrFail($userId);
+
+        if ($actor->isSales()) {
+            return $actor->id;
+        }
+
+        if ($actor->hasAnyRole([User::ROLE_ADMIN, User::ROLE_MANAGER]) && isset($data['sales_agent_id'])) {
+            return (int) $data['sales_agent_id'];
+        }
+
+        throw ValidationException::withMessages([
+            'sales_agent_id' => ['管理員代登銷售流程時必須指定實際賣車人'],
+        ]);
+    }
+
+    /** @param array<string, int> $agentsByField */
+    private function assertCommissionAgentsEligible(array $agentsByField): void
+    {
+        $agentIds = array_values(array_unique(array_map('intval', $agentsByField)));
+        sort($agentIds);
+
+        $profiles = SalaryProfile::query()
+            ->whereIn('user_id', $agentIds)
+            ->orderBy('user_id')
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('user_id');
+        $users = User::query()
+            ->whereKey($agentIds)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get()
+            ->keyBy('id');
+
+        foreach ($agentsByField as $field => $agentId) {
+            $user = $users->get((int) $agentId);
+            $profile = $profiles->get((int) $agentId);
+
+            if (! $user?->is_active || ! $profile?->is_active || ! $profile?->commission_enabled) {
+                throw ValidationException::withMessages([
+                    $field => ['指定人員必須為啟用中且已啟用獎金的員工'],
+                ]);
+            }
         }
     }
 

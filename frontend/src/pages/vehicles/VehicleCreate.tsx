@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { isAxiosError } from 'axios'
-import { createVehicle } from '../../api/vehicles'
+import { createVehicle, listCommissionAgentOptions } from '../../api/vehicles'
 import { listCashAccountOptions } from '../../api/cashAccounts'
 import { CustomerSelect } from '../../components/CustomerSelect'
-import type { CreateVehiclePayload } from '../../types/vehicle'
+import type { CommissionAgent, CreateVehiclePayload } from '../../types/vehicle'
 import type { CashAccountOption } from '../../types/cashAccount'
 import { generateIdempotencyKey } from '../../utils/idempotency'
 
@@ -27,6 +27,7 @@ interface FormState {
   seller_phone: string
   seller_customer_id: string
   purchase_price: string
+  purchase_agent_id: string
   has_registration_document: boolean
   has_spare_key: boolean
   is_transfer_completed: boolean
@@ -60,6 +61,7 @@ const initialState: FormState = {
   seller_phone: '',
   seller_customer_id: '',
   purchase_price: '',
+  purchase_agent_id: '',
   has_registration_document: false,
   has_spare_key: false,
   is_transfer_completed: false,
@@ -80,6 +82,7 @@ function buildPayload(form: FormState, idempotencyKey: string): CreateVehiclePay
     brand: form.brand,
     model: form.model,
     idempotency_key: idempotencyKey,
+    purchase_agent_id: Number(form.purchase_agent_id),
   }
   if (form.year) payload.year = Number(form.year)
   if (form.license_plate) payload.license_plate = form.license_plate
@@ -161,6 +164,7 @@ export function VehicleCreate() {
   const [form, setForm] = useState<FormState>(initialState)
   const [sellerCustomerLabel, setSellerCustomerLabel] = useState('')
   const [cashAccounts, setCashAccounts] = useState<CashAccountOption[]>([])
+  const [commissionAgents, setCommissionAgents] = useState<CommissionAgent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   // 冪等鍵在表單掛載時就固定下來，重試送出必須沿用同一把鍵，
@@ -169,6 +173,7 @@ export function VehicleCreate() {
 
   useEffect(() => {
     listCashAccountOptions().then(setCashAccounts).catch(() => setCashAccounts([]))
+    listCommissionAgentOptions().then(setCommissionAgents).catch(() => setCommissionAgents([]))
   }, [])
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -261,6 +266,22 @@ export function VehicleCreate() {
             readOnly={!!form.seller_customer_id}
           />
           <Field label="收購價" value={form.purchase_price} onChange={(v) => set('purchase_price', v)} type="number" />
+          <div>
+            <label className="mb-1 block text-sm font-medium text-fg-muted">
+              收車人<span className="text-error"> *</span>
+            </label>
+            <select
+              required
+              value={form.purchase_agent_id}
+              onChange={(event) => set('purchase_agent_id', event.target.value)}
+              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+            >
+              <option value="">請選擇實際收車人</option>
+              {commissionAgents.map((agent) => (
+                <option key={agent.id} value={agent.id}>{agent.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="my-6 border-t border-border" />

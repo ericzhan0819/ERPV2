@@ -1,6 +1,7 @@
 import { apiClient } from './client'
 import type {
   CloseSalePayload,
+  CommissionAgent,
   CreateVehiclePayload,
   FinalPaymentPayload,
   FinalPaymentResponse,
@@ -13,12 +14,31 @@ import type {
   VehicleListResponse,
   VehiclePrintClosingResponse,
   VehiclePrintIntakeResponse,
+  UpdateCommissionAttributionPayload,
 } from '../types/vehicle'
 import type { MoneyEntry } from '../types/moneyEntry'
 
 export async function listVehicles(params: VehicleListParams): Promise<VehicleListResponse> {
   const { data } = await apiClient.get<VehicleListResponse>('/api/vehicles', { params })
   return data
+}
+
+export async function listCommissionAgentOptions(): Promise<CommissionAgent[]> {
+  const { data } = await apiClient.get<{ data: CommissionAgent[] }>('/api/vehicles/commission-agent-options')
+  return data.data
+}
+
+export async function listPendingCommissionAttribution(): Promise<Vehicle[]> {
+  const { data } = await apiClient.get<{ data: Vehicle[] }>('/api/vehicles/commission-attribution-pending')
+  return data.data
+}
+
+export async function updateCommissionAttribution(
+  id: number,
+  payload: UpdateCommissionAttributionPayload,
+): Promise<Vehicle> {
+  const { data } = await apiClient.patch<{ data: Vehicle }>(`/api/vehicles/${id}/commission-attribution`, payload)
+  return data.data
 }
 
 export async function getVehicle(id: number): Promise<VehicleDetailResponse> {

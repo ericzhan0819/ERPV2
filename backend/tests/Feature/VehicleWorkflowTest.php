@@ -14,11 +14,24 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Tests\Concerns\UsesCommissionAttributionFixtures;
 use Tests\TestCase;
 
 class VehicleWorkflowTest extends TestCase
 {
     use RefreshDatabase;
+    use UsesCommissionAttributionFixtures;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->setUpCommissionAttributionFixtures();
+    }
+
+    public function postJson($uri, array $data = [], array $headers = [], $options = 0)
+    {
+        return parent::postJson($uri, $this->addCommissionAttributionFixtures($uri, $data), $headers, $options);
+    }
 
     public function test_listing_a_vehicle_marks_preparation_as_completed(): void
     {
@@ -1002,6 +1015,7 @@ class VehicleWorkflowTest extends TestCase
                 'deposit_amount' => 100000,
                 'cash_account_id' => $cashAccount->id,
                 'idempotency_key' => (string) Str::uuid(),
+                'sales_agent_id' => $this->defaultCommissionAgent->id,
             ], $user->id);
 
             $this->fail('應該因為車輛狀態已變更而拋出 ValidationException');
