@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 3 部分審查修正後最新完整回歸為 396 tests、1617 assertions、4 skipped，frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 3 部分複審修正後最新完整回歸為 398 tests、1617 assertions、6 skipped，其中新增 2 個 skipped 是需安全旗標與可拋棄 MariaDB schema 的真並發測試；另行啟用後為 2 tests、28 assertions 全數通過。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
 
 ---
 
@@ -361,6 +361,7 @@ v1.3 第 1～3 部分已補齊：
 - Commission Plan tiers 由集中規則驗證，方案不提供修改／刪除 API；月份採「最新有效生效日、同日較新 id」的 deterministic 選取規則。
 - 薪資設定稽核只記對象與異動欄位名稱，不複製底薪、津貼、保險扣款金額值。
 - Salary Profile 首次建立與 Commission Plan 重名建立的 duplicate-key race 皆會在 rollback 後開新 transaction 讀取 winner；相同 profile payload 可 replay，不同內容／重名方案回 422，不再外洩成 500。
+- `SalarySettingsMysqlConcurrencyTest` 使用 `pcntl_fork`、socket barrier 與真正獨立 MariaDB connections 驅動兩個 Service 公開方法；只有在測試環境、connection／database allowlist、明確可拋棄資料庫名稱與 `RUN_MYSQL_CONCURRENCY_TESTS=1` 同時成立時才允許 `migrate:fresh`。
 
 後續仍待實作：
 
