@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Carbon;
 
 class StoreSalaryPeriodRequest extends FormRequest
 {
@@ -13,8 +14,10 @@ class StoreSalaryPeriodRequest extends FormRequest
 
     public function rules(): array
     {
+        $currentMonth = Carbon::now(config('app.timezone'))->format('Y-m');
+
         return [
-            'period_month' => ['required', 'date_format:Y-m'],
+            'period_month' => ['required', 'date_format:Y-m', "before_or_equal:{$currentMonth}"],
             'commission_plan_id' => ['missing'],
             'status' => ['missing'],
             'settlements' => ['missing'],
@@ -37,6 +40,7 @@ class StoreSalaryPeriodRequest extends FormRequest
         return [
             'period_month.required' => '結算月份為必填欄位',
             'period_month.date_format' => '結算月份格式必須為 YYYY-MM',
+            'period_month.before_or_equal' => '結算月份不得晚於台北目前月份',
             '*.missing' => ':attribute 不允許由前端寫入',
         ];
     }

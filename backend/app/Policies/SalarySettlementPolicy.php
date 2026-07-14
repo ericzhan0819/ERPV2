@@ -16,4 +16,9 @@ class SalarySettlementPolicy
     {
         return $user->isAdmin();
     }
+
+    public function deleteAdjustment(User $user, SalarySettlement $salarySettlement): bool
+    {
+        return $user->isAdmin();
+    }
 }

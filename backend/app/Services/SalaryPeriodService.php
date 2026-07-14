@@ -34,6 +34,7 @@ final class SalaryPeriodService
     {
         $this->assertAdmin($actor);
         $periodMonth = SalaryPeriodMonth::normalize($periodMonth);
+        $this->assertPeriodMonthNotFuture($periodMonth);
 
         try {
             return DB::transaction(function () use ($actor, $periodMonth) {
@@ -496,10 +497,17 @@ final class SalaryPeriodService
     {
         return $period->load([
             'plan.tiers',
+            'plan.createdBy:id,name',
             'settlements' => fn ($query) => $query->orderBy('user_id'),
             'settlements.user:id,name,email,role',
             'settlements.items' => fn ($query) => $query->orderBy('type')->orderBy('vehicle_id')->orderBy('id'),
+            'settlements.items.vehicle:id,stock_no,brand,model',
+            'settlements.items.createdBy:id,name',
             'settlements.moneyEntry',
+            'createdBy:id,name',
+            'confirmedBy:id,name',
+            'paidBy:id,name',
+            'cashAccount:id,name,type',
         ]);
     }
 
@@ -634,6 +642,16 @@ final class SalaryPeriodService
     {
         if (! $actor->isAdmin() || ! $actor->is_active) {
             throw new AuthorizationException('只有啟用中的管理員可以操作薪資結算');
+        }
+    }
+
+    private function assertPeriodMonthNotFuture(string $periodMonth): void
+    {
+        $currentMonth = Carbon::now(config('app.timezone'))->format('Y-m');
+        if ($periodMonth > $currentMonth) {
+            throw ValidationException::withMessages([
+                'period_month' => ["結算月份不得晚於台北目前月份（{$currentMonth}）"],
+            ]);
         }
     }
 

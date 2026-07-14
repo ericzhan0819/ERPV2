@@ -34,6 +34,17 @@ class StoreSalaryAdjustmentRequest extends FormRequest
         ];
     }
 
+    protected function prepareForValidation(): void
+    {
+        $amount = $this->input('amount');
+        if (is_string($amount) && ctype_digit($amount)) {
+            $normalized = (int) $amount;
+            if ((string) $normalized === $amount) {
+                $this->merge(['amount' => $normalized]);
+            }
+        }
+    }
+
     public function messages(): array
     {
         return [

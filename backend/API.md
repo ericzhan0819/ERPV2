@@ -993,6 +993,7 @@ v1.3 第 6 部分新增的薪資資格與異常檢查目前是後端集中服務
 v1.3 第 7～9 部分已完成 `SalaryPeriodService` 與 Policy／Request／Resource HTTP 安全邊界；對外 Controller／Routes 仍依 PLAN 第 10 部分後續實作，目前不提前開放 endpoint。服務層與輸出行為如下：
 
 - 建立草稿時以 `findEffectiveForMonthForUpdate()` 鎖定並選取方案，再固定 `commission_plan_id`；同月份重複建立或沒有有效方案皆回 `422`。
+- 建立月份不得晚於 `Asia/Taipei` 目前月份；當月與過去月份可建立，未來月份在 Request 與 Service 兩層均回 `422 period_month`，避免月份被提前確認後鎖住未來成交回填。
 - 只有「啟用使用者 + 啟用薪資設定」建立 settlement；啟用但沒有薪資設定的使用者採明確排除，不會以零薪資靜默納入。
 - 草稿重算沿用已綁定方案，重新建立自動項目並保留手動加扣；已存在 settlement 的薪資設定若後來停用，其自動項目歸零，既有手動項目仍保留供管理員明確處理。
 - 草稿允許 `net_pay < 0`，例如純佣金員工淡月只有保險扣款，或停用設定後仍保留既有手動扣款；負值會如實保存在 signed bigint，讓 admin 可在草稿內用手動加給補平或刪除扣款。新增手動扣款若當下會把 net pay 降到負數仍即時回 `422`。
@@ -1001,6 +1002,7 @@ v1.3 第 7～9 部分已完成 `SalaryPeriodService` 與 Policy／Request／Reso
 - 跨模組月份鎖使用 `period_month = YYYY-MM-01` 等值條件，命中 MySQL unique index；`SalaryPeriod` 亦強制以 `Y-m-d` 持久化，避免 SQLite 保存時間部分而破壞同一契約。
 - `SalaryPeriodResource` 的 draft 回應會即時呼叫 `SalaryEligibilityService::inspectPeriod()`，附上 `anomalies`、`vehicle_results`、`has_blocking_issues` 與既有 correction action。異常是衍生資料、不寫入 salary_periods；confirmed／paid 回應不重算目前資格，僅回傳鎖定的 settlement／item snapshot。
 - 薪資 Resource 全部採白名單；不回傳 `idempotency_key`、`money_entry_id`、原始 `calculation_snapshot` 額外欄位或 audit metadata。SalaryPeriod／SalarySettlement Policy 僅允許 admin，未知角色 fail-closed。
+- Service 回傳月份時會預載 Resource 所需的方案建立人、月份建立／確認／發薪人、資金帳戶、item 車輛摘要與手動項目建立人；手動加扣 Request 會將 canonical 整數字串金額正規化為 int。SalarySettlementPolicy 提供 `adjust` 與 `deleteAdjustment` 兩個 admin-only ability。
 - 薪資月份與手動加扣會寫 Audit Log，但不複製薪資金額、加扣金額或說明內容到 audit metadata。
 
 v1.3 第 8～9 部分已完成同一 Service 的發薪契約與 Pay Request／Policy／Resource；`POST /api/salary-periods/{salaryPeriod}/pay` 仍待 PLAN 第 10 部分補上 Controller 與 route，因此目前不可由外部呼叫。服務層行為如下：

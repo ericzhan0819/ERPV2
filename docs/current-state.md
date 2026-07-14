@@ -386,11 +386,14 @@ v1.3 第 1～9 部分已補齊：
 - 薪資資格服務的任意集合檢查已改為 private；一般預覽使用 `inspectPeriod()`，第 7 部分的草稿建立／重算使用 transaction-only `inspectPeriodForUpdate()` 鎖定完整月份，確認則使用 `assertPeriodEligible()` 重新鎖定並阻擋異常。
 - 零毛利／虧損車只要其他資格完整仍列為 eligible，並回傳 approved-only 毛利；後續交給計算器保留明細與公司淨損益，但不推升賣車跨級台數。
 - `SalaryPeriodService` 已完成月份草稿、重算、手動加扣與確認鎖定。建立草稿才選取最新有效方案，後續重算固定沿用 `commission_plan_id`，不受新建回溯方案影響。
+- 薪資草稿月份不得晚於 `Asia/Taipei` 目前月份；當月可用於即時預估，未來月份由 Request 與 Service 雙層拒絕，避免誤確認後提前鎖住該月份成交回填。
 - 只有 active user + active salary profile 建立 settlement；沒有啟用薪資設定的使用者採明確排除。草稿重算會更新薪資 snapshot 與所有自動項目，但保留既有手動加扣；設定後來停用的既有 settlement 自動項目歸零，不會暗刪手動資料。
 - `salary_settlements.net_pay` 為 signed bigint。草稿允許負薪並保持可建立、可重算、可手動補平；確認點才列出負薪員工並以 422 阻擋。新增手動扣款若立即造成負薪仍會 rollback。
 - 草稿建立／重算會先鎖定整月 sold 候選車，再讀 MoneyEntry、settlement snapshot 與方案，避免 MySQL REPEATABLE READ 在車輛鎖前建立舊 read view；與獎金歸屬修改及綁車 MoneyEntry 核准共用車輛列鎖。確認時同一 transaction 重新選取、鎖定、驗資格、重算並比對 snapshot；stale preview 會回 422 要求先重算。
 - confirmed／paid 月份查詢以 `period_month = YYYY-MM-01` 命中 unique index，不使用會使 MySQL 全表掃描並擴大 `FOR UPDATE` 鎖範圍的 `whereDate()`。SalaryPeriod 寫入則固定正規化為 `Y-m-d`，確保 SQLite／MySQL 等值契約一致。
 - draft 不持久化資格異常；`SalaryPeriodResource` 已在輸出草稿時呼叫 `SalaryEligibilityService::inspectPeriod()`，把 `anomalies`、`vehicle_results`、`has_blocking_issues` 與修正 action 一併回傳，避免被排除的異常車在草稿畫面靜默消失。confirmed／paid 回應只讀鎖定快照，不重新套用目前資格資料。
+- `SalaryPeriodService::loadPeriod()` 與薪資 Resource 的 `whenLoaded()` 契約已對齊：方案建立人、月份建立／確認／發薪人、發薪帳戶，以及 item 的車輛摘要／手動項目建立人都由真實 Service 回傳預載，不依賴 Controller 額外補載。
+- 手動加扣 Request 會把 canonical 整數字串金額正規化為 int，再交給 Service 的嚴格整數契約；SalarySettlementPolicy 同時提供新增與刪除手動加扣的 admin-only ability，供第 10 部分 routes 掛載。
 - `SalarySettingsMysqlConcurrencyTest` 已新增並在可拋棄 MariaDB schema 實跑 salary period／closeSale fork/socket 鎖序案例：parent 持有 period 鎖時 child 必須等待，parent 仍可取得 vehicle 鎖；提交 confirmed 後 child 醒來回 `sold_at` 422，避免未來重構恢復 vehicle → period 反向鎖。
 - confirmed／paid 月份拒絕重算與手動項目異動；`closeSale()` 回填至已鎖月份會回 422 並要求聯絡管理員，已售車歸屬也會依 `sold_at` 月份防禦沒有 settlement item reference 的歷史缺口。draft 月份仍可成交或修正歸屬，之後重算納入。
 - 薪資月份建立、重算、確認與手動加扣新增／刪除皆有 Audit Log；metadata 不保存薪資金額、加扣金額或說明內容。
