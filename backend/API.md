@@ -1076,6 +1076,7 @@ Request body：
 - confirmed／paid 後拒絕重算及手動加扣；已確認月份的成交回填與車輛獎金歸屬修改也會依台北月份阻擋，即使歷史資料沒有 settlement item reference 亦同。
 - 跨模組月份鎖使用 `period_month = YYYY-MM-01` 等值條件，命中 MySQL unique index；`SalaryPeriod` 亦強制以 `Y-m-d` 持久化，避免 SQLite 保存時間部分而破壞同一契約。
 - `SalaryPeriodResource` 的獨立 GET draft 回應會即時呼叫 `SalaryEligibilityService::inspectPeriod()`，附上 `anomalies`、`vehicle_results`、`has_blocking_issues` 與既有 correction action。`company_reserve_total` 與 `company_remaining_total` 直接保存 calculator 對整月 eligible vehicles 算出的批次結果，不依賴員工 settlement item 是否存在；若升級前草稿尚未重算，兩欄為 `null` 且 `company_totals_available=false`。前端不得自行重算。異常是衍生資料、不寫入 salary_periods；confirmed／paid 回應不重算目前資格，僅回傳鎖定快照。
+- draft 詳情另回傳非阻擋性的 `commission_warnings`：只列正毛利 eligible vehicle 中，收車人／賣車人沒有 active salary profile、使用者已停用或 `commission_enabled=false` 的角色。每筆含車號、角色、人員、原因及 `salary_profile` 修正 action；這些提示不會改變 `has_blocking_issues`，相應獎金仍依 calculator 規則歸入 `company_remaining_total`。confirmed／paid 不重新產生目前設定提示。
 - 建立與重算的寫入回應會沿用同一 transaction 內 `inspectPeriodForUpdate()` 的 eligibility 結果，不在 commit 後重複掃描；獨立 `GET` 詳情仍即時呼叫 `inspectPeriod()`，反映目前資料。
 - 薪資 Resource 全部採白名單；不回傳 `idempotency_key`、`money_entry_id`、原始 `calculation_snapshot` 額外欄位或 audit metadata。SalaryPeriod／SalarySettlement Policy 僅允許 admin，未知角色 fail-closed。
 - Service 回傳月份時會預載 Resource 所需的方案建立人、月份建立／確認／發薪人、資金帳戶、item 車輛摘要與手動項目建立人；手動加扣 Request 會將 canonical 整數字串金額正規化為 int。SalarySettlementPolicy 提供 `adjust` 與 `deleteAdjustment` 兩個 admin-only ability。

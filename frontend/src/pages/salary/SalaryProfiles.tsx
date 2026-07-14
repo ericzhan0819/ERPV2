@@ -21,14 +21,17 @@ export function SalaryProfiles() {
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   function load() {
+    setLoading(true)
     Promise.all([listSalaryProfiles(), listUsers()])
       .then(([loadedProfiles, loadedUsers]) => {
         setProfiles(loadedProfiles)
         setUsers(loadedUsers)
       })
       .catch((caught) => setError(apiError(caught, '薪資設定載入失敗')))
+      .finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [])
@@ -78,6 +81,8 @@ export function SalaryProfiles() {
       </div>
 
       {error && <p className="text-sm text-error">{error}</p>}
+      {loading && <p className="text-sm text-fg-muted">載入中...</p>}
+      {!loading && rows.length === 0 && <p className="text-sm text-fg-muted">目前沒有可設定的員工</p>}
       <div className="grid gap-4">
         {rows.map((profile) => (
           <SalaryProfileCard

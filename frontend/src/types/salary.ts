@@ -40,6 +40,11 @@ export interface SalaryAnomaly {
   vehicle_id: number; stock_no: string; code: string; field: string; message: string
   correction: { label: string; action: string }; context: Record<string, unknown>
 }
+export interface SalaryCommissionWarning {
+  vehicle_id: number; stock_no: string; code: 'active_salary_profile_missing' | 'commission_disabled'
+  role: 'purchase' | 'sales'; agent_id: number; agent_name: string | null; message: string
+  correction: { label: string; action: 'salary_profile' }
+}
 export interface SalaryVehicleResult {
   vehicle_id: number; stock_no: string; brand: string; model: string; sold_at: string | null
   purchase_agent_id: number | null; sales_agent_id: number | null; eligible: boolean
@@ -55,5 +60,6 @@ export interface SalaryPeriod {
   settlements: SalarySettlement[]; totals: SalaryTotals
   confirmed_at: string | null; paid_at: string | null; payment_date: string | null
   cash_account: { id: number; name: string; type: string } | null
-  anomalies?: SalaryAnomaly[]; vehicle_results?: SalaryVehicleResult[]; has_blocking_issues?: boolean
+  anomalies?: SalaryAnomaly[]; commission_warnings?: SalaryCommissionWarning[]
+  vehicle_results?: SalaryVehicleResult[]; has_blocking_issues?: boolean
 }

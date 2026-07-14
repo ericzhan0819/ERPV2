@@ -23,11 +23,14 @@ export function CommissionPlans() {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
   function load() {
+    setLoading(true)
     listCommissionPlans()
       .then(setPlans)
       .catch((caught) => setError(apiError(caught, '獎金方案載入失敗')))
+      .finally(() => setLoading(false))
   }
 
   useEffect(() => { load() }, [])
@@ -58,6 +61,7 @@ export function CommissionPlans() {
       </div>
 
       {error && <p className="text-sm text-error">{error}</p>}
+      {loading && <p className="text-sm text-fg-muted">載入中...</p>}
       <button
         onClick={() => setShowForm((visible) => !visible)}
         className="w-fit rounded-lg bg-primary px-4 py-2 text-sm text-primary-fg"
@@ -70,6 +74,7 @@ export function CommissionPlans() {
       )}
 
       <div className="grid gap-4">
+        {!loading && plans.length === 0 && <p className="text-sm text-fg-muted">尚未建立獎金方案</p>}
         {plans.map((plan) => <CommissionPlanCard key={plan.id} plan={plan} />)}
       </div>
     </div>

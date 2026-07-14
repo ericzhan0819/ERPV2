@@ -1,8 +1,8 @@
-# 中古車行內部營運系統（1.0 + v1.1 + v1.2；v1.3 開發中）
+# 中古車行內部營運系統（1.0 + v1.1 + v1.2；v1.3 待人工驗收）
 
 小型中古車行內部使用的前後端分離營運管理系統。v1.1 新增角色（`admin`／`manager`／`sales`）、敏感金額遮蔽、一般收支審核、客戶模組與建車入庫欄位補強，並以 `v1.1-smoke-passed` 封版。v1.2 新增車輛照片管理與官網公開唯讀車輛 API，已完成自動測試、瀏覽器 manual smoke，並以 `v1.2-smoke-passed` 封版。完整穩定狀態見 `docs/current-state.md`、`docs/v1.2-smoke-report.md` 與 `docs/v1.2-handoff.md`。
 
-v1.3 已完成 `PLAN_v1.3.md` 第 0～11 部分：薪資資料模型、admin-only 員工薪資設定／版本化獎金方案、車輛收／賣車人正式歸屬、approved-only 整月跨級獎金、資格異常檢查、月份草稿／重算／確認、具備 transaction、idempotency 與 paid 歷史保護的整批發薪，以及完整薪資管理前端與隱私邊界。完整 manual smoke 仍待使用者執行。完整規格、進度與本階段交接見 `企劃書_v1.3.md`、`PLAN_v1.3.md`、`docs/current-state.md`、`docs/v1.3-phase11-handoff.md`。
+v1.3 薪資結算的功能實作、自動測試、真實 MariaDB 並發／時區測試、前端 lint／typecheck／production build 與文件已完成；目前只剩使用者執行完整 browser manual smoke。範圍包含 admin-only 員工薪資設定、版本化獎金方案、正式收／賣車歸屬、approved-only 整月跨級獎金、異常與非阻擋提示、月份草稿／重算／確認、具備 transaction、idempotency 與 paid 歷史保護的整批發薪。完整規格、進度、待驗項目與交接見 `企劃書_v1.3.md`、`PLAN_v1.3.md`、`docs/current-state.md`、`docs/v1.3-smoke-report.md`、`docs/v1.3-handoff.md`。
 
 ### v1.3 預定公式
 
@@ -121,6 +121,15 @@ cd backend
 php artisan test
 ```
 
+前端驗證：
+
+```bash
+cd frontend
+npm run lint
+npx tsc -b
+npm run build
+```
+
 手動驗證（v1.2 已完成一次完整 browser smoke，結果見 `docs/v1.2-smoke-report.md`；重新部署或重大修改後依下列項目複查）：
 
 1. `php artisan serve` 啟動後端、`npm run dev` 啟動前端。
@@ -137,6 +146,12 @@ php artisan test
 11. 以 admin 開啟「稽核紀錄」，確認登入、資料新增／修改／刪除皆有紀錄；manager／sales 不可進入該頁或呼叫稽核 API。
 12. （v1.2）於車輛詳情頁以 `admin`／`manager` 帳號上傳／刪除／排序／設定封面照片，確認縮圖與封面正確顯示；以 `sales` 帳號檢視同一頁，確認只能看照片、不會顯示上傳／刪除／排序等管理按鈕，且直接呼叫對應 API 會回傳 `403`。
 13. （v1.2）呼叫 `GET /api/public/vehicles`、`GET /api/public/vehicles/{id}`（不帶登入 cookie），確認只回傳 `status=listed` 的車輛，且回應 JSON 不含收購價、底價、成交價、客戶個資、收支、毛利、資金帳戶等欄位；查詢非上架中或不存在的車輛 id 應回傳 `404`。
+14. （v1.3）依 `docs/v1.3-smoke-report.md` 建立至少兩位員工與五台同月份成交車，確認 1／3／5 台整月級距為 20%／30%／50%，同人收賣車可同時取得兩項獎金。
+15. （v1.3）確認公司保留、分配池、收車／賣車獎金、公司剩餘與毛利恆等；歸屬人未啟用薪資或獎金時顯示非阻擋提示，對應獎金明確歸入公司剩餘。
+16. （v1.3）確認底薪、津貼、勞健保、手動加扣與全公司實發總額；草稿變更後未重算不得直接確認。
+17. （v1.3）逐一製造缺收車人、缺賣車人、pending 收支及購車付款不一致，確認皆阻擋；虧損車不得產生負獎金。
+18. （v1.3）確認後頁面只讀；發薪後每位正數實發員工各有一筆 approved `salary_settlement` MoneyEntry，帳戶餘額正確下降，重試不重複建立支出。
+19. （v1.3）以 manager／sales 檢查 Sidebar、直接路由與 API 均無法取得薪資資料，並於 light／dark mode、桌機／手機寬度完成基本操作。
 
 ## 常見問題
 

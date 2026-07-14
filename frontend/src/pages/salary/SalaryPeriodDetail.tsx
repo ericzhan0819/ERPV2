@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { listCashAccounts } from '../../api/cashAccounts'
 import {
@@ -12,6 +12,7 @@ import {
 import type { CashAccountOption } from '../../types/cashAccount'
 import type {
   CommissionPlanTier,
+  SalaryCommissionWarning,
   SalaryAnomaly,
   SalaryPeriod,
   SalarySettlement,
@@ -49,6 +50,7 @@ export function SalaryPeriodDetail() {
   const [period, setPeriod] = useState<SalaryPeriod | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const actionInFlight = useRef(false)
   const [expanded, setExpanded] = useState<number | null>(null)
   const [adjustment, setAdjustment] = useState<AdjustmentForm | null>(null)
   const [accounts, setAccounts] = useState<CashAccountOption[]>([])
@@ -73,6 +75,8 @@ export function SalaryPeriodDetail() {
   }, [])
 
   async function runAction(action: () => Promise<unknown>) {
+    if (actionInFlight.current) return
+    actionInFlight.current = true
     setBusy(true)
     setError(null)
     try {
@@ -81,6 +85,7 @@ export function SalaryPeriodDetail() {
     } catch (caught) {
       setError(apiError(caught, '薪資操作失敗'))
     } finally {
+      actionInFlight.current = false
       setBusy(false)
     }
   }
@@ -137,6 +142,10 @@ export function SalaryPeriodDetail() {
 
       {period.status === 'draft' && period.anomalies && period.anomalies.length > 0 && (
         <AnomalyPanel anomalies={period.anomalies} />
+      )}
+
+      {period.status === 'draft' && period.commission_warnings && period.commission_warnings.length > 0 && (
+        <CommissionWarningPanel warnings={period.commission_warnings} />
       )}
 
       <div className="grid gap-4">
@@ -290,6 +299,30 @@ function AnomalyPanel({ anomalies }: { anomalies: SalaryAnomaly[] }) {
               className="font-medium text-primary"
             >
               {anomaly.correction.label}
+            </Link>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function CommissionWarningPanel({ warnings }: { warnings: SalaryCommissionWarning[] }) {
+  return (
+    <section className="rounded-2xl border border-warning/40 bg-surface p-5">
+      <h2 className="font-semibold text-warning">獎金設定提示（不阻擋確認）</h2>
+      <p className="mt-1 text-sm text-fg-muted">
+        下列歸屬人不會取得對應獎金，金額將保留在公司剩餘分配額。
+      </p>
+      <div className="mt-3 grid gap-2">
+        {warnings.map((warning) => (
+          <div
+            key={`${warning.vehicle_id}-${warning.role}`}
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-warning/10 p-3 text-sm"
+          >
+            <span><b>{warning.stock_no}</b>：{warning.message}</span>
+            <Link to="/salary/profiles" className="font-medium text-primary">
+              {warning.correction.label}
             </Link>
           </div>
         ))}

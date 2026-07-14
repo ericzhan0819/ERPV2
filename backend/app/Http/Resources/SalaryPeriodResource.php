@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\SalaryPeriod;
+use App\Services\SalaryCommissionWarningService;
 use App\Services\SalaryEligibilityService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -32,6 +33,11 @@ class SalaryPeriodResource extends JsonResource
                 'type' => $this->cashAccount->type,
             ] : null),
             'anomalies' => $this->when($eligibility !== null, fn () => $eligibility['anomalies']),
+            'commission_warnings' => $this->when(
+                $eligibility !== null,
+                fn () => app(SalaryCommissionWarningService::class)
+                    ->forVehicleResults($eligibility['vehicle_results']),
+            ),
             'vehicle_results' => $this->when(
                 $eligibility !== null,
                 fn () => $this->vehicleResults($eligibility['vehicle_results']),

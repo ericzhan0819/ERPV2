@@ -34,7 +34,9 @@ class VehicleFinalPaymentMysqlConcurrencyTest extends TestCase
 
         $this->artisan('migrate:fresh')->run();
 
-        $user = User::factory()->create(['is_active' => true]);
+        // 本案例驗證「已核准」訂金＋尾款的 duplicate-key replay；使用 admin 才符合
+        // 現行 approval 契約，manager／sales 建立的收款會保持 pending，不應拿來斷言足額警告為 null。
+        $user = User::factory()->admin()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
         $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
         $payload = [

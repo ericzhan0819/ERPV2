@@ -129,12 +129,14 @@ class VehicleCreateMysqlConcurrencyTest extends TestCase
             'brand' => 'Toyota',
             'model' => 'Camry',
             'license_plate' => 'RACE-0001',
+            'purchase_agent_id' => $user->id,
             'idempotency_key' => (string) Str::uuid(),
         ];
         $secondPayload = [
             'brand' => 'Honda',
             'model' => 'Civic',
             'license_plate' => 'RACE-0002',
+            'purchase_agent_id' => $user->id,
             'idempotency_key' => (string) Str::uuid(),
         ];
 
@@ -167,7 +169,13 @@ class VehicleCreateMysqlConcurrencyTest extends TestCase
             $signal = fread($sockets[0], 1);
             $metadata = stream_get_meta_data($sockets[0]);
             if ($signal !== 'L' || ($metadata['timed_out'] ?? false)) {
-                $this->fail('第一個建車行程未在時限內鎖住每日序號列。');
+                $status = $this->waitForChildOrStop($firstPid);
+                $firstPid = 0;
+                $childResult = $this->readChildResult($firstResultPath);
+                $this->fail(
+                    '第一個建車行程未在時限內鎖住每日序號列。Child status: '
+                    .$status.' result: '.json_encode($childResult, JSON_UNESCAPED_UNICODE),
+                );
             }
 
             $secondPid = pcntl_fork();
@@ -180,7 +188,7 @@ class VehicleCreateMysqlConcurrencyTest extends TestCase
                 $this->runCreateRequestInChild($secondResultPath, $secondPayload, $user->id);
             }
 
-            // 此段說明相鄰程式碼的用途與預期行為。
+            // 讓第二個請求確實進入等待序號鎖的狀態，再允許第一個交易提交。
             usleep(250000);
             fwrite($sockets[0], 'C');
             fclose($sockets[0]);
@@ -249,17 +257,26 @@ class VehicleCreateMysqlConcurrencyTest extends TestCase
             }
         });
 
-        $this->runCreateRequestInChild($resultPath, $payload, $userId, $socket);
+        // listener 必須留在同一個 connection dispatcher；下層不可再次 purge，否則
+        // Laravel 13 會連同剛註冊的查詢監聽一起移除，父行程永遠收不到鎖定訊號。
+        $this->runCreateRequestInChild($resultPath, $payload, $userId, $socket, false);
     }
 
     /**
      * @param  array<string, mixed>  $payload
      * @param  resource|null  $socket
      */
-    private function runCreateRequestInChild(string $resultPath, array $payload, int $userId, $socket = null): never
-    {
-        DB::disconnect();
-        DB::purge();
+    private function runCreateRequestInChild(
+        string $resultPath,
+        array $payload,
+        int $userId,
+        $socket = null,
+        bool $resetConnection = true,
+    ): never {
+        if ($resetConnection) {
+            DB::disconnect();
+            DB::purge();
+        }
 
         try {
             $vehicle = app(VehicleService::class)->createVehicle($payload, $userId);
