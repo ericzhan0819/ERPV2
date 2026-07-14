@@ -410,7 +410,8 @@ v1.3 第 1～10 部分已補齊：
 - 發薪服務接受正整數或 canonical 整數字串形式的 `cash_account_id`，並集中正規化為 int；`PaySalaryPeriodRequest` 同步接受表單常見的整數字串、拒絕停用帳戶，非法型別回傳業務可讀中文訊息。
 - `payment_date` 定義為款項實際支付日，必須介於結算月份第一天與今天之間；可延後至隔月或更後月份補發，但不可提前到結算月之前，也不可用尚未實際發生的未來日期建立 approved 支出。
 - 第 11 部分 review 修正公司摘要來源：`company_reserve_total`／`company_remaining_total` 由 calculator 的整月 eligible vehicle 批次 totals 保存到 salary period，不再從「有員工 settlement 才建立」的 item 反推，因此收／賣車人都沒有 active salary profile 時仍不會漏算公司分配。
-- 新增公司 totals migration 對升級前草稿保留 nullable，重算後寫入；若部署前已有 confirmed／paid 月份則在任何 DDL 前停止，要求人工評估，避免缺乏 durable provenance 的歷史數字被靜默回填為 0。
+- 新增公司 totals migration 對升級前草稿保留 nullable，重算後寫入；若部署前已有 confirmed／paid 月份則在任何 DDL 前停止，要求人工評估，避免缺乏 durable provenance 的歷史數字被靜默回填為 0。此 migration 實質 forward-only：`down()` 只移除欄位；若 rollback 後又產生 confirmed／paid 月份，不能直接重新 `up()`，必須先人工處理歷史資料。
+- 公司 totals 已納入 confirm 的草稿 snapshot signature；即使車輛歸屬人都沒有 active salary profile、完全不產生 bonus item，草稿後 approved 收支造成的公司分配漂移仍會以 422 要求先重算，不會確認 admin 尚未看過的數字。
 - Dashboard 薪資卡依月份狀態顯示預估／已確認／實發，並區分尚未建立與載入失敗；薪資前端已拆分為可獨立審查的卡片、表單、明細、異常、發薪及 modal 元件。
 
 後續仍待實作／驗收：

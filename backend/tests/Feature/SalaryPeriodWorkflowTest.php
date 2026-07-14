@@ -255,6 +255,31 @@ class SalaryPeriodWorkflowTest extends TestCase
         $this->expectValidation(fn () => $this->service->recalculateDraft($this->admin, $confirmed), 'status');
     }
 
+    public function test_confirm_rejects_company_total_drift_for_vehicle_whose_agents_have_no_salary_profile(): void
+    {
+        $plan = $this->plan('六月方案', '2026-01-01', 2000);
+        $plan->update(['company_reserve_bps' => 4000]);
+        $agentWithoutProfile = User::factory()->sales()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create([
+            'status' => 'sold',
+            'sold_at' => '2026-06-15 12:00:00',
+            'purchase_price' => 50000,
+            'sold_price' => 100000,
+            'purchase_agent_id' => $agentWithoutProfile->id,
+            'sales_agent_id' => $agentWithoutProfile->id,
+        ]);
+        $this->entry($vehicle, 'expense', '購車付款', 50000);
+        $this->entry($vehicle, 'income', '尾款收入', 100000);
+        $period = $this->service->createDraft($this->admin, '2026-06');
+        $this->assertSame(20000, $period->company_reserve_total);
+
+        $this->entry($vehicle, 'expense', '維修支出', 20000);
+
+        $this->expectValidation(fn () => $this->service->confirm($this->admin, $period), 'salary_period');
+        $this->assertSame(SalaryPeriod::STATUS_DRAFT, $period->fresh()->status);
+        $this->assertSame(20000, $period->fresh()->company_reserve_total);
+    }
+
     public function test_recalculate_and_confirm_lock_candidate_vehicles_before_consistent_reads(): void
     {
         $this->plan('六月方案', '2026-01-01', 2000);

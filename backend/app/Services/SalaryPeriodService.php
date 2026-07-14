@@ -512,7 +512,17 @@ final class SalaryPeriodService
                 ])->all(),
             ])->all();
 
-        return hash('sha256', json_encode($rows, JSON_THROW_ON_ERROR));
+        return hash('sha256', json_encode([
+            'company_totals' => [
+                'company_reserve_total' => $period->company_reserve_total === null
+                    ? null
+                    : (int) $period->company_reserve_total,
+                'company_remaining_total' => $period->company_remaining_total === null
+                    ? null
+                    : (int) $period->company_remaining_total,
+            ],
+            'settlements' => $rows,
+        ], JSON_THROW_ON_ERROR));
     }
 
     private function loadPeriod(SalaryPeriod $period): SalaryPeriod

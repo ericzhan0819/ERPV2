@@ -30,6 +30,9 @@ return new class extends Migration
 
     public function down(): void
     {
+        // 本 migration 實質 forward-only：down 只移除新欄位，不可能恢復已丟棄的公司
+        // totals snapshot。若 rollback 後已有月份被確認／發薪，下一次 up 會依上方
+        // fail-fast 停止，必須人工評估，不可用 0 或 item 推測式回填。
         Schema::table('salary_periods', function (Blueprint $table) {
             $table->dropColumn(['company_reserve_total', 'company_remaining_total']);
         });
