@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AuditLog;
 use App\Models\CommissionPlan;
 use App\Models\MoneyEntry;
+use App\Models\SalaryPeriod;
 use App\Models\SalaryProfile;
 use App\Models\User;
 use App\Models\Vehicle;
@@ -12,6 +13,7 @@ use App\Services\CommissionPlanService;
 use App\Services\MoneyEntryService;
 use App\Services\SalaryEligibilityService;
 use App\Services\SalaryProfileService;
+use App\Services\VehicleService;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -230,6 +232,106 @@ class SalarySettingsMysqlConcurrencyTest extends TestCase
         }
     }
 
+    public function test_close_sale_waits_for_salary_period_lock_before_locking_vehicle(): void
+    {
+        $this->prepareDisposableMysqlDatabase();
+
+        $admin = User::factory()->admin()->create();
+        $agent = User::factory()->sales()->create();
+        $plan = CommissionPlan::query()->create([
+            'name' => '成交與薪資鎖序測試方案',
+            'effective_from' => '2026-01-01',
+            'company_reserve_bps' => 4000,
+            'purchase_bonus_bps' => 2000,
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+        $plan->tiers()->create([
+            'min_sales_count' => 1,
+            'sales_bonus_bps' => 2000,
+            'sort_order' => 1,
+        ]);
+        $period = SalaryPeriod::query()->create([
+            'period_month' => '2026-06-01',
+            'commission_plan_id' => $plan->id,
+            'status' => SalaryPeriod::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+        $vehicle = Vehicle::factory()->create([
+            'status' => 'reserved',
+            'sold_price' => 100000,
+            'buyer_name' => '鎖序測試買方',
+            'purchase_agent_id' => $agent->id,
+            'sales_agent_id' => $agent->id,
+        ]);
+        MoneyEntry::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'direction' => 'income',
+            'category' => '尾款收入',
+            'amount' => 100000,
+            'approval_status' => MoneyEntry::APPROVAL_APPROVED,
+            'source_type' => MoneyEntry::SOURCE_MANUAL,
+        ]);
+
+        [$parentSocket, $childSocket] = $this->createSocketPair();
+        $resultPath = $this->createResultPath('erpv2-close-sale-period-lock-');
+        $pid = pcntl_fork();
+
+        if ($pid === -1) {
+            @unlink($resultPath);
+            $this->fail('pcntl_fork 失敗，無法建立真正的第二個成交結案請求。');
+        }
+
+        if ($pid === 0) {
+            fclose($parentSocket);
+            $this->runCloseSaleInChild($childSocket, $resultPath, $vehicle->id, $admin->id);
+        }
+
+        fclose($childSocket);
+        stream_set_timeout($parentSocket, self::CHILD_HANDSHAKE_TIMEOUT_SECONDS);
+        $this->assertChildSignal($parentSocket, 'R', '成交結案 child 未完成獨立資料庫連線初始化。');
+        DB::purge();
+        DB::beginTransaction();
+
+        try {
+            $lockedPeriod = SalaryPeriod::query()->whereKey($period->id)->lockForUpdate()->firstOrFail();
+            fwrite($parentSocket, 'G');
+            $this->assertChildSignal($parentSocket, 'S', '成交結案 child 未開始執行。');
+
+            // 讓 child 有時間進入 closeSale()。正確實作會先等待 period 鎖，尚未持有 vehicle；
+            // 若順序退化成 vehicle → period，這裡取得 vehicle 鎖會形成反向等待並觸發 deadlock。
+            usleep(300000);
+            $lockedVehicle = Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
+            $this->assertSame('reserved', $lockedVehicle->status);
+
+            $lockedPeriod->status = SalaryPeriod::STATUS_CONFIRMED;
+            $lockedPeriod->confirmed_by = $admin->id;
+            $lockedPeriod->confirmed_at = now();
+            $lockedPeriod->save();
+            DB::commit();
+
+            $this->assertChildSignal($parentSocket, 'D', 'period 鎖釋放後，成交結案 child 未在時限內完成。');
+            fclose($parentSocket);
+            $status = $this->waitForChildOrStop($pid);
+            $pid = 0;
+            $childResult = $this->readChildResult($resultPath);
+
+            $this->assertTrue(
+                pcntl_wifexited($status) && pcntl_wexitstatus($status) === 0,
+                '成交結案應等待 period 鎖，醒來後因月份已確認而回 422。Child result: '.json_encode($childResult, JSON_UNESCAPED_UNICODE),
+            );
+            $this->assertSame(true, $childResult['ok'] ?? false);
+            $this->assertSame('validation', $childResult['result'] ?? null);
+            $this->assertSame(['sold_at'], $childResult['error_fields'] ?? null);
+            $this->assertSame('reserved', Vehicle::query()->findOrFail($vehicle->id)->status);
+        } finally {
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
+            $this->cleanupParentResources($parentSocket, $pid, $resultPath);
+        }
+    }
+
     /**
      * @param  resource  $socket
      * @param  array<string, mixed>  $payload
@@ -364,11 +466,57 @@ class SalarySettingsMysqlConcurrencyTest extends TestCase
         }
     }
 
+    /** @param resource $socket */
+    private function runCloseSaleInChild(
+        $socket,
+        string $resultPath,
+        int $vehicleId,
+        int $adminId,
+    ): never {
+        DB::disconnect();
+        DB::purge();
+        fwrite($socket, 'R');
+
+        if (fread($socket, 1) !== 'G') {
+            $this->writeChildResult($resultPath, ['ok' => false, 'message' => '父行程未開始鎖定測試']);
+            fclose($socket);
+            exit(1);
+        }
+
+        fwrite($socket, 'S');
+
+        try {
+            app(VehicleService::class)->closeSale(
+                Vehicle::query()->findOrFail($vehicleId),
+                ['sold_at' => '2026-06-15'],
+                $adminId,
+            );
+            $this->writeChildResult($resultPath, ['ok' => false, 'result' => 'unexpected_success']);
+            fwrite($socket, 'D');
+            fclose($socket);
+            exit(1);
+        } catch (ValidationException $exception) {
+            $this->writeChildResult($resultPath, [
+                'ok' => true,
+                'result' => 'validation',
+                'error_fields' => array_keys($exception->errors()),
+            ]);
+            fwrite($socket, 'D');
+            fclose($socket);
+            exit(0);
+        } catch (Throwable $exception) {
+            $this->writeChildException($resultPath, $exception);
+            fwrite($socket, 'D');
+            fclose($socket);
+            exit(1);
+        }
+    }
+
     private function prepareDisposableMysqlDatabase(): void
     {
         $this->skipUnlessRealMysqlConcurrencyTestCanRun();
         $this->assertSafeToFreshMigrateMysqlConcurrencyDatabase();
-        $this->artisan('migrate:fresh')->run();
+        $this->artisan('migrate:fresh', ['--seed' => true])->run();
     }
 
     private function skipUnlessRealMysqlConcurrencyTestCanRun(): void

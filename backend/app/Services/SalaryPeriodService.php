@@ -97,6 +97,7 @@ final class SalaryPeriodService
                 ->where('salary_period_id', $period->id)
                 ->lockForUpdate()
                 ->firstOrFail();
+            $netPayBeforeAdjustment = (int) $lockedSettlement->net_pay;
 
             $item = $lockedSettlement->items()->create([
                 'type' => $data['type'],
@@ -107,8 +108,11 @@ final class SalaryPeriodService
             $this->updateSettlementTotals($lockedSettlement);
             if ($data['type'] === SalarySettlementItem::TYPE_MANUAL_DEDUCTION
                 && $lockedSettlement->net_pay < 0) {
+                $message = $netPayBeforeAdjustment < 0
+                    ? '目前實發薪資已小於 0，請先用其他加給補平或調整既有扣款'
+                    : '此扣款會使實發薪資小於 0，請先調整其他薪資項目';
                 throw ValidationException::withMessages([
-                    'amount' => ['此扣款會使實發薪資小於 0，請先調整其他薪資項目'],
+                    'amount' => [$message],
                 ]);
             }
             $this->auditLogService->recordSalaryAdjustmentAction($period, $item, AuditLog::ACTION_CREATED, $actor);

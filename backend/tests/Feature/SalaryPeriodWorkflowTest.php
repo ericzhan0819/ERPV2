@@ -102,6 +102,18 @@ class SalaryPeriodWorkflowTest extends TestCase
         }
         $this->assertSame(SalaryPeriod::STATUS_DRAFT, $period->fresh()->status);
 
+        try {
+            $this->service->addAdjustment($this->admin, $settlement, [
+                'type' => SalarySettlementItem::TYPE_MANUAL_DEDUCTION,
+                'amount' => 100,
+                'description' => '負薪時新增扣款',
+            ]);
+            $this->fail('目前已負薪時不得再新增手動扣款');
+        } catch (ValidationException $exception) {
+            $this->assertStringContainsString('目前實發薪資已小於 0', $exception->errors()['amount'][0]);
+        }
+        $this->assertDatabaseMissing('salary_settlement_items', ['description' => '負薪時新增扣款']);
+
         $this->service->addAdjustment($this->admin, $settlement, [
             'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
             'amount' => 1500,

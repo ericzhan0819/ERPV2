@@ -992,11 +992,12 @@ v1.3 第 6 部分新增的薪資資格與異常檢查目前是後端集中服務
 
 v1.3 第 7 部分已完成 `SalaryPeriodService` 的服務層契約，但對外 Policy／Request／Resource／Routes 仍依 PLAN 第 9、10 部分後續實作，本階段不提前開放 endpoint。服務層行為如下：
 
-- 建立草稿時以 `findEffectiveForMonth()` 選取方案並固定 `commission_plan_id`；同月份重複建立或沒有有效方案皆回 `422`。
+- 建立草稿時以 `findEffectiveForMonthForUpdate()` 鎖定並選取方案，再固定 `commission_plan_id`；同月份重複建立或沒有有效方案皆回 `422`。
 - 只有「啟用使用者 + 啟用薪資設定」建立 settlement；啟用但沒有薪資設定的使用者採明確排除，不會以零薪資靜默納入。
 - 草稿重算沿用已綁定方案，重新建立自動項目並保留手動加扣；已存在 settlement 的薪資設定若後來停用，其自動項目歸零，既有手動項目仍保留供管理員明確處理。
 - 草稿允許 `net_pay < 0`，例如純佣金員工淡月只有保險扣款，或停用設定後仍保留既有手動扣款；負值會如實保存在 signed bigint，讓 admin 可在草稿內用手動加給補平或刪除扣款。新增手動扣款若當下會把 net pay 降到負數仍即時回 `422`。
 - 確認時在同一 transaction 先鎖定整月候選車，再讀 MoneyEntry、草稿 snapshot 與方案；接著重跑資格與公式，並將重算結果和草稿 snapshot 比對。若資料已變動則回 `422` 要求先重算；若仍有負薪，`net_pay` 錯誤會列出員工姓名與金額。
 - confirmed／paid 後拒絕重算及手動加扣；已確認月份的成交回填與車輛獎金歸屬修改也會依台北月份阻擋，即使歷史資料沒有 settlement item reference 亦同。
 - 跨模組月份鎖使用 `period_month = YYYY-MM-01` 等值條件，命中 MySQL unique index；`SalaryPeriod` 亦強制以 `Y-m-d` 持久化，避免 SQLite 保存時間部分而破壞同一契約。
+- 第 9 部分實作 `SalaryPeriodResource` 時，draft 回應必須即時呼叫 `SalaryEligibilityService::inspectPeriod()`，附上 `anomalies`、`vehicle_results`、`has_blocking_issues` 與既有 correction action。異常是衍生資料、不寫入 salary_periods，但不得只回 settlements／totals 而讓被排除的車輛靜默消失。
 - 薪資月份與手動加扣會寫 Audit Log，但不複製薪資金額、加扣金額或說明內容到 audit metadata。

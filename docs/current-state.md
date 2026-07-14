@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 6 部分 review 修正後最新完整回歸為 444 tests、1814 assertions、9 skipped，其中 9 個 skipped 是需專用環境或安全旗標的測試。新增的薪資確認／收支核准跨連線鎖測試已在真實 MariaDB 通過 13 assertions，薪資資格 TIMESTAMP 月界整合測試通過 11 assertions；可拋棄 schema 已於驗證後刪除。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 7 部分 review 修正後最新完整回歸為 456 tests、1887 assertions、10 skipped，其中 skipped 項目需要專用環境或安全旗標。薪資確認／收支核准跨連線鎖測試已在真實 MariaDB 通過 13 assertions，薪資資格 TIMESTAMP 月界整合測試通過 11 assertions，本次新增的薪資月份／成交結案鎖序測試通過 14 assertions；可拋棄 schema 均已於驗證後刪除。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
 
 ---
 
@@ -372,7 +372,7 @@ v1.3 第 1～7 部分已補齊：
 - 大額比例以商數／餘數拆算，避免 `amount × bps` 中間乘法 overflow；超出 PHP 安全整數範圍的彙總會明確拒絕，不會靜默截斷。
 - 混合盈虧批次另回傳 `loss_total` 與 `company_net`；`company_total` 表示獲利車分配給公司的正額合計，正式公司淨得應使用 `company_net`，並維持 `company_net + purchase_bonus + sales_bonus = gross_profit`。
 - 計算器要求明確傳入 `YYYY-MM` 結算月份與啟用佣金的 agent IDs；月份不符會拒絕，未啟用佣金的人員只將自己對應的收車／賣車 bps 歸零，不會犧牲另一位人員的合法獎金。
-- `CommissionPlanService::findEffectiveForMonth()` 與計算器共用 `SalaryPeriodMonth` 的 `YYYY-MM` 契約；查詢會明確轉成月首日。第 7 部分只在建立草稿時嚴格選取最新有效方案，之後重算沿用 SalaryPeriod 綁定的 `commission_plan_id`；計算器只驗證方案已儲存且 tiers 合法，避免回溯生效的新方案把既有草稿或歷史 snapshot 卡死。
+- `CommissionPlanService` 的月份查詢與計算器共用 `SalaryPeriodMonth` 的 `YYYY-MM` 契約，查詢會明確轉成月首日；建立草稿使用 `findEffectiveForMonthForUpdate()` 鎖定並選取最新有效方案。之後重算沿用 SalaryPeriod 綁定的 `commission_plan_id`；計算器只驗證方案已儲存且 tiers 合法，避免回溯生效的新方案把既有草稿或歷史 snapshot 卡死。
 - `SalaryProfile.user_id` 明確 cast 為 integer，後續傳入佣金資格集合時不依賴 PDO／driver 回傳型別。
 - 使用者已決策：`gross_profit <= 0` 車輛仍列入月份明細與公司淨損益，但不增加賣車跨級台數；只有正毛利車計入 `eligible_sales_count`。
 - 啟用佣金但整月只有零毛利／虧損車的賣車人仍會出現在 `sales_agents`，明確回傳 0 台、0 bps、0 元，不會消失或造成 undefined key。
@@ -390,6 +390,8 @@ v1.3 第 1～7 部分已補齊：
 - `salary_settlements.net_pay` 為 signed bigint。草稿允許負薪並保持可建立、可重算、可手動補平；確認點才列出負薪員工並以 422 阻擋。新增手動扣款若立即造成負薪仍會 rollback。
 - 草稿建立／重算會先鎖定整月 sold 候選車，再讀 MoneyEntry、settlement snapshot 與方案，避免 MySQL REPEATABLE READ 在車輛鎖前建立舊 read view；與獎金歸屬修改及綁車 MoneyEntry 核准共用車輛列鎖。確認時同一 transaction 重新選取、鎖定、驗資格、重算並比對 snapshot；stale preview 會回 422 要求先重算。
 - confirmed／paid 月份查詢以 `period_month = YYYY-MM-01` 命中 unique index，不使用會使 MySQL 全表掃描並擴大 `FOR UPDATE` 鎖範圍的 `whereDate()`。SalaryPeriod 寫入則固定正規化為 `Y-m-d`，確保 SQLite／MySQL 等值契約一致。
+- draft 不持久化資格異常；第 9 部分的 `SalaryPeriodResource` 必須呼叫 `SalaryEligibilityService::inspectPeriod()`，把 `anomalies`、`vehicle_results`、`has_blocking_issues` 與修正 action 一併回傳，否則被排除的異常車會在草稿畫面靜默消失。
+- `SalarySettingsMysqlConcurrencyTest` 已新增並在可拋棄 MariaDB schema 實跑 salary period／closeSale fork/socket 鎖序案例：parent 持有 period 鎖時 child 必須等待，parent 仍可取得 vehicle 鎖；提交 confirmed 後 child 醒來回 `sold_at` 422，避免未來重構恢復 vehicle → period 反向鎖。
 - confirmed／paid 月份拒絕重算與手動項目異動；`closeSale()` 回填至已鎖月份會回 422 並要求聯絡管理員，已售車歸屬也會依 `sold_at` 月份防禦沒有 settlement item reference 的歷史缺口。draft 月份仍可成交或修正歸屬，之後重算納入。
 - 薪資月份建立、重算、確認與手動加扣新增／刪除皆有 Audit Log；metadata 不保存薪資金額、加扣金額或說明內容。
 
