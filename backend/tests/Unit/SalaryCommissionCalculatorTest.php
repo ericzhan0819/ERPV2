@@ -213,6 +213,32 @@ class SalaryCommissionCalculatorTest extends TestCase
         $this->assertSame(0, $result['vehicles'][$lossVehicle->id]['sales_bonus']);
     }
 
+    public function test_enabled_agent_with_only_loss_or_zero_profit_vehicles_has_zero_tier_summary(): void
+    {
+        [$plan, $lossOnlyAgent] = $this->standardPlanAndAgent();
+        $zeroOnlyAgent = User::factory()->create();
+        $lossVehicle = $this->vehicle($lossOnlyAgent, $lossOnlyAgent);
+        $zeroVehicle = $this->vehicle($zeroOnlyAgent, $zeroOnlyAgent);
+        $this->moneyEntry($lossVehicle, 'income', 40000, MoneyEntry::APPROVAL_APPROVED);
+        $this->moneyEntry($lossVehicle, 'expense', 50000, MoneyEntry::APPROVAL_APPROVED);
+        $this->moneyEntry($zeroVehicle, 'income', 50000, MoneyEntry::APPROVAL_APPROVED);
+        $this->moneyEntry($zeroVehicle, 'expense', 50000, MoneyEntry::APPROVAL_APPROVED);
+
+        $result = $this->calculator->calculate(
+            $plan,
+            '2026-06',
+            [$lossVehicle, $zeroVehicle],
+            [$lossOnlyAgent->id, $zeroOnlyAgent->id],
+        );
+
+        foreach ([$lossOnlyAgent, $zeroOnlyAgent] as $agent) {
+            $this->assertArrayHasKey($agent->id, $result['sales_agents']);
+            $this->assertSame(0, $result['sales_agents'][$agent->id]['eligible_sales_count']);
+            $this->assertSame(0, $result['sales_agents'][$agent->id]['sales_bonus_bps']);
+            $this->assertSame(0, $result['sales_agents'][$agent->id]['sales_bonus_total']);
+        }
+    }
+
     public function test_commission_enabled_agents_are_applied_per_role_without_dropping_vehicle(): void
     {
         [$plan, $enabledAgent] = $this->standardPlanAndAgent();
@@ -268,25 +294,22 @@ class SalaryCommissionCalculatorTest extends TestCase
         $this->calculator->calculate($plan, '2026-6', [], []);
     }
 
-    public function test_calculator_rejects_inactive_future_and_superseded_plans(): void
+    public function test_calculator_keeps_using_a_persisted_bound_plan_after_a_newer_plan_is_created(): void
     {
         [$supersededPlan, $agent] = $this->standardPlanAndAgent();
         $admin = User::factory()->admin()->create();
-        $currentPlan = $this->plan($admin, '目前方案', '2026-06-01');
-        $inactivePlan = $this->plan($admin, '停用方案', '2026-06-01', false);
-        $futurePlan = $this->plan($admin, '未來方案', '2026-07-01');
+        $this->plan($admin, '回溯生效的新方案', '2026-06-01');
 
-        foreach ([$supersededPlan, $inactivePlan, $futurePlan] as $invalidPlan) {
-            try {
-                $this->calculator->calculate($invalidPlan, '2026-06', [], [$agent->id]);
-                $this->fail("方案 {$invalidPlan->id} 不應可用於 2026-06");
-            } catch (InvalidArgumentException $exception) {
-                $this->assertStringContainsString('不適用於 2026-06', $exception->getMessage());
-            }
-        }
-
-        $result = $this->calculator->calculate($currentPlan, '2026-06', [], [$agent->id]);
+        $result = $this->calculator->calculate($supersededPlan, '2026-06', [], [$agent->id]);
         $this->assertSame([], $result['vehicles']);
+    }
+
+    public function test_calculator_rejects_unsaved_plan(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('已儲存');
+
+        $this->calculator->calculate(new CommissionPlan, '2026-06', [], []);
     }
 
     public function test_large_amount_formula_does_not_overflow_intermediate_multiplication(): void

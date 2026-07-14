@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 5 部分決策修正後最新完整回歸為 427 tests、1772 assertions、6 skipped，其中 6 個 skipped 是需專用環境或安全旗標的既有測試。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 5 部分決策修正後最新完整回歸為 430 tests、1779 assertions、7 skipped，其中 7 個 skipped 是需專用環境或安全旗標的測試；新增的時區整合測試已另在真實 MariaDB 可拋棄 schema 通過 15 assertions。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
 
 ---
 
@@ -372,11 +372,13 @@ v1.3 第 1～5 部分已補齊：
 - 大額比例以商數／餘數拆算，避免 `amount × bps` 中間乘法 overflow；超出 PHP 安全整數範圍的彙總會明確拒絕，不會靜默截斷。
 - 混合盈虧批次另回傳 `loss_total` 與 `company_net`；`company_total` 表示獲利車分配給公司的正額合計，正式公司淨得應使用 `company_net`，並維持 `company_net + purchase_bonus + sales_bonus = gross_profit`。
 - 計算器要求明確傳入 `YYYY-MM` 結算月份與啟用佣金的 agent IDs；月份不符會拒絕，未啟用佣金的人員只將自己對應的收車／賣車 bps 歸零，不會犧牲另一位人員的合法獎金。
-- `CommissionPlanService::findEffectiveForMonth()` 與計算器共用 `SalaryPeriodMonth` 的 `YYYY-MM` 契約；查詢會明確轉成月首日，計算器另核對正式最新有效方案 ID，拒絕停用、未生效或被新版取代的方案。
+- `CommissionPlanService::findEffectiveForMonth()` 與計算器共用 `SalaryPeriodMonth` 的 `YYYY-MM` 契約；查詢會明確轉成月首日。第 7 部分只在建立草稿時嚴格選取最新有效方案，之後重算沿用 SalaryPeriod 綁定的 `commission_plan_id`；計算器只驗證方案已儲存且 tiers 合法，避免回溯生效的新方案把既有草稿或歷史 snapshot 卡死。
 - `SalaryProfile.user_id` 明確 cast 為 integer，後續傳入佣金資格集合時不依賴 PDO／driver 回傳型別。
 - 使用者已決策：`gross_profit <= 0` 車輛仍列入月份明細與公司淨損益，但不增加賣車跨級台數；只有正毛利車計入 `eligible_sales_count`。
+- 啟用佣金但整月只有零毛利／虧損車的賣車人仍會出現在 `sales_agents`，明確回傳 0 台、0 bps、0 元，不會消失或造成 undefined key。
 - 全系統業務日期與月份邊界統一為 `Asia/Taipei`。Laravel app timezone、MySQL／MariaDB session timezone、Dashboard 月統計、預設收支日期、成交時間正規化、列印／稽核前端顯示及 API datetime offset 均採台北時間。
 - 既有 MySQL／MariaDB `TIMESTAMP` 由資料庫依 `+08:00` session timezone 顯示，不做推測式資料搬移；正式環境須保留 `APP_TIMEZONE=Asia/Taipei` 與 `DB_TIMEZONE=+08:00`。持久化 SQLite 不是正式部署目標，既有 UTC-naive 開發資料需重建，不做不安全回填。
+- 時區切換前提是舊環境實際以 UTC 運作；部署前必須查 `@@global.time_zone`、`@@session.time_zone`、`@@system_time_zone` 並比較 `NOW()`／`UTC_TIMESTAMP()`。若舊環境不是 UTC，停止部署並人工評估既有 TIMESTAMP，不得直接假設無需轉換。
 
 後續仍待實作：
 

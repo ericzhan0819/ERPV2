@@ -16,8 +16,6 @@ final class SalaryCommissionCalculator
 {
     private const BASIS_POINTS_DENOMINATOR = 10000;
 
-    public function __construct(private readonly CommissionPlanService $commissionPlanService) {}
-
     /**
      * Calculate commissions for one month's already-eligible sold vehicles.
      *
@@ -41,14 +39,14 @@ final class SalaryCommissionCalculator
         iterable $commissionEnabledAgentIds,
     ): array {
         $periodMonth = SalaryPeriodMonth::normalize($periodMonth);
-        $this->assertPlanIsEffectiveForMonth($plan, $periodMonth);
+        $this->assertPlanIsPersisted($plan);
         $tiers = $this->validatedTiers($plan);
         $vehicles = collect($vehicles)->values()->sortBy('id')->values();
         $this->assertValidVehicleSet($vehicles, $periodMonth);
         $commissionEnabledAgentIds = $this->commissionEnabledAgentIdSet($commissionEnabledAgentIds);
 
         $moneyTotals = $this->approvedMoneyTotals($vehicles->pluck('id')->all());
-        $salesCounts = $vehicles
+        $profitableSalesCounts = $vehicles
             ->filter(function (Vehicle $vehicle) use ($commissionEnabledAgentIds, $moneyTotals): bool {
                 if (! isset($commissionEnabledAgentIds[(int) $vehicle->sales_agent_id])) {
                     return false;
@@ -63,8 +61,16 @@ final class SalaryCommissionCalculator
             })
             ->countBy(fn (Vehicle $vehicle): int => (int) $vehicle->sales_agent_id);
 
+        $enabledSalesAgentIds = $vehicles
+            ->map(fn (Vehicle $vehicle): int => (int) $vehicle->sales_agent_id)
+            ->filter(fn (int $salesAgentId): bool => isset($commissionEnabledAgentIds[$salesAgentId]))
+            ->unique()
+            ->sort()
+            ->values();
+
         $salesAgents = [];
-        foreach ($salesCounts->sortKeys() as $salesAgentId => $eligibleSalesCount) {
+        foreach ($enabledSalesAgentIds as $salesAgentId) {
+            $eligibleSalesCount = (int) ($profitableSalesCounts[$salesAgentId] ?? 0);
             $salesAgents[(int) $salesAgentId] = [
                 'sales_agent_id' => (int) $salesAgentId,
                 ...$this->salesTierSummaryForTiers($tiers, $eligibleSalesCount),
@@ -297,12 +303,10 @@ final class SalaryCommissionCalculator
         return $totals;
     }
 
-    private function assertPlanIsEffectiveForMonth(CommissionPlan $plan, string $periodMonth): void
+    private function assertPlanIsPersisted(CommissionPlan $plan): void
     {
-        $effectivePlan = $this->commissionPlanService->findEffectiveForMonth($periodMonth);
-
-        if ($effectivePlan === null || ! $plan->exists || $effectivePlan->getKey() !== $plan->getKey()) {
-            throw new InvalidArgumentException("獎金方案不適用於 {$periodMonth} 結算月份");
+        if (! $plan->exists || $plan->getKey() === null) {
+            throw new InvalidArgumentException('獎金方案必須是已儲存的 CommissionPlan');
         }
     }
 
