@@ -8,6 +8,7 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MoneyEntryController;
 use App\Http\Controllers\PublicVehicleController;
+use App\Http\Controllers\SalaryPeriodController;
 use App\Http\Controllers\SalaryProfileController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\VehicleController;
@@ -65,6 +66,7 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
     Route::delete('vehicles/{vehicle}', [VehicleController::class, 'destroy'])
         ->middleware('can:delete,vehicle');
     Route::patch('vehicles/{vehicle}/commission-attribution', [VehicleController::class, 'updateCommissionAttribution'])
+        ->middleware('role:admin')
         ->middleware('can:updateCommissionAttribution,vehicle');
     Route::post('vehicles/{vehicle}/list', [VehicleController::class, 'list'])
         ->middleware('can:listVehicle,vehicle');
@@ -146,5 +148,20 @@ Route::middleware(['auth:sanctum', 'active'])->group(function () {
             ->middleware('can:create,App\Models\CommissionPlan');
         Route::get('commission-plans/{commissionPlan}', [CommissionPlanController::class, 'show'])
             ->middleware('can:view,commissionPlan');
+
+        Route::get('salary-periods', [SalaryPeriodController::class, 'index'])
+            ->middleware('can:viewAny,App\Models\SalaryPeriod');
+        Route::post('salary-periods', [SalaryPeriodController::class, 'store'])
+            ->middleware('can:create,App\Models\SalaryPeriod');
+        Route::get('salary-periods/{salaryPeriod}', [SalaryPeriodController::class, 'show'])
+            ->middleware('can:view,salaryPeriod');
+        Route::post('salary-periods/{salaryPeriod}/recalculate', [SalaryPeriodController::class, 'recalculate'])
+            ->middleware('can:recalculate,salaryPeriod');
+        Route::post('salary-periods/{salaryPeriod}/adjustments', [SalaryPeriodController::class, 'storeAdjustment']);
+        Route::delete('salary-periods/{salaryPeriod}/adjustments/{item}', [SalaryPeriodController::class, 'destroyAdjustment']);
+        Route::post('salary-periods/{salaryPeriod}/confirm', [SalaryPeriodController::class, 'confirm'])
+            ->middleware('can:confirm,salaryPeriod');
+        Route::post('salary-periods/{salaryPeriod}/pay', [SalaryPeriodController::class, 'pay'])
+            ->middleware('can:pay,salaryPeriod');
     });
 });

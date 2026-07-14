@@ -13,6 +13,7 @@ use App\Models\SalarySettlementItem;
 use App\Models\User;
 use App\Support\SalaryPeriodMonth;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -29,6 +30,23 @@ final class SalaryPeriodService
         private readonly SalaryCommissionCalculator $calculator,
         private readonly AuditLogService $auditLogService,
     ) {}
+
+    /** @return Collection<int, SalaryPeriod> */
+    public function listPeriods(): Collection
+    {
+        return SalaryPeriod::query()
+            ->with('plan:id,name')
+            ->withCount('settlements')
+            ->withSum('settlements', 'net_pay')
+            ->orderByDesc('period_month')
+            ->orderByDesc('id')
+            ->get();
+    }
+
+    public function getPeriod(SalaryPeriod $period): SalaryPeriod
+    {
+        return $this->loadPeriod($period);
+    }
 
     public function createDraft(User $actor, string $periodMonth): SalaryPeriod
     {

@@ -988,9 +988,82 @@ Request body：
 
 回傳單一 `CommissionPlanResource`，包含依 `sort_order` 排列的 tiers、建立者與 `is_used`。不存在回傳 `404`；非 admin 在進入 Controller 前即回傳 `403`。
 
-v1.3 第 6 部分新增的薪資資格與異常檢查目前是後端集中服務，供下一階段建立草稿、重算與確認時共用，本階段未新增對外 endpoint。它只選取台北月份內的 `sold` 車輛，並對每台候選車檢查收／賣車人、pending 收支、approved 銷售淨收款、approved 購車付款、`legacy_unknown` 與 confirmed／paid 重複引用；異常車不會被靜默略過。
+薪資資格與異常檢查是後端集中服務，由月份草稿、重算、確認及 draft 詳情共同使用。它只選取台北月份內的 `sold` 車輛，並對每台候選車檢查收／賣車人、pending 收支、approved 銷售淨收款、approved 購車付款、`legacy_unknown` 與 confirmed／paid 重複引用；異常車不會被靜默略過。
 
-v1.3 第 7～9 部分已完成 `SalaryPeriodService` 與 Policy／Request／Resource HTTP 安全邊界；對外 Controller／Routes 仍依 PLAN 第 10 部分後續實作，目前不提前開放 endpoint。服務層與輸出行為如下：
+## 16. Salary Periods（v1.3，僅限管理員）
+
+本節端點皆位於 `auth:sanctum` + `active` + `role:admin` 下，並由 `SalaryPeriodPolicy`／`SalarySettlementPolicy` 再做白名單授權。`manager`、`sales` 與未知角色一律回傳 `403`，不可透過月份、員工或加扣項 ID 枚舉薪資資料。
+
+### GET /api/salary-periods
+
+依月份、id 由新到舊回傳所有薪資月份。列表固定使用 `SalaryPeriodListResource`，每列只包含月份、狀態、方案摘要、員工數、實發合計、確認／發薪時間及發薪日期；不回傳 settlements、資格異常或明細，也不會逐月份執行 `SalaryEligibilityService::inspectPeriod()`。
+
+### POST /api/salary-periods
+
+建立月份草稿，成功回傳 `201` 與完整 `SalaryPeriodResource`。
+
+Request body：
+
+```json
+{
+  "period_month": "2026-06"
+}
+```
+
+`period_month` 必須為 `YYYY-MM`，且不得晚於台北目前月份。獎金方案、狀態、snapshot、totals、確認／發薪欄位及 idempotency key 均由後端管理，禁止前端寫入。
+
+### GET /api/salary-periods/{salaryPeriod}
+
+回傳完整月份白名單資料。draft 會即時計算並回傳 `anomalies`、`vehicle_results` 與 `has_blocking_issues`；confirmed／paid 只讀鎖定 snapshot，不以目前資料重算。回應不含內部 `idempotency_key`、settlement 的 `money_entry_id`、原始 `calculation_snapshot` 額外欄位或 audit metadata。
+
+### POST /api/salary-periods/{salaryPeriod}/recalculate
+
+重算草稿並回傳更新後的完整月份。只有 draft 可執行；沿用月份已綁定方案、重建自動項目並保留手動加扣項。confirmed／paid 回傳 `422`。
+
+### POST /api/salary-periods/{salaryPeriod}/adjustments
+
+為該月份指定員工 settlement 新增手動加給或扣款，成功回傳 `201` 與新增項目。指定員工必須已存在於該月份，否則回傳 `404`；只有 draft 可新增。
+
+Request body：
+
+```json
+{
+  "user_id": 12,
+  "type": "manual_addition",
+  "amount": 1000,
+  "description": "臨時加給"
+}
+```
+
+`type` 只接受 `manual_addition` 或 `manual_deduction`，`amount` 必須為正整數，`description` 必填且最多 255 字元。前端不得指定 settlement、vehicle、snapshot、totals 或狀態欄位。
+
+### DELETE /api/salary-periods/{salaryPeriod}/adjustments/{item}
+
+刪除草稿中的手動加扣項並回傳 `200`。Controller 會先確認 item 所屬 settlement 確實位於 URL 指定月份，再以該 settlement 執行 `deleteAdjustment` 授權；跨月份組合一律 `404`，自動薪資／獎金項目不可由此端點刪除。
+
+### POST /api/salary-periods/{salaryPeriod}/confirm
+
+重新鎖定整月候選車、驗證資格、重算並比對草稿 snapshot；全部一致且沒有阻擋異常／負薪後，將月份確認鎖定並回傳完整月份。只有 draft 可執行，Request 不接受任何業務 payload。
+
+### POST /api/salary-periods/{salaryPeriod}/pay
+
+對 confirmed 月份執行整批發薪，成功或相同 payload replay 均回傳 `200` 與 paid 月份。
+
+Request body：
+
+```json
+{
+  "cash_account_id": 1,
+  "payment_date": "2026-07-01",
+  "idempotency_key": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+`cash_account_id` 必須是啟用中的帳戶；`payment_date` 不得早於結算月首或晚於今天；`idempotency_key` 必填且最多 100 字元。相同 key／相同帳戶與日期 replay；相同 key 不同 payload、同月份不同 key，或 key 已被其他月份使用皆回傳 `422`。
+
+### 共同行為與安全邊界
+
+`SalaryPeriodService` 的核心行為如下：
 
 - 建立草稿時以 `findEffectiveForMonthForUpdate()` 鎖定並選取方案，再固定 `commission_plan_id`；同月份重複建立或沒有有效方案皆回 `422`。
 - 建立月份不得晚於 `Asia/Taipei` 目前月份；當月與過去月份可建立，未來月份在 Request 與 Service 兩層均回 `422 period_month`，避免月份被提前確認後鎖住未來成交回填。
@@ -1005,7 +1078,7 @@ v1.3 第 7～9 部分已完成 `SalaryPeriodService` 與 Policy／Request／Reso
 - Service 回傳月份時會預載 Resource 所需的方案建立人、月份建立／確認／發薪人、資金帳戶、item 車輛摘要與手動項目建立人；手動加扣 Request 會將 canonical 整數字串金額正規化為 int。SalarySettlementPolicy 提供 `adjust` 與 `deleteAdjustment` 兩個 admin-only ability。
 - 薪資月份與手動加扣會寫 Audit Log，但不複製薪資金額、加扣金額或說明內容到 audit metadata。
 
-v1.3 第 8～9 部分已完成同一 Service 的發薪契約與 Pay Request／Policy／Resource；`POST /api/salary-periods/{salaryPeriod}/pay` 仍待 PLAN 第 10 部分補上 Controller 與 route，因此目前不可由外部呼叫。服務層行為如下：
+發薪契約與批次安全行為如下：
 
 - 只允許啟用中的 admin 對 confirmed 月份操作，輸入啟用中的 `cash_account_id`、`payment_date` 與最長 100 字元的 `idempotency_key`。`payment_date` 代表款項實際支付日，不得早於結算月份第一天或晚於今天；允許薪資延後至後續月份實際補發。
 - 同一 transaction 依序鎖定 period、資金帳戶及全部 settlement；每位 `net_pay > 0` 員工建立一筆 `expense`、`薪資 / 佣金`、`vehicle_id=null`、`source_type=salary_settlement`、直接 approved 的 MoneyEntry，並回填 `money_entry_id`。零元員工不建立空支出。

@@ -23,6 +23,7 @@ use App\Services\SalaryPeriodService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -297,6 +298,204 @@ class SalaryHttpBoundaryTest extends TestCase
         $this->assertArrayNotHasKey('has_blocking_issues', $data);
     }
 
+    public function test_admin_can_use_the_complete_salary_period_http_workflow(): void
+    {
+        Carbon::setTestNow(Carbon::create(2026, 7, 15, 10, 0, 0, 'Asia/Taipei'));
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $employee = User::factory()->sales()->create(['is_active' => true]);
+        $this->profile($employee);
+        $this->plan($admin);
+        $this->validVehicle($employee);
+        $account = CashAccount::factory()->create(['is_active' => true]);
+
+        $created = $this->actingAs($admin)->postJson('/api/salary-periods', [
+            'period_month' => '2026-06',
+        ])->assertCreated()->assertJsonPath('data.status', SalaryPeriod::STATUS_DRAFT);
+        $periodId = $created->json('data.id');
+
+        $this->getJson('/api/salary-periods')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $periodId)
+            ->assertJsonMissingPath('data.0.settlements');
+        $this->getJson("/api/salary-periods/{$periodId}")
+            ->assertOk()
+            ->assertJsonPath('data.period_month', '2026-06');
+
+        $adjustment = $this->postJson("/api/salary-periods/{$periodId}/adjustments", [
+            'user_id' => $employee->id,
+            'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
+            'amount' => '1000',
+            'description' => '臨時加給',
+        ])->assertCreated()->assertJsonPath('data.amount', 1000);
+        $itemId = $adjustment->json('data.id');
+
+        $this->deleteJson("/api/salary-periods/{$periodId}/adjustments/{$itemId}")
+            ->assertOk()
+            ->assertJsonPath('message', '手動薪資加扣項已刪除');
+        $this->postJson("/api/salary-periods/{$periodId}/recalculate")
+            ->assertOk()
+            ->assertJsonPath('data.status', SalaryPeriod::STATUS_DRAFT);
+        $this->postJson("/api/salary-periods/{$periodId}/confirm")
+            ->assertOk()
+            ->assertJsonPath('data.status', SalaryPeriod::STATUS_CONFIRMED);
+        $this->postJson("/api/salary-periods/{$periodId}/pay", [
+            'cash_account_id' => $account->id,
+            'payment_date' => '2026-07-01',
+            'idempotency_key' => (string) Str::uuid(),
+        ])->assertOk()->assertJsonPath('data.status', SalaryPeriod::STATUS_PAID);
+    }
+
+    public function test_manager_and_sales_receive_forbidden_for_every_salary_period_endpoint(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $manager = User::factory()->manager()->create(['is_active' => true]);
+        $sales = User::factory()->sales()->create(['is_active' => true]);
+        $period = $this->period($admin);
+        $settlement = SalarySettlement::query()->create([
+            'salary_period_id' => $period->id,
+            'user_id' => $sales->id,
+        ]);
+        $item = $settlement->items()->create([
+            'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
+            'amount' => 100,
+            'description' => '權限測試',
+            'created_by' => $admin->id,
+        ]);
+        $account = CashAccount::factory()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create();
+
+        foreach ([$manager, $sales] as $user) {
+            $requests = [
+                fn () => $this->getJson('/api/salary-periods'),
+                fn () => $this->postJson('/api/salary-periods', ['period_month' => '2026-06']),
+                fn () => $this->getJson("/api/salary-periods/{$period->id}"),
+                fn () => $this->postJson("/api/salary-periods/{$period->id}/recalculate"),
+                fn () => $this->postJson("/api/salary-periods/{$period->id}/adjustments", [
+                    'user_id' => $sales->id,
+                    'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
+                    'amount' => 100,
+                    'description' => '未授權',
+                ]),
+                fn () => $this->deleteJson("/api/salary-periods/{$period->id}/adjustments/{$item->id}"),
+                fn () => $this->postJson("/api/salary-periods/{$period->id}/confirm"),
+                fn () => $this->postJson("/api/salary-periods/{$period->id}/pay", [
+                    'cash_account_id' => $account->id,
+                    'payment_date' => '2026-07-01',
+                    'idempotency_key' => (string) Str::uuid(),
+                ]),
+                fn () => $this->patchJson("/api/vehicles/{$vehicle->id}/commission-attribution", [
+                    'purchase_agent_id' => $sales->id,
+                ]),
+            ];
+
+            $this->actingAs($user);
+            foreach ($requests as $request) {
+                $response = $request()->assertForbidden();
+                $keys = $this->recursiveJsonKeys($response->json());
+                foreach (['base_salary', 'net_pay', 'money_entry_id', 'calculation_snapshot', 'idempotency_key'] as $key) {
+                    $this->assertNotContains($key, $keys);
+                }
+            }
+            $this->getJson('/api/salary-periods/999999999')->assertForbidden();
+            $this->deleteJson("/api/salary-periods/999999999/adjustments/{$item->id}")->assertForbidden();
+            $this->patchJson('/api/vehicles/999999999/commission-attribution', [
+                'purchase_agent_id' => $sales->id,
+            ])->assertForbidden();
+        }
+    }
+
+    public function test_salary_period_index_uses_list_resource_without_inspecting_each_period(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $plan = $this->plan($admin);
+        SalaryPeriod::query()->create([
+            'period_month' => '2026-05-01',
+            'commission_plan_id' => $plan->id,
+            'status' => SalaryPeriod::STATUS_CONFIRMED,
+            'created_by' => $admin->id,
+        ]);
+        SalaryPeriod::query()->create([
+            'period_month' => '2026-06-01',
+            'commission_plan_id' => $plan->id,
+            'status' => SalaryPeriod::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+        $queries = [];
+        DB::listen(function ($query) use (&$queries): void {
+            $queries[] = strtolower($query->sql);
+        });
+
+        $response = $this->actingAs($admin)->getJson('/api/salary-periods')->assertOk();
+
+        $response->assertJsonCount(2, 'data');
+        $response->assertJsonPath('data.0.period_month', '2026-06');
+        $response->assertJsonMissingPath('data.0.anomalies');
+        $response->assertJsonMissingPath('data.0.settlements');
+        $this->assertFalse(collect($queries)->contains(
+            fn (string $sql): bool => str_contains($sql, ' from "vehicles"')
+                || str_contains($sql, ' from `vehicles`')
+                || str_contains($sql, ' from "money_entries"')
+                || str_contains($sql, ' from `money_entries`'),
+        ));
+    }
+
+    public function test_salary_period_show_uses_raw_json_whitelist(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $employee = User::factory()->sales()->create(['is_active' => true]);
+        $this->profile($employee);
+        $this->plan($admin);
+        $this->validVehicle($employee);
+        $period = app(SalaryPeriodService::class)->createDraft($admin, '2026-06');
+        $bonus = $period->settlements->firstWhere('user_id', $employee->id)->items
+            ->firstWhere('type', SalarySettlementItem::TYPE_SALES_BONUS);
+        $bonus->forceFill([
+            'calculation_snapshot' => [
+                ...$bonus->calculation_snapshot,
+                'internal_secret' => '不可輸出',
+            ],
+        ])->save();
+
+        $response = $this->actingAs($admin)->getJson("/api/salary-periods/{$period->id}")->assertOk();
+        $keys = $this->recursiveJsonKeys($response->json('data'));
+
+        foreach (['idempotency_key', 'money_entry_id', 'calculation_snapshot', 'internal_secret'] as $key) {
+            $this->assertNotContains($key, $keys);
+        }
+    }
+
+    public function test_adjustment_item_cannot_be_deleted_through_another_period_route(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $employee = User::factory()->sales()->create(['is_active' => true]);
+        $firstPeriod = $this->period($admin);
+        $secondPeriod = SalaryPeriod::query()->create([
+            'period_month' => '2026-05-01',
+            'commission_plan_id' => $firstPeriod->commission_plan_id,
+            'status' => SalaryPeriod::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+        $settlement = SalarySettlement::query()->create([
+            'salary_period_id' => $secondPeriod->id,
+            'user_id' => $employee->id,
+        ]);
+        $item = $settlement->items()->create([
+            'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
+            'amount' => 1000,
+            'description' => '跨月份保護測試',
+            'created_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->deleteJson("/api/salary-periods/{$firstPeriod->id}/adjustments/{$item->id}")
+            ->assertNotFound();
+        $this->assertDatabaseHas('salary_settlement_items', ['id' => $item->id]);
+
+        $this->deleteJson("/api/salary-periods/{$secondPeriod->id}/adjustments/{$item->id}")
+            ->assertOk();
+        $this->assertDatabaseMissing('salary_settlement_items', ['id' => $item->id]);
+    }
+
     /** @return array<string, array<int, string>> */
     private function assertRequestFails(string $requestClass, array $payload, array $fields): array
     {
@@ -411,5 +610,23 @@ class SalaryHttpBoundaryTest extends TestCase
             'status' => SalaryPeriod::STATUS_DRAFT,
             'created_by' => $admin->id,
         ]);
+    }
+
+    /** @return array<int, string> */
+    private function recursiveJsonKeys(mixed $value): array
+    {
+        if (! is_array($value)) {
+            return [];
+        }
+
+        $keys = [];
+        foreach ($value as $key => $nested) {
+            if (is_string($key)) {
+                $keys[] = $key;
+            }
+            $keys = [...$keys, ...$this->recursiveJsonKeys($nested)];
+        }
+
+        return $keys;
     }
 }
