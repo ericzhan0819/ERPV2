@@ -423,6 +423,25 @@ class SalarySettingsMysqlConcurrencyTest extends TestCase
         }
     }
 
+    public function test_paid_salary_history_trigger_migration_is_safe_to_rerun_on_mysql(): void
+    {
+        $this->prepareDisposableMysqlDatabase();
+        $migrationPath = database_path('migrations/2026_07_13_000012_protect_paid_salary_history.php');
+
+        (require $migrationPath)->up();
+        (require $migrationPath)->up();
+
+        $triggerCount = DB::table('information_schema.TRIGGERS')
+            ->where('TRIGGER_SCHEMA', DB::connection()->getDatabaseName())
+            ->whereIn('TRIGGER_NAME', [
+                'paid_salary_period_update', 'paid_salary_period_delete',
+                'paid_salary_settlement_insert', 'paid_salary_settlement_update', 'paid_salary_settlement_delete',
+                'paid_salary_item_insert', 'paid_salary_item_update', 'paid_salary_item_delete',
+            ])
+            ->count();
+        $this->assertSame(8, $triggerCount);
+    }
+
     /**
      * @param  resource  $socket
      * @param  array<string, mixed>  $payload
@@ -635,7 +654,7 @@ class SalarySettingsMysqlConcurrencyTest extends TestCase
                 SalaryPeriod::query()->findOrFail($periodId),
                 [
                     'cash_account_id' => $accountId,
-                    'payment_date' => '2026-07-31',
+                    'payment_date' => '2026-07-14',
                     'idempotency_key' => $idempotencyKey,
                 ],
             );

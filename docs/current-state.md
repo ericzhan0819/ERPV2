@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 8 部分完成後最新完整回歸為 462 tests、1930 assertions、11 skipped，其中 skipped 項目需要專用環境或安全旗標。薪資確認／收支核准跨連線鎖測試已在真實 MariaDB 通過 13 assertions，薪資資格 TIMESTAMP 月界整合測試通過 11 assertions，薪資月份／成交結案鎖序測試通過 14 assertions；本次新增的發薪 duplicate-key 真並發測試已實作，待於同一專用可拋棄 MariaDB allowlist 環境執行。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 沿用第 7 部分已通過結果，本次未修改前端。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 8 部分 review 與發薪日期決策修正後最新完整回歸為 466 tests、1942 assertions、12 skipped，其中 skipped 項目需要專用環境或安全旗標。薪資確認／收支核准跨連線鎖測試已在真實 MariaDB 通過 13 assertions，薪資資格 TIMESTAMP 月界整合測試通過 11 assertions，薪資月份／成交結案鎖序測試通過 14 assertions；Claude review 另在可拋棄 MariaDB 10.11 schema 驗證原始發薪並發案例 5 tests／71 assertions 通過。review 修正後新增的 re-parent 與 migration retry MariaDB 案例已實作，待專用 allowlist 環境重跑。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 沿用第 7 部分已通過結果，本次未修改前端。
 
 ---
 
@@ -399,6 +399,9 @@ v1.3 第 1～8 部分已補齊：
 - duplicate-key race 會先離開並回滾原 transaction，再以新 transaction `lockForUpdate()` 讀取已提交 winner；真實 MariaDB 測試使用 fork/socket 讓兩個月份競爭同一 key，確認輸家不殘留 MoneyEntry 或 settlement linkage。
 - 發薪完成後回填 `cash_account_id`、`payment_date`、`paid_by`、`paid_at` 與 settlement 的 `money_entry_id`；正式帳戶餘額及 Dashboard monthly expense 會因 approved 薪資支出立即更新。
 - 資料庫 trigger 阻擋 paid period、settlement 與 settlement item 的後續新增／更新／刪除；既有 salary MoneyEntry 不可變規則持續保護正式薪資支出，歷史修正只能走後續月份手動調整或另建一般收支修正。
+- 第 8 部分 adversarial review 修正 paid 歷史 re-parent 漏洞：settlement／item UPDATE trigger 同時檢查 `OLD` 與 `NEW` 所屬月份，不能從草稿搬入 paid 歷史，也不能從 paid 搬出；migration 每次 `up()` 先移除全部同名 trigger，可從 MySQL 部分 DDL 失敗狀態安全重跑。
+- 發薪服務接受正整數或 canonical 整數字串形式的 `cash_account_id`，並集中正規化為 int；非法型別回傳「必須是正整數」，避免第 9 部分 Request 傳入字串時出現誤導訊息。
+- `payment_date` 定義為款項實際支付日，必須介於結算月份第一天與今天之間；可延後至隔月或更後月份補發，但不可提前到結算月之前，也不可用尚未實際發生的未來日期建立 approved 支出。
 
 後續仍待實作：
 

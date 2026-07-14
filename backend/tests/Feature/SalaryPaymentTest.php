@@ -18,6 +18,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -167,10 +168,26 @@ class SalaryPaymentTest extends TestCase
         $paid = $this->service->pay($this->admin, $period, $this->payload($account, 'immutable-key'));
         $settlement = $paid->settlements->first();
         $item = $settlement->items->first();
+        $draft = $this->draftPeriod('2026-07');
+        $otherEmployee = User::factory()->sales()->create(['is_active' => true]);
+        $movableSettlement = SalarySettlement::query()->create([
+            'salary_period_id' => $draft->id,
+            'user_id' => $otherEmployee->id,
+            'net_pay' => 50000,
+        ]);
+        $movableItem = SalarySettlementItem::query()->create([
+            'salary_settlement_id' => $movableSettlement->id,
+            'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
+            'amount' => 50000,
+            'description' => '不得搬入已發薪月份',
+            'created_by' => $this->admin->id,
+        ]);
 
         foreach ([
             fn () => SalaryPeriod::query()->whereKey($paid->id)->update(['payment_date' => '2026-07-01']),
             fn () => SalarySettlement::query()->whereKey($settlement->id)->update(['net_pay' => 1]),
+            fn () => SalarySettlement::query()->whereKey($movableSettlement->id)->update(['salary_period_id' => $paid->id]),
+            fn () => SalarySettlementItem::query()->whereKey($movableItem->id)->update(['salary_settlement_id' => $settlement->id]),
             fn () => SalarySettlementItem::query()->whereKey($item->id)->delete(),
             fn () => SalaryPeriod::query()->whereKey($paid->id)->delete(),
         ] as $write) {
@@ -184,6 +201,80 @@ class SalaryPaymentTest extends TestCase
 
         $this->assertDatabaseHas('salary_periods', ['id' => $paid->id, 'status' => SalaryPeriod::STATUS_PAID]);
         $this->assertDatabaseHas('salary_settlement_items', ['id' => $item->id]);
+        $this->assertDatabaseHas('salary_settlements', [
+            'id' => $movableSettlement->id,
+            'salary_period_id' => $draft->id,
+        ]);
+        $this->assertDatabaseHas('salary_settlement_items', [
+            'id' => $movableItem->id,
+            'salary_settlement_id' => $movableSettlement->id,
+        ]);
+    }
+
+    public function test_payment_accepts_a_canonical_integer_string_account_id(): void
+    {
+        $this->employeeWithProfile('員工', 30000);
+        $period = $this->confirmedPeriod('2026-06');
+        $account = CashAccount::factory()->create(['is_active' => true]);
+        $payload = $this->payload($account, 'string-account-id');
+        $payload['cash_account_id'] = (string) $account->id;
+
+        $paid = $this->service->pay($this->admin, $period, $payload);
+
+        $this->assertSame($account->id, $paid->cash_account_id);
+        $this->assertSame($account->id, $paid->settlements->first()->moneyEntry->cash_account_id);
+    }
+
+    public function test_payment_date_must_be_between_period_start_and_today_but_may_be_in_a_later_month(): void
+    {
+        Carbon::setTestNow('2026-07-14 10:00:00');
+        $this->employeeWithProfile('員工', 30000);
+        $period = $this->confirmedPeriod('2026-06');
+        $account = CashAccount::factory()->create(['is_active' => true]);
+
+        foreach ([
+            '2026-05-31' => '發薪日期不得早於結算月份第一天',
+            '2026-07-15' => '日期不得晚於今天',
+        ] as $paymentDate => $expectedMessage) {
+            $payload = $this->payload($account, 'invalid-date-'.$paymentDate);
+            $payload['payment_date'] = $paymentDate;
+
+            try {
+                $this->service->pay($this->admin, $period, $payload);
+                $this->fail('不合理的發薪日期必須被拒絕');
+            } catch (ValidationException $exception) {
+                $this->assertStringContainsString($expectedMessage, $exception->errors()['payment_date'][0]);
+            }
+        }
+
+        $delayedPayload = $this->payload($account, 'delayed-payment');
+        $delayedPayload['payment_date'] = '2026-07-14';
+        $paid = $this->service->pay($this->admin, $period, $delayedPayload);
+
+        $this->assertSame('2026-07-14', $paid->payment_date->toDateString());
+        $this->assertSame('2026-07-14', $paid->settlements->first()->moneyEntry->entry_date->toDateString());
+        $this->assertSame(1, MoneyEntry::query()->where('source_type', MoneyEntry::SOURCE_SALARY_SETTLEMENT)->count());
+    }
+
+    public function test_paid_history_trigger_migration_is_safe_to_rerun_on_sqlite(): void
+    {
+        if (DB::connection()->getDriverName() !== 'sqlite') {
+            $this->markTestSkipped('MySQL/MariaDB 重跑由專用可拋棄 schema 的並發測試覆蓋。');
+        }
+
+        $migrationPath = database_path('migrations/2026_07_13_000012_protect_paid_salary_history.php');
+        (require $migrationPath)->up();
+        (require $migrationPath)->up();
+
+        $triggerCount = DB::table('sqlite_master')
+            ->where('type', 'trigger')
+            ->whereIn('name', [
+                'paid_salary_period_update', 'paid_salary_period_delete',
+                'paid_salary_settlement_insert', 'paid_salary_settlement_update', 'paid_salary_settlement_delete',
+                'paid_salary_item_insert', 'paid_salary_item_update', 'paid_salary_item_delete',
+            ])
+            ->count();
+        $this->assertSame(8, $triggerCount);
     }
 
     private function employeeWithProfile(

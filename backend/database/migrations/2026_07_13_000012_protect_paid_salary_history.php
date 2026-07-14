@@ -8,6 +8,12 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // MySQL 的 trigger DDL 不受 migration transaction 保護。若前次部署只建立到
+        // 一半就失敗，重跑前先清掉所有同名 trigger，避免卡在 already exists。
+        foreach ($this->triggerNames() as $name) {
+            DB::unprepared("DROP TRIGGER IF EXISTS {$name}");
+        }
+
         $triggers = Schema::getConnection()->getDriverName() === 'sqlite'
             ? $this->sqliteTriggers()
             : $this->mysqlTriggers();
@@ -73,22 +79,26 @@ return new class extends Migration
 
     private function sqliteSettlementTrigger(string $name, string $event): string
     {
-        $row = $event === 'INSERT' ? 'NEW' : 'OLD';
+        $references = $event === 'UPDATE'
+            ? 'OLD.salary_period_id, NEW.salary_period_id'
+            : ($event === 'INSERT' ? 'NEW.salary_period_id' : 'OLD.salary_period_id');
 
         return "CREATE TRIGGER {$name} BEFORE {$event} ON salary_settlements
-            WHEN EXISTS (SELECT 1 FROM salary_periods WHERE id = {$row}.salary_period_id AND status = 'paid')
+            WHEN EXISTS (SELECT 1 FROM salary_periods WHERE id IN ({$references}) AND status = 'paid')
             BEGIN SELECT RAISE(ABORT, 'paid salary settlements are immutable'); END";
     }
 
     private function sqliteItemTrigger(string $name, string $event): string
     {
-        $row = $event === 'INSERT' ? 'NEW' : 'OLD';
+        $references = $event === 'UPDATE'
+            ? 'OLD.salary_settlement_id, NEW.salary_settlement_id'
+            : ($event === 'INSERT' ? 'NEW.salary_settlement_id' : 'OLD.salary_settlement_id');
 
         return "CREATE TRIGGER {$name} BEFORE {$event} ON salary_settlement_items
             WHEN EXISTS (
                 SELECT 1 FROM salary_settlements s
                 JOIN salary_periods p ON p.id = s.salary_period_id
-                WHERE s.id = {$row}.salary_settlement_id AND p.status = 'paid'
+                WHERE s.id IN ({$references}) AND p.status = 'paid'
             )
             BEGIN SELECT RAISE(ABORT, 'paid salary settlement items are immutable'); END";
     }
@@ -103,23 +113,27 @@ return new class extends Migration
 
     private function mysqlSettlementTrigger(string $name, string $event): string
     {
-        $row = $event === 'INSERT' ? 'NEW' : 'OLD';
+        $references = $event === 'UPDATE'
+            ? 'OLD.salary_period_id, NEW.salary_period_id'
+            : ($event === 'INSERT' ? 'NEW.salary_period_id' : 'OLD.salary_period_id');
 
         return "CREATE TRIGGER {$name} BEFORE {$event} ON salary_settlements FOR EACH ROW
-            BEGIN IF EXISTS (SELECT 1 FROM salary_periods WHERE id = {$row}.salary_period_id AND status = 'paid') THEN
+            BEGIN IF EXISTS (SELECT 1 FROM salary_periods WHERE id IN ({$references}) AND status = 'paid') THEN
                 SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'paid salary settlements are immutable';
             END IF; END";
     }
 
     private function mysqlItemTrigger(string $name, string $event): string
     {
-        $row = $event === 'INSERT' ? 'NEW' : 'OLD';
+        $references = $event === 'UPDATE'
+            ? 'OLD.salary_settlement_id, NEW.salary_settlement_id'
+            : ($event === 'INSERT' ? 'NEW.salary_settlement_id' : 'OLD.salary_settlement_id');
 
         return "CREATE TRIGGER {$name} BEFORE {$event} ON salary_settlement_items FOR EACH ROW
             BEGIN IF EXISTS (
                 SELECT 1 FROM salary_settlements s
                 JOIN salary_periods p ON p.id = s.salary_period_id
-                WHERE s.id = {$row}.salary_settlement_id AND p.status = 'paid'
+                WHERE s.id IN ({$references}) AND p.status = 'paid'
             ) THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'paid salary settlement items are immutable';
             END IF; END";
     }

@@ -200,7 +200,7 @@ final class SalaryPeriodService
     }
 
     /**
-     * @param  array{cash_account_id: int, payment_date: string, idempotency_key: string}  $data
+     * @param  array{cash_account_id: int|string, payment_date: string, idempotency_key: string}  $data
      */
     public function pay(User $actor, SalaryPeriod $period, array $data): SalaryPeriod
     {
@@ -219,6 +219,7 @@ final class SalaryPeriodService
                         'status' => ['只有已確認的薪資月份可以發薪'],
                     ]);
                 }
+                $this->assertPaymentDateAllowed($lockedPeriod, $payload['payment_date']);
 
                 $keyOwner = SalaryPeriod::query()
                     ->where('idempotency_key', $payload['idempotency_key'])
@@ -508,8 +509,12 @@ final class SalaryPeriodService
      */
     private function normalizePaymentData(array $data): array
     {
-        if (! isset($data['cash_account_id']) || ! is_int($data['cash_account_id']) || $data['cash_account_id'] <= 0) {
-            throw ValidationException::withMessages(['cash_account_id' => ['資金帳戶為必填']]);
+        $rawAccountId = $data['cash_account_id'] ?? null;
+        $accountId = is_int($rawAccountId)
+            ? $rawAccountId
+            : (is_string($rawAccountId) && ctype_digit($rawAccountId) ? (int) $rawAccountId : 0);
+        if ($accountId <= 0) {
+            throw ValidationException::withMessages(['cash_account_id' => ['資金帳戶必須是正整數']]);
         }
 
         $paymentDate = $data['payment_date'] ?? null;
@@ -528,7 +533,7 @@ final class SalaryPeriodService
         }
 
         return [
-            'cash_account_id' => $data['cash_account_id'],
+            'cash_account_id' => $accountId,
             'payment_date' => $paymentDate,
             'idempotency_key' => trim($key),
         ];
@@ -548,6 +553,24 @@ final class SalaryPeriodService
         }
 
         return $this->loadPeriod($period);
+    }
+
+    private function assertPaymentDateAllowed(SalaryPeriod $period, string $paymentDate): void
+    {
+        $date = Carbon::createFromFormat('!Y-m-d', $paymentDate);
+        $periodStart = $period->period_month->copy()->startOfDay();
+        $today = Carbon::today();
+
+        if ($date->lt($periodStart)) {
+            throw ValidationException::withMessages([
+                'payment_date' => ['發薪日期不得早於結算月份第一天'],
+            ]);
+        }
+        if ($date->gt($today)) {
+            throw ValidationException::withMessages([
+                'payment_date' => ['發薪代表款項已實際支付，日期不得晚於今天'],
+            ]);
+        }
     }
 
     /**
