@@ -990,7 +990,7 @@ Request body：
 
 v1.3 第 6 部分新增的薪資資格與異常檢查目前是後端集中服務，供下一階段建立草稿、重算與確認時共用，本階段未新增對外 endpoint。它只選取台北月份內的 `sold` 車輛，並對每台候選車檢查收／賣車人、pending 收支、approved 銷售淨收款、approved 購車付款、`legacy_unknown` 與 confirmed／paid 重複引用；異常車不會被靜默略過。
 
-v1.3 第 7 部分已完成 `SalaryPeriodService` 的服務層契約，但對外 Policy／Request／Resource／Routes 仍依 PLAN 第 9、10 部分後續實作，本階段不提前開放 endpoint。服務層行為如下：
+v1.3 第 7～9 部分已完成 `SalaryPeriodService` 與 Policy／Request／Resource HTTP 安全邊界；對外 Controller／Routes 仍依 PLAN 第 10 部分後續實作，目前不提前開放 endpoint。服務層與輸出行為如下：
 
 - 建立草稿時以 `findEffectiveForMonthForUpdate()` 鎖定並選取方案，再固定 `commission_plan_id`；同月份重複建立或沒有有效方案皆回 `422`。
 - 只有「啟用使用者 + 啟用薪資設定」建立 settlement；啟用但沒有薪資設定的使用者採明確排除，不會以零薪資靜默納入。
@@ -999,10 +999,11 @@ v1.3 第 7 部分已完成 `SalaryPeriodService` 的服務層契約，但對外 
 - 確認時在同一 transaction 先鎖定整月候選車，再讀 MoneyEntry、草稿 snapshot 與方案；接著重跑資格與公式，並將重算結果和草稿 snapshot 比對。若資料已變動則回 `422` 要求先重算；若仍有負薪，`net_pay` 錯誤會列出員工姓名與金額。
 - confirmed／paid 後拒絕重算及手動加扣；已確認月份的成交回填與車輛獎金歸屬修改也會依台北月份阻擋，即使歷史資料沒有 settlement item reference 亦同。
 - 跨模組月份鎖使用 `period_month = YYYY-MM-01` 等值條件，命中 MySQL unique index；`SalaryPeriod` 亦強制以 `Y-m-d` 持久化，避免 SQLite 保存時間部分而破壞同一契約。
-- 第 9 部分實作 `SalaryPeriodResource` 時，draft 回應必須即時呼叫 `SalaryEligibilityService::inspectPeriod()`，附上 `anomalies`、`vehicle_results`、`has_blocking_issues` 與既有 correction action。異常是衍生資料、不寫入 salary_periods，但不得只回 settlements／totals 而讓被排除的車輛靜默消失。
+- `SalaryPeriodResource` 的 draft 回應會即時呼叫 `SalaryEligibilityService::inspectPeriod()`，附上 `anomalies`、`vehicle_results`、`has_blocking_issues` 與既有 correction action。異常是衍生資料、不寫入 salary_periods；confirmed／paid 回應不重算目前資格，僅回傳鎖定的 settlement／item snapshot。
+- 薪資 Resource 全部採白名單；不回傳 `idempotency_key`、`money_entry_id`、原始 `calculation_snapshot` 額外欄位或 audit metadata。SalaryPeriod／SalarySettlement Policy 僅允許 admin，未知角色 fail-closed。
 - 薪資月份與手動加扣會寫 Audit Log，但不複製薪資金額、加扣金額或說明內容到 audit metadata。
 
-v1.3 第 8 部分已完成同一 Service 的發薪契約；`POST /api/salary-periods/{salaryPeriod}/pay` 仍待 PLAN 第 9、10 部分補上 Request、Policy、Resource 與 route，因此目前不可由外部呼叫。服務層行為如下：
+v1.3 第 8～9 部分已完成同一 Service 的發薪契約與 Pay Request／Policy／Resource；`POST /api/salary-periods/{salaryPeriod}/pay` 仍待 PLAN 第 10 部分補上 Controller 與 route，因此目前不可由外部呼叫。服務層行為如下：
 
 - 只允許啟用中的 admin 對 confirmed 月份操作，輸入啟用中的 `cash_account_id`、`payment_date` 與最長 100 字元的 `idempotency_key`。`payment_date` 代表款項實際支付日，不得早於結算月份第一天或晚於今天；允許薪資延後至後續月份實際補發。
 - 同一 transaction 依序鎖定 period、資金帳戶及全部 settlement；每位 `net_pay > 0` 員工建立一筆 `expense`、`薪資 / 佣金`、`vehicle_id=null`、`source_type=salary_settlement`、直接 approved 的 MoneyEntry，並回填 `money_entry_id`。零元員工不建立空支出。

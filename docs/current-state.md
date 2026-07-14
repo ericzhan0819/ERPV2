@@ -4,7 +4,7 @@
 專案：ERPV2 / 中古車行內部營運系統
 目前穩定點：`b1edffa docs: 完成 v1.2 smoke 封版與交接文件`
 目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`
-狀態：v1.2 已完成並封版。v1.3「薪資結算」已完成 `PLAN_v1.3.md` 第 0～8 部分：前置盤點、薪資 schema、完整 Model、初始與版本化獎金方案、admin-only 薪資設定／獎金方案 API、車輛收／賣車人正式歸屬流程、salary MoneyEntry 保護、approved-only 整月跨級獎金計算器、薪資資格與異常集中檢查、月份草稿／重算／確認，以及整批發薪與薪資支出整合；第 9 部分之後的薪資 HTTP API 邊界、管理前端與 Smoke 尚未開始。
+狀態：v1.2 已完成並封版。v1.3「薪資結算」已完成 `PLAN_v1.3.md` 第 0～9 部分：前置盤點、薪資 schema、完整 Model、初始與版本化獎金方案、admin-only 薪資設定／獎金方案 API、車輛收／賣車人正式歸屬流程、salary MoneyEntry 保護、approved-only 整月跨級獎金計算器、薪資資格與異常集中檢查、月份草稿／重算／確認、整批發薪與薪資支出整合，以及薪資 Policy／Request／Resource HTTP 安全邊界；第 10 部分之後的薪資月份 routes、管理前端與 Smoke 尚未開始。
 
 ---
 
@@ -348,7 +348,7 @@ v1.3 已鎖定為「薪資結算」，不是完整 HR。核心規則：
 
 v1.3 另包含底薪、固定津貼、勞保扣款、健保扣款、手動加扣項、每月草稿／確認／發薪，以及發薪後自動建立 `薪資 / 佣金` Money Entry。
 
-v1.3 第 1～8 部分已補齊：
+v1.3 第 1～9 部分已補齊：
 
 - `salary_profiles`、`commission_plans`／`commission_plan_tiers`、`salary_periods`、`salary_settlements`、`salary_settlement_items`。
 - Vehicle 正式 `purchase_agent_id`／`sales_agent_id`，歷史資料保持空值，不做 heuristic backfill。
@@ -390,7 +390,7 @@ v1.3 第 1～8 部分已補齊：
 - `salary_settlements.net_pay` 為 signed bigint。草稿允許負薪並保持可建立、可重算、可手動補平；確認點才列出負薪員工並以 422 阻擋。新增手動扣款若立即造成負薪仍會 rollback。
 - 草稿建立／重算會先鎖定整月 sold 候選車，再讀 MoneyEntry、settlement snapshot 與方案，避免 MySQL REPEATABLE READ 在車輛鎖前建立舊 read view；與獎金歸屬修改及綁車 MoneyEntry 核准共用車輛列鎖。確認時同一 transaction 重新選取、鎖定、驗資格、重算並比對 snapshot；stale preview 會回 422 要求先重算。
 - confirmed／paid 月份查詢以 `period_month = YYYY-MM-01` 命中 unique index，不使用會使 MySQL 全表掃描並擴大 `FOR UPDATE` 鎖範圍的 `whereDate()`。SalaryPeriod 寫入則固定正規化為 `Y-m-d`，確保 SQLite／MySQL 等值契約一致。
-- draft 不持久化資格異常；第 9 部分的 `SalaryPeriodResource` 必須呼叫 `SalaryEligibilityService::inspectPeriod()`，把 `anomalies`、`vehicle_results`、`has_blocking_issues` 與修正 action 一併回傳，否則被排除的異常車會在草稿畫面靜默消失。
+- draft 不持久化資格異常；`SalaryPeriodResource` 已在輸出草稿時呼叫 `SalaryEligibilityService::inspectPeriod()`，把 `anomalies`、`vehicle_results`、`has_blocking_issues` 與修正 action 一併回傳，避免被排除的異常車在草稿畫面靜默消失。confirmed／paid 回應只讀鎖定快照，不重新套用目前資格資料。
 - `SalarySettingsMysqlConcurrencyTest` 已新增並在可拋棄 MariaDB schema 實跑 salary period／closeSale fork/socket 鎖序案例：parent 持有 period 鎖時 child 必須等待，parent 仍可取得 vehicle 鎖；提交 confirmed 後 child 醒來回 `sold_at` 422，避免未來重構恢復 vehicle → period 反向鎖。
 - confirmed／paid 月份拒絕重算與手動項目異動；`closeSale()` 回填至已鎖月份會回 422 並要求聯絡管理員，已售車歸屬也會依 `sold_at` 月份防禦沒有 settlement item reference 的歷史缺口。draft 月份仍可成交或修正歸屬，之後重算納入。
 - 薪資月份建立、重算、確認與手動加扣新增／刪除皆有 Audit Log；metadata 不保存薪資金額、加扣金額或說明內容。
@@ -400,12 +400,12 @@ v1.3 第 1～8 部分已補齊：
 - 發薪完成後回填 `cash_account_id`、`payment_date`、`paid_by`、`paid_at` 與 settlement 的 `money_entry_id`；正式帳戶餘額及 Dashboard monthly expense 會因 approved 薪資支出立即更新。
 - 資料庫 trigger 阻擋 paid period、settlement 與 settlement item 的後續新增／更新／刪除；既有 salary MoneyEntry 不可變規則持續保護正式薪資支出，歷史修正只能走後續月份手動調整或另建一般收支修正。
 - 第 8 部分 adversarial review 修正 paid 歷史 re-parent 漏洞：settlement／item UPDATE trigger 同時檢查 `OLD` 與 `NEW` 所屬月份，不能從草稿搬入 paid 歷史，也不能從 paid 搬出；migration 每次 `up()` 先移除全部同名 trigger，可從 MySQL 部分 DDL 失敗狀態安全重跑。
-- 發薪服務接受正整數或 canonical 整數字串形式的 `cash_account_id`，並集中正規化為 int；非法型別回傳「必須是正整數」，避免第 9 部分 Request 傳入字串時出現誤導訊息。
+- 發薪服務接受正整數或 canonical 整數字串形式的 `cash_account_id`，並集中正規化為 int；`PaySalaryPeriodRequest` 同步接受表單常見的整數字串、拒絕停用帳戶，非法型別回傳業務可讀中文訊息。
 - `payment_date` 定義為款項實際支付日，必須介於結算月份第一天與今天之間；可延後至隔月或更後月份補發，但不可提前到結算月之前，也不可用尚未實際發生的未來日期建立 approved 支出。
 
 後續仍待實作：
 
-- 薪資月份 Policy／Request／Resource／API routes（PLAN 第 9、10 部分）；發薪 service 與批次 idempotency 已完成，但尚未暴露 HTTP endpoint。
+- 薪資月份 Controller／API routes（PLAN 第 10 部分）；Policy／Request／Resource 與發薪 service、批次 idempotency 已完成，但薪資月份 endpoint 尚未對外開放。
 - 薪資管理前端與完整 manual smoke。
 
 Website MVP 延後到 v1.3 完成或進入正式部署準備時再獨立規劃，不得混入薪資結算。
