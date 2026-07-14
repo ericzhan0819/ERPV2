@@ -4,7 +4,7 @@
 專案：ERPV2 / 中古車行內部營運系統
 目前穩定點：`b1edffa docs: 完成 v1.2 smoke 封版與交接文件`
 目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`
-狀態：v1.2 已完成並封版。v1.3「薪資結算」已完成 `PLAN_v1.3.md` 第 0～10 部分：前置盤點、薪資 schema、完整 Model、初始與版本化獎金方案、admin-only 薪資設定／獎金方案 API、車輛收／賣車人正式歸屬流程、salary MoneyEntry 保護、approved-only 整月跨級獎金計算器、薪資資格與異常集中檢查、月份草稿／重算／確認、整批發薪與薪資支出整合、薪資 Policy／Request／Resource HTTP 安全邊界，以及薪資月份完整 API routes；第 11 部分管理前端與後續 Smoke 尚未開始。
+狀態：v1.2 已完成並封版。v1.3「薪資結算」已完成 `PLAN_v1.3.md` 第 0～11 部分：後端薪資設定、版本化獎金方案、車輛收／賣車人正式歸屬、approved-only 跨級獎金計算、月份草稿／重算／確認、整批發薪、HTTP 安全邊界與 admin-only 管理前端皆已完成；後續完整人工 Smoke 尚未執行。
 
 ---
 
@@ -410,9 +410,8 @@ v1.3 第 1～10 部分已補齊：
 - 發薪服務接受正整數或 canonical 整數字串形式的 `cash_account_id`，並集中正規化為 int；`PaySalaryPeriodRequest` 同步接受表單常見的整數字串、拒絕停用帳戶，非法型別回傳業務可讀中文訊息。
 - `payment_date` 定義為款項實際支付日，必須介於結算月份第一天與今天之間；可延後至隔月或更後月份補發，但不可提前到結算月之前，也不可用尚未實際發生的未來日期建立 approved 支出。
 
-後續仍待實作：
+後續仍待實作／驗收：
 
-- 薪資管理前端（PLAN 第 11 部分）；月份 Controller／API routes、Policy／Request／Resource、發薪 service 與批次 idempotency 已完成。
 - 完整 manual smoke。
 
 Website MVP 延後到 v1.3 完成或進入正式部署準備時再獨立規劃，不得混入薪資結算。

@@ -117,6 +117,7 @@ export interface VehicleDetailResponse {
   summary?: VehicleFinancialSummary
   sales_collection_summary?: VehicleSalesCollectionSummary
   money_entries: VehicleMoneyEntry[]
+  commission_attribution_lock?: { id: number; period_month: string; status: 'confirmed' | 'paid'; reason: string } | null
 }
 
 export interface ListVehiclePayload {

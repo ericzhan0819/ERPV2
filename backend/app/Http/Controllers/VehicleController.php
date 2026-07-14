@@ -97,11 +97,16 @@ class VehicleController extends Controller
                     ] : null,
                 ]);
 
-            return response()->json([
+            $response = [
                 'vehicle' => new VehicleResource($vehicle),
                 'money_entries' => $entries,
                 'summary' => $this->vehicleService->financialSummary($vehicle),
-            ]);
+            ];
+            if ($user?->isAdmin()) {
+                $response['commission_attribution_lock'] = $this->vehicleService->commissionAttributionLock($vehicle);
+            }
+
+            return response()->json($response);
         }
 
         // sales：不回傳管理用 summary/完整收支明細，改回傳銷售收款安全摘要與

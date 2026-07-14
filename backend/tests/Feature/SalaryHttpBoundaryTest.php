@@ -225,6 +225,8 @@ class SalaryHttpBoundaryTest extends TestCase
         $this->assertSame($admin->id, $data['created_by']['id']);
         $this->assertSame($admin->id, $data['commission_plan']['created_by']['id']);
         $this->assertSame(47000, $data['totals']['net_pay']);
+        $this->assertSame(20000, $data['totals']['company_reserve_total']);
+        $this->assertSame(18000, $data['totals']['company_remaining_total']);
         $this->assertArrayNotHasKey('idempotency_key', $data);
         $this->assertArrayNotHasKey('commission_plan_id', $data);
         $settlement = collect($data['settlements'])->firstWhere('user_id', $employee->id);

@@ -68,6 +68,10 @@ class SalaryPeriodResource extends JsonResource
             return null;
         }
 
+        $vehicleItems = $this->settlements->flatMap->items
+            ->filter(fn ($item) => $item->vehicle_id !== null && is_array($item->calculation_snapshot))
+            ->unique('vehicle_id');
+
         return [
             'purchase_bonus_total' => (int) $this->settlements->sum('purchase_bonus_total'),
             'sales_bonus_total' => (int) $this->settlements->sum('sales_bonus_total'),
@@ -76,6 +80,12 @@ class SalaryPeriodResource extends JsonResource
             'gross_pay' => (int) $this->settlements->sum('gross_pay'),
             'deduction_total' => (int) $this->settlements->sum('deduction_total'),
             'net_pay' => (int) $this->settlements->sum('net_pay'),
+            'company_reserve_total' => (int) $vehicleItems->sum(
+                fn ($item) => (int) ($item->calculation_snapshot['company_reserve'] ?? 0),
+            ),
+            'company_remaining_total' => (int) $vehicleItems->sum(
+                fn ($item) => (int) ($item->calculation_snapshot['company_remaining'] ?? 0),
+            ),
         ];
     }
 

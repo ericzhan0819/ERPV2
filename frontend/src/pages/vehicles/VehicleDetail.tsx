@@ -470,6 +470,16 @@ export function VehicleDetail() {
         </Panel>
       </div>
 
+      {detail.commission_attribution_lock && (
+        <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-fg">
+          <p className="font-medium">獎金歸屬已鎖定</p>
+          <p className="mt-1 text-fg-muted">{detail.commission_attribution_lock.reason}</p>
+          <Link to={`/salary/periods/${detail.commission_attribution_lock.id}`} className="mt-2 inline-block font-medium text-primary hover:underline">
+            查看 {detail.commission_attribution_lock.period_month} 薪資月份
+          </Link>
+        </div>
+      )}
+
       {summary && (
         <Panel title="單車收支摘要">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

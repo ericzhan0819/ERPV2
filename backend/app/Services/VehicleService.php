@@ -1054,6 +1054,29 @@ class VehicleService
             ->get();
     }
 
+    /** @return array{id: int, period_month: string, status: string, reason: string}|null */
+    public function commissionAttributionLock(Vehicle $vehicle): ?array
+    {
+        $period = SalaryPeriod::query()
+            ->join('salary_settlements', 'salary_settlements.salary_period_id', '=', 'salary_periods.id')
+            ->join('salary_settlement_items', 'salary_settlement_items.salary_settlement_id', '=', 'salary_settlements.id')
+            ->where('salary_settlement_items.vehicle_id', $vehicle->id)
+            ->whereIn('salary_periods.status', [SalaryPeriod::STATUS_CONFIRMED, SalaryPeriod::STATUS_PAID])
+            ->orderByDesc('salary_periods.period_month')
+            ->first(['salary_periods.id', 'salary_periods.period_month', 'salary_periods.status']);
+
+        if (! $period) {
+            return null;
+        }
+
+        return [
+            'id' => (int) $period->id,
+            'period_month' => Carbon::parse($period->period_month)->format('Y-m'),
+            'status' => (string) $period->status,
+            'reason' => '此車輛已納入已確認或已發薪的薪資月份，獎金歸屬已鎖定。',
+        ];
+    }
+
     /** @param array<string, int> $data */
     public function updateCommissionAttribution(Vehicle $vehicle, array $data, int $userId): Vehicle
     {

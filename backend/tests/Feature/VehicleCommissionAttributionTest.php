@@ -276,6 +276,22 @@ class VehicleCommissionAttributionTest extends TestCase
         $this->actingAs($admin, 'web')->patchJson("/api/vehicles/{$vehicle->id}/commission-attribution", [
             'purchase_agent_id' => $agent->id,
         ])->assertUnprocessable()->assertJsonValidationErrors('commission_attribution');
+
+        $this->actingAs($admin, 'web')->getJson("/api/vehicles/{$vehicle->id}")
+            ->assertOk()
+            ->assertJsonPath('commission_attribution_lock.id', $period->id)
+            ->assertJsonPath('commission_attribution_lock.period_month', '2026-06')
+            ->assertJsonPath('commission_attribution_lock.status', SalaryPeriod::STATUS_CONFIRMED)
+            ->assertJsonPath(
+                'commission_attribution_lock.reason',
+                '此車輛已納入已確認或已發薪的薪資月份，獎金歸屬已鎖定。',
+            );
+
+        $manager = User::factory()->manager()->create();
+        Auth::forgetGuards();
+        $this->actingAs($manager, 'web')->getJson("/api/vehicles/{$vehicle->id}")
+            ->assertOk()
+            ->assertJsonMissingPath('commission_attribution_lock');
     }
 
     private function reservationPayload(CashAccount $account): array

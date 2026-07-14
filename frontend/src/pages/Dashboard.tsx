@@ -4,6 +4,7 @@ import { getDashboardSummary } from '../api/dashboard'
 import type { DashboardSummary } from '../types/dashboard'
 import { useAuth } from '../hooks/useAuth'
 import { canManageVehicles, canRunSalesFlow, canViewFinancials } from '../utils/permissions'
+import { listSalaryPeriods } from '../api/salaryPeriods'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
@@ -42,12 +43,19 @@ export function Dashboard() {
   const canRunSales = canRunSalesFlow(user?.role)
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [monthlySalary, setMonthlySalary] = useState<number | null>(null)
 
   useEffect(() => {
     getDashboardSummary()
       .then(setSummary)
       .catch(() => setError('儀表板資料載入失敗'))
   }, [])
+
+  useEffect(() => {
+    if (user?.role !== 'admin') return
+    const currentMonth = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' }).slice(0, 7)
+    listSalaryPeriods().then((periods) => setMonthlySalary(periods.find((period) => period.period_month === currentMonth)?.net_pay_total ?? null)).catch(() => {})
+  }, [user?.role])
 
   if (error) {
     return <p className="text-sm text-error">{error}</p>
@@ -86,6 +94,7 @@ export function Dashboard() {
         {canViewFinance && summary.monthly_net_flow !== undefined && (
           <Card label="本月淨流入" value={formatCurrency(summary.monthly_net_flow)} />
         )}
+        {user?.role === 'admin' && monthlySalary !== null && <Card label="本月預估薪資" value={formatCurrency(monthlySalary)} />}
         <Card label="本月成交台數" value={`${summary.monthly_sold_count} 台`} />
         <Card label="整備中車輛" value={`${summary.vehicle_counts.preparing} 台`} />
         <Card label="上架中車輛" value={`${summary.vehicle_counts.listed} 台`} />

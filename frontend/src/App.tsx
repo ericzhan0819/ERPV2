@@ -18,6 +18,10 @@ import { UserList } from './pages/users/UserList'
 import { AuditLogList } from './pages/audit-logs/AuditLogList'
 import { VehicleIntakePrint } from './pages/print/VehicleIntakePrint'
 import { VehicleClosingPrint } from './pages/print/VehicleClosingPrint'
+import { SalaryPeriodList } from './pages/salary/SalaryPeriodList'
+import { SalaryPeriodDetail } from './pages/salary/SalaryPeriodDetail'
+import { SalaryProfiles } from './pages/salary/SalaryProfiles'
+import { CommissionPlans } from './pages/salary/CommissionPlans'
 
 function App() {
   return (
@@ -130,6 +134,10 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="/salary" element={<ProtectedRoute allowedRoles={['admin']}><SalaryPeriodList /></ProtectedRoute>} />
+          <Route path="/salary/periods/:id" element={<ProtectedRoute allowedRoles={['admin']}><SalaryPeriodDetail /></ProtectedRoute>} />
+          <Route path="/salary/profiles" element={<ProtectedRoute allowedRoles={['admin']}><SalaryProfiles /></ProtectedRoute>} />
+          <Route path="/salary/commission-plans" element={<ProtectedRoute allowedRoles={['admin']}><CommissionPlans /></ProtectedRoute>} />
         </Route>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
       </Routes>
