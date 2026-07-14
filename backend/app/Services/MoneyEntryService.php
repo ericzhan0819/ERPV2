@@ -6,6 +6,7 @@ use App\Models\CashAccount;
 use App\Models\MoneyEntry;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Support\VehicleMoneyCategories;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -66,12 +67,6 @@ class MoneyEntryService
         MoneyEntry::SOURCE_VEHICLE_WORKFLOW,
     ];
 
-    /**
-     * 銷售收款安全分類：訂金 / 尾款收入與退款，sales 可在一般收支列表看到金額
-     * （即使不是自己建立），但不可看到資金帳戶。
-     */
-    public const SALES_SAFE_COLLECTION_CATEGORIES = ['訂金收入', '尾款收入', '退款'];
-
     public static function categories(): array
     {
         return array_keys(self::CATEGORY_DIRECTIONS);
@@ -96,7 +91,7 @@ class MoneyEntryService
         if ($user?->isSales()) {
             $query->where(function ($q) use ($user) {
                 $q->where('created_by', $user->id)
-                    ->orWhereIn('category', self::SALES_SAFE_COLLECTION_CATEGORIES);
+                    ->orWhereIn('category', VehicleMoneyCategories::SALES_SAFE);
             });
         }
 
@@ -283,7 +278,7 @@ class MoneyEntryService
             $lockedEntry = MoneyEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
 
             $this->assertPendingApprovableEntry($lockedEntry, '核准');
-            $this->assertApprovingCollectionEntryKeepsSoldVehicleInvariant($lockedEntry);
+            $this->lockVehicleForApprovalAndAssertCollectionInvariant($lockedEntry);
 
             $lockedEntry->approval_status = MoneyEntry::APPROVAL_APPROVED;
             $lockedEntry->approved_by = $approverId;
@@ -340,22 +335,23 @@ class MoneyEntryService
      * closeSale() 使用同一把鎖，避免與結案動作競態）並拒絕核准，不論車輛是何時、以何種
      * 方式進入 sold/cancelled 狀態。
      */
-    private function assertApprovingCollectionEntryKeepsSoldVehicleInvariant(MoneyEntry $entry): void
+    private function lockVehicleForApprovalAndAssertCollectionInvariant(MoneyEntry $entry): void
     {
         if ($entry->vehicle_id === null) {
             return;
         }
 
-        if (! in_array($entry->category, self::SALES_SAFE_COLLECTION_CATEGORIES, true)) {
-            return;
-        }
-
+        // 所有綁車收支核准都鎖定同一台車。薪資月份確認會先鎖候選車，再重跑資格檢查；
+        // 這裡共用車輛列鎖後，維修等非銷售類 pending 支出也不能在確認途中核准，
+        // 避免已確認獎金使用過時毛利。核准仍先鎖 MoneyEntry，再等待車輛，不會讓確認
+        // 流程反向等待 MoneyEntry，因為資格檢查只讀收支、不取得收支列鎖。
         $vehicleStatus = Vehicle::query()
             ->whereKey($entry->vehicle_id)
             ->lockForUpdate()
             ->value('status');
 
-        if (in_array($vehicleStatus, ['sold', 'cancelled'], true)) {
+        if (in_array($entry->category, VehicleMoneyCategories::SALES_SAFE, true)
+            && in_array($vehicleStatus, ['sold', 'cancelled'], true)) {
             throw ValidationException::withMessages([
                 'vehicle_id' => ['車輛已成交結案或取消，此筆訂金/尾款/退款不可再核准，如需修正請聯絡系統管理員手動處理'],
             ]);

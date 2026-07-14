@@ -3,7 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\MoneyEntry;
-use App\Services\MoneyEntryService;
+use App\Support\VehicleMoneyCategories;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -14,7 +14,7 @@ class MoneyEntryResource extends JsonResource
         $user = $request->user();
         $canSeeFull = $user?->canViewFinancials() ?? false;
         $isOwner = $user !== null && (int) $this->created_by === $user->id;
-        $isSalesSafeCategory = in_array($this->category, MoneyEntryService::SALES_SAFE_COLLECTION_CATEGORIES, true);
+        $isSalesSafeCategory = in_array($this->category, VehicleMoneyCategories::SALES_SAFE, true);
         $isSalarySettlement = $this->source_type === MoneyEntry::SOURCE_SALARY_SETTLEMENT;
         $canSeeSalaryDetails = ! $isSalarySettlement || ($user?->isAdmin() ?? false);
         $canSeeCashAccount = $canSeeFull && $canSeeSalaryDetails;

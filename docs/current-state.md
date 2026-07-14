@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 6 部分完成後最新完整回歸為 440 tests、1808 assertions、7 skipped，其中 7 個 skipped 是需專用環境或安全旗標的測試；時區整合測試已另在真實 MariaDB 可拋棄 schema 通過 15 assertions。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 6 部分 review 修正後最新完整回歸為 445 tests、1815 assertions、9 skipped，其中 9 個 skipped 是需專用環境或安全旗標的測試。新增的薪資確認／收支核准跨連線鎖測試已在真實 MariaDB 通過 13 assertions，薪資資格 TIMESTAMP 月界整合測試通過 11 assertions；可拋棄 schema 已於驗證後刪除。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
 
 ---
 
@@ -380,7 +380,9 @@ v1.3 第 1～6 部分已補齊：
 - 既有 MySQL／MariaDB `TIMESTAMP` 由資料庫依 `+08:00` session timezone 顯示，不做推測式資料搬移；正式環境須保留 `APP_TIMEZONE=Asia/Taipei` 與 `DB_TIMEZONE=+08:00`。持久化 SQLite 不是正式部署目標，既有 UTC-naive 開發資料需重建，不做不安全回填。
 - 時區切換前提是舊環境實際以 UTC 運作；部署前必須查 `@@global.time_zone`、`@@session.time_zone`、`@@system_time_zone` 並比較 `NOW()`／`UTC_TIMESTAMP()`。若舊環境不是 UTC，停止部署並人工評估既有 TIMESTAMP，不得直接假設無需轉換。
 - `SalaryEligibilityService` 以台北月份選出 `status=sold` 候選車，並集中檢查歸屬、任意 pending 收支、approved 銷售淨收款、approved 購車付款、`legacy_unknown` 與其他 confirmed／paid 月份重複引用。
-- 本月候選車不因異常被靜默丟棄；結果保留車號、問題碼、業務可讀訊息與修正路徑。草稿可顯示異常，確認流程可使用 fail-closed 斷言以 422 阻擋。
+- 本月候選車不因異常被靜默丟棄；結果保留車號、問題碼、業務可讀訊息與前端可映射的修正動作代碼，不在後端 Service 硬寫 SPA 路徑。草稿可顯示異常，確認流程以 422 fail-closed。
+- `assertPeriodEligible()` 是月份確認唯一入口：只能在 transaction 內執行，會重新從資料庫選取完整月份並 `lockForUpdate()` 候選車，不接受舊草稿傳入的任意集合。
+- 所有綁車 MoneyEntry 核准都會鎖定同一車輛列，確保維修等非銷售類 pending 支出核准與薪資確認互斥；銷售收款分類統一由 `VehicleMoneyCategories` 提供，避免關帳、可見範圍與薪資資格規則漂移。
 - 零毛利／虧損車只要其他資格完整仍列為 eligible，並回傳 approved-only 毛利；後續交給計算器保留明細與公司淨損益，但不推升賣車跨級台數。
 
 後續仍待實作：

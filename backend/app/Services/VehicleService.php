@@ -10,6 +10,7 @@ use App\Models\SalarySettlementItem;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehiclePhoto;
+use App\Support\VehicleMoneyCategories;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
@@ -19,14 +20,6 @@ use Illuminate\Validation\ValidationException;
 
 class VehicleService
 {
-    /**
-     * 銷售收款安全摘要只計入訂金/尾款收入與退款，其他單車收入不在本輪保守範圍內
-     * （見 CLAUDE.md 銷售收款安全摘要規則）。
-     */
-    private const SALES_COLLECTION_CATEGORIES = ['訂金收入', '尾款收入'];
-
-    private const SALES_REFUND_CATEGORY = '退款';
-
     /**
      * sales 車輛詳情頁「自己上報紀錄」可見的車輛支出分類。
      */
@@ -677,7 +670,7 @@ class VehicleService
         // 收款達成交價為準（見 closeSale()）。
         $entry->approval_status = $this->isCreatorAdmin($userId) ? MoneyEntry::APPROVAL_APPROVED : MoneyEntry::APPROVAL_PENDING;
 
-            // 讓重複鍵例外離開，DB::transaction 才會回滾；呼叫端會在新的交易與快照中捕捉並重試。
+        // 讓重複鍵例外離開，DB::transaction 才會回滾；呼叫端會在新的交易與快照中捕捉並重試。
         $entry->save();
 
         return $lockedVehicle;
@@ -971,7 +964,7 @@ class VehicleService
             $hasPendingCollectionOrRefund = MoneyEntry::query()
                 ->where('vehicle_id', $lockedVehicle->id)
                 ->where('approval_status', MoneyEntry::APPROVAL_PENDING)
-                ->whereIn('category', array_merge(self::SALES_COLLECTION_CATEGORIES, [self::SALES_REFUND_CATEGORY]))
+                ->whereIn('category', VehicleMoneyCategories::SALES_SAFE)
                 ->exists();
 
             if ($hasPendingCollectionOrRefund) {
@@ -988,13 +981,13 @@ class VehicleService
             $approvedCollectionTotal = (int) MoneyEntry::query()
                 ->approved()
                 ->where('vehicle_id', $lockedVehicle->id)
-                ->whereIn('category', self::SALES_COLLECTION_CATEGORIES)
+                ->whereIn('category', VehicleMoneyCategories::SALES_COLLECTION_INCOME)
                 ->sum('amount');
 
             $approvedRefundTotal = (int) MoneyEntry::query()
                 ->approved()
                 ->where('vehicle_id', $lockedVehicle->id)
-                ->where('category', self::SALES_REFUND_CATEGORY)
+                ->where('category', VehicleMoneyCategories::SALES_REFUND)
                 ->sum('amount');
 
             $approvedIncome = $approvedCollectionTotal - $approvedRefundTotal;
@@ -1134,25 +1127,25 @@ class VehicleService
         $approvedCollectionTotal = (int) MoneyEntry::query()
             ->approved()
             ->where('vehicle_id', $vehicle->id)
-            ->whereIn('category', self::SALES_COLLECTION_CATEGORIES)
+            ->whereIn('category', VehicleMoneyCategories::SALES_COLLECTION_INCOME)
             ->sum('amount');
 
         $pendingCollectionTotal = (int) MoneyEntry::query()
             ->where('vehicle_id', $vehicle->id)
             ->where('approval_status', MoneyEntry::APPROVAL_PENDING)
-            ->whereIn('category', self::SALES_COLLECTION_CATEGORIES)
+            ->whereIn('category', VehicleMoneyCategories::SALES_COLLECTION_INCOME)
             ->sum('amount');
 
         $approvedRefundTotal = (int) MoneyEntry::query()
             ->approved()
             ->where('vehicle_id', $vehicle->id)
-            ->where('category', self::SALES_REFUND_CATEGORY)
+            ->where('category', VehicleMoneyCategories::SALES_REFUND)
             ->sum('amount');
 
         $pendingRefundTotal = (int) MoneyEntry::query()
             ->where('vehicle_id', $vehicle->id)
             ->where('approval_status', MoneyEntry::APPROVAL_PENDING)
-            ->where('category', self::SALES_REFUND_CATEGORY)
+            ->where('category', VehicleMoneyCategories::SALES_REFUND)
             ->sum('amount');
 
         $netRecordedCollectionTotal = $approvedCollectionTotal + $pendingCollectionTotal
@@ -1180,7 +1173,7 @@ class VehicleService
      */
     public function salesSafeMoneyEntries(Vehicle $vehicle, User $user): array
     {
-        $collectionCategories = array_merge(self::SALES_COLLECTION_CATEGORIES, [self::SALES_REFUND_CATEGORY]);
+        $collectionCategories = VehicleMoneyCategories::SALES_SAFE;
 
         $entries = MoneyEntry::query()
             ->where('vehicle_id', $vehicle->id)

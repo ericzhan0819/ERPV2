@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Models\Vehicle;
 use App\Services\SalaryEligibilityService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -55,7 +56,7 @@ class SalaryEligibilityTest extends TestCase
             SalaryEligibilityService::ISSUE_SALES_AGENT_MISSING,
         ], array_column($issues, 'code'));
         $this->assertSame($vehicle->stock_no, $issues[0]['stock_no']);
-        $this->assertSame('/vehicles/commission-attribution', $issues[0]['correction']['path']);
+        $this->assertSame('commission_attribution', $issues[0]['correction']['action']);
         $this->assertTrue($result['has_blocking_issues']);
         $this->assertCount(0, $result['eligible_vehicles']);
     }
@@ -149,7 +150,7 @@ class SalaryEligibilityTest extends TestCase
             ->firstWhere('code', SalaryEligibilityService::ISSUE_ALREADY_SETTLED);
         $this->assertNotNull($issue);
         $this->assertSame([$confirmedPeriod->id], $issue['context']['salary_period_ids']);
-        $this->assertSame("/salary-periods/{$confirmedPeriod->id}", $issue['correction']['path']);
+        $this->assertSame('salary_period', $issue['correction']['action']);
         $this->assertContains(
             SalaryEligibilityService::ISSUE_ALREADY_SETTLED,
             array_column($result['vehicle_results'][$paidVehicle->id]['issues'], 'code'),
@@ -184,6 +185,40 @@ class SalaryEligibilityTest extends TestCase
         ], array_column($result['vehicle_results'][$vehicle->id]['issues'], 'code'));
     }
 
+    public function test_period_selection_uses_taipei_inclusive_start_and_exclusive_next_month_boundary(): void
+    {
+        $before = $this->validVehicle(['sold_at' => '2026-05-31 23:59:59']);
+        $firstSecond = $this->validVehicle(['sold_at' => '2026-06-01 00:00:00']);
+        $lastSecond = $this->validVehicle(['sold_at' => '2026-06-30 23:59:59']);
+        $nextMonth = $this->validVehicle(['sold_at' => '2026-07-01 00:00:00']);
+
+        $result = $this->service->inspectPeriod('2026-06');
+
+        $this->assertSame(
+            [$firstSecond->id, $lastSecond->id],
+            $result['eligible_vehicles']->pluck('id')->sort()->values()->all(),
+        );
+        $this->assertArrayNotHasKey($before->id, $result['vehicle_results']);
+        $this->assertArrayNotHasKey($nextMonth->id, $result['vehicle_results']);
+    }
+
+    public function test_confirmation_entry_reselects_entire_period(): void
+    {
+        $existing = $this->validVehicle();
+        $draftInspection = $this->service->inspectPeriod('2026-06');
+        $this->assertSame([$existing->id], $draftInspection['eligible_vehicles']->pluck('id')->all());
+
+        $lateVehicle = $this->validVehicle();
+        $lateVehicle->forceFill(['sales_agent_id' => null])->save();
+
+        try {
+            DB::transaction(fn () => $this->service->assertPeriodEligible('2026-06'));
+            $this->fail('確認入口必須重新選取並阻擋草稿後新增的異常成交車');
+        } catch (ValidationException $exception) {
+            $this->assertStringContainsString($lateVehicle->stock_no, $exception->errors()['salary_eligibility'][0]);
+        }
+    }
+
     public function test_draft_can_keep_anomalies_but_confirmation_guard_rejects_them_with_business_readable_vehicle_number(): void
     {
         $vehicle = $this->validVehicle();
@@ -193,7 +228,7 @@ class SalaryEligibilityTest extends TestCase
         $this->assertTrue($draftInspection['has_blocking_issues']);
 
         try {
-            $this->service->assertVehiclesEligible('2026-06', [$vehicle->fresh()]);
+            DB::transaction(fn () => $this->service->assertPeriodEligible('2026-06'));
             $this->fail('確認前應阻擋仍有異常的車輛');
         } catch (ValidationException $exception) {
             $this->assertStringContainsString($vehicle->stock_no, $exception->errors()['salary_eligibility'][0]);

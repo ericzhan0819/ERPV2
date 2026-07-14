@@ -4,9 +4,13 @@ namespace Tests\Feature;
 
 use App\Models\AuditLog;
 use App\Models\CommissionPlan;
+use App\Models\MoneyEntry;
 use App\Models\SalaryProfile;
 use App\Models\User;
+use App\Models\Vehicle;
 use App\Services\CommissionPlanService;
+use App\Services\MoneyEntryService;
+use App\Services\SalaryEligibilityService;
 use App\Services\SalaryProfileService;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Facades\DB;
@@ -125,6 +129,107 @@ class SalarySettingsMysqlConcurrencyTest extends TestCase
         }
     }
 
+    public function test_vehicle_money_approval_waits_for_salary_confirmation_candidate_lock(): void
+    {
+        $this->prepareDisposableMysqlDatabase();
+
+        $admin = User::factory()->admin()->create();
+        $manager = User::factory()->manager()->create();
+        $agent = User::factory()->sales()->create();
+        $vehicle = Vehicle::factory()->create([
+            'status' => 'sold',
+            'sold_at' => '2026-06-15 12:00:00',
+            'purchase_price' => 60000,
+            'sold_price' => 100000,
+            'purchase_agent_id' => $agent->id,
+            'sales_agent_id' => $agent->id,
+        ]);
+        MoneyEntry::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'direction' => 'income',
+            'category' => '訂金收入',
+            'amount' => 100000,
+            'approval_status' => MoneyEntry::APPROVAL_APPROVED,
+            'source_type' => MoneyEntry::SOURCE_MANUAL,
+        ]);
+        MoneyEntry::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'direction' => 'expense',
+            'category' => '購車付款',
+            'amount' => 60000,
+            'approval_status' => MoneyEntry::APPROVAL_APPROVED,
+            'source_type' => MoneyEntry::SOURCE_MANUAL,
+        ]);
+        $pendingRepair = MoneyEntry::factory()->create([
+            'vehicle_id' => $vehicle->id,
+            'direction' => 'expense',
+            'category' => '維修支出',
+            'amount' => 50000,
+            'approval_status' => MoneyEntry::APPROVAL_PENDING,
+            'source_type' => MoneyEntry::SOURCE_MANUAL,
+            'created_by' => $manager->id,
+            'updated_by' => $manager->id,
+        ]);
+
+        [$parentSocket, $childSocket] = $this->createSocketPair();
+        $resultPath = $this->createResultPath('erpv2-salary-eligibility-lock-');
+        $pid = pcntl_fork();
+
+        if ($pid === -1) {
+            @unlink($resultPath);
+            $this->fail('pcntl_fork 失敗，無法建立真正的第二個收支核准請求。');
+        }
+
+        if ($pid === 0) {
+            fclose($parentSocket);
+            $this->runVehicleMoneyApprovalInChild($childSocket, $resultPath, $pendingRepair->id, $admin->id);
+        }
+
+        fclose($childSocket);
+        stream_set_timeout($parentSocket, self::CHILD_HANDSHAKE_TIMEOUT_SECONDS);
+        $this->assertChildSignal($parentSocket, 'R', '收支核准 child 未完成獨立資料庫連線初始化。');
+        DB::purge();
+        DB::beginTransaction();
+
+        try {
+            try {
+                app(SalaryEligibilityService::class)->assertPeriodEligible('2026-06');
+                $this->fail('待審維修支出必須阻擋薪資確認。');
+            } catch (ValidationException $exception) {
+                $this->assertArrayHasKey('salary_eligibility', $exception->errors());
+            }
+
+            fwrite($parentSocket, 'G');
+            $this->assertChildSignal($parentSocket, 'S', '收支核准 child 未開始執行。');
+
+            stream_set_blocking($parentSocket, false);
+            usleep(300000);
+            $this->assertSame('', fread($parentSocket, 1), '車輛列鎖釋放前，維修支出核准不得先完成。');
+
+            DB::commit();
+            stream_set_blocking($parentSocket, true);
+            stream_set_timeout($parentSocket, self::CHILD_HANDSHAKE_TIMEOUT_SECONDS);
+            $this->assertChildSignal($parentSocket, 'D', '車輛列鎖釋放後，收支核准未在時限內完成。');
+            fclose($parentSocket);
+
+            $status = $this->waitForChildOrStop($pid);
+            $pid = 0;
+            $childResult = $this->readChildResult($resultPath);
+
+            $this->assertTrue(
+                pcntl_wifexited($status) && pcntl_wexitstatus($status) === 0,
+                '收支核准 child 應在確認交易釋放車輛鎖後完成。Child result: '.json_encode($childResult, JSON_UNESCAPED_UNICODE),
+            );
+            $this->assertSame(true, $childResult['ok'] ?? false);
+            $this->assertSame(MoneyEntry::APPROVAL_APPROVED, MoneyEntry::query()->findOrFail($pendingRepair->id)->approval_status);
+        } finally {
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
+            $this->cleanupParentResources($parentSocket, $pid, $resultPath);
+        }
+    }
+
     /**
      * @param  resource  $socket
      * @param  array<string, mixed>  $payload
@@ -215,6 +320,45 @@ class SalarySettingsMysqlConcurrencyTest extends TestCase
             exit(0);
         } catch (Throwable $exception) {
             $this->writeChildException($resultPath, $exception);
+            fclose($socket);
+            exit(1);
+        }
+    }
+
+    /** @param resource $socket */
+    private function runVehicleMoneyApprovalInChild(
+        $socket,
+        string $resultPath,
+        int $moneyEntryId,
+        int $adminId,
+    ): never {
+        DB::disconnect();
+        DB::purge();
+        fwrite($socket, 'R');
+
+        if (fread($socket, 1) !== 'G') {
+            $this->writeChildResult($resultPath, ['ok' => false, 'message' => '父行程未開始鎖定測試']);
+            fclose($socket);
+            exit(1);
+        }
+
+        fwrite($socket, 'S');
+
+        try {
+            $entry = app(MoneyEntryService::class)->approve(
+                MoneyEntry::query()->findOrFail($moneyEntryId),
+                $adminId,
+            );
+            $this->writeChildResult($resultPath, [
+                'ok' => true,
+                'approval_status' => $entry->approval_status,
+            ]);
+            fwrite($socket, 'D');
+            fclose($socket);
+            exit(0);
+        } catch (Throwable $exception) {
+            $this->writeChildException($resultPath, $exception);
+            fwrite($socket, 'D');
             fclose($socket);
             exit(1);
         }

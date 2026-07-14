@@ -4,7 +4,7 @@ namespace App\Policies;
 
 use App\Models\MoneyEntry;
 use App\Models\User;
-use App\Services\MoneyEntryService;
+use App\Support\VehicleMoneyCategories;
 
 class MoneyEntryPolicy
 {
@@ -31,7 +31,7 @@ class MoneyEntryPolicy
 
         if ($user->isSales()) {
             return $moneyEntry->created_by === $user->id
-                || in_array($moneyEntry->category, MoneyEntryService::SALES_SAFE_COLLECTION_CATEGORIES, true);
+                || in_array($moneyEntry->category, VehicleMoneyCategories::SALES_SAFE, true);
         }
 
         return false;

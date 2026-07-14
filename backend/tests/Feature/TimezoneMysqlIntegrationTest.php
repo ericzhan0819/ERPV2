@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Services\SalaryEligibilityService;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -57,6 +58,36 @@ class TimezoneMysqlIntegrationTest extends TestCase
             DB::disconnect($secondConnectionName);
             DB::purge($secondConnectionName);
         }
+    }
+
+    public function test_salary_eligibility_selects_real_mysql_timestamp_month_boundaries_in_taipei(): void
+    {
+        $this->prepareDisposableMysqlDatabase();
+
+        $connection = DB::connection();
+        $ids = [];
+        foreach ([
+            'before' => '2026-05-31 23:59:59',
+            'first' => '2026-06-01 00:00:00',
+            'last' => '2026-06-30 23:59:59',
+            'next' => '2026-07-01 00:00:00',
+        ] as $label => $soldAt) {
+            $ids[$label] = $connection->table('vehicles')->insertGetId([
+                'stock_no' => 'TZ-ELIGIBILITY-'.strtoupper($label),
+                'status' => 'sold',
+                'brand' => 'Timezone',
+                'model' => 'Eligibility',
+                'sold_at' => $soldAt,
+                'created_at' => $soldAt,
+                'updated_at' => $soldAt,
+            ]);
+        }
+
+        $result = app(SalaryEligibilityService::class)->inspectPeriod('2026-06');
+
+        $this->assertSame([$ids['first'], $ids['last']], array_keys($result['vehicle_results']));
+        $this->assertArrayNotHasKey($ids['before'], $result['vehicle_results']);
+        $this->assertArrayNotHasKey($ids['next'], $result['vehicle_results']);
     }
 
     private function prepareDisposableMysqlDatabase(): void

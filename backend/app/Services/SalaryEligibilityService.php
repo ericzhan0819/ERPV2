@@ -7,10 +7,13 @@ use App\Models\SalaryPeriod;
 use App\Models\SalarySettlementItem;
 use App\Models\Vehicle;
 use App\Support\SalaryPeriodMonth;
+use App\Support\VehicleMoneyCategories;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
+use LogicException;
 use OverflowException;
 
 final class SalaryEligibilityService
@@ -33,10 +36,6 @@ final class SalaryEligibilityService
 
     public const ISSUE_ALREADY_SETTLED = 'already_in_confirmed_or_paid_period';
 
-    private const SALES_COLLECTION_CATEGORIES = ['訂金收入', '尾款收入'];
-
-    private const SALES_REFUND_CATEGORY = '退款';
-
     private const PURCHASE_PAYMENT_CATEGORY = '購車付款';
 
     /**
@@ -47,16 +46,48 @@ final class SalaryEligibilityService
      */
     public function inspectPeriod(string $periodMonth, ?int $currentSalaryPeriodId = null): array
     {
+        return $this->inspectPeriodFromDatabase($periodMonth, $currentSalaryPeriodId, false);
+    }
+
+    /**
+     * 薪資月份確認唯一允許的資格入口：必須在既有 transaction 內重新從資料庫選出
+     * 整個月份候選車並鎖定車輛列，不能接受呼叫端提供的舊草稿集合。
+     *
+     * @return array<string, mixed>
+     */
+    public function assertPeriodEligible(string $periodMonth, ?int $currentSalaryPeriodId = null): array
+    {
+        if (DB::transactionLevel() < 1) {
+            throw new LogicException('確認薪資資格必須在資料庫 transaction 內執行');
+        }
+
+        $result = $this->inspectPeriodFromDatabase($periodMonth, $currentSalaryPeriodId, true);
+        $this->assertNoBlockingIssues($result);
+
+        return $result;
+    }
+
+    /** @return array<string, mixed> */
+    private function inspectPeriodFromDatabase(
+        string $periodMonth,
+        ?int $currentSalaryPeriodId,
+        bool $lockVehicles,
+    ): array {
         $periodMonth = SalaryPeriodMonth::normalize($periodMonth);
         [$monthStart, $nextMonthStart] = $this->monthBounds($periodMonth);
 
-        $vehicles = Vehicle::query()
+        $query = Vehicle::query()
             ->where('status', 'sold')
             ->where('sold_at', '>=', $monthStart)
             ->where('sold_at', '<', $nextMonthStart)
             ->orderBy('sold_at')
-            ->orderBy('id')
-            ->get();
+            ->orderBy('id');
+
+        if ($lockVehicles) {
+            $query->lockForUpdate();
+        }
+
+        $vehicles = $query->get();
 
         return $this->inspectVehicles($periodMonth, $vehicles, $currentSalaryPeriodId);
     }
@@ -135,20 +166,9 @@ final class SalaryEligibilityService
         ];
     }
 
-    /**
-     * 確認結算前使用的 fail-closed 入口。草稿可直接使用 inspectPeriod() 保留異常，
-     * 確認流程則必須呼叫本方法，任何一項異常都會以 422 業務錯誤阻擋。
-     *
-     * @param  iterable<int, Vehicle>  $vehicles
-     * @return array<string, mixed>
-     */
-    public function assertVehiclesEligible(
-        string $periodMonth,
-        iterable $vehicles,
-        ?int $currentSalaryPeriodId = null,
-    ): array {
-        $result = $this->inspectVehicles($periodMonth, $vehicles, $currentSalaryPeriodId);
-
+    /** @param array<string, mixed> $result */
+    private function assertNoBlockingIssues(array $result): void
+    {
         if ($result['has_blocking_issues']) {
             throw ValidationException::withMessages([
                 'salary_eligibility' => array_map(
@@ -157,8 +177,6 @@ final class SalaryEligibilityService
                 ),
             ]);
         }
-
-        return $result;
     }
 
     /**
@@ -175,23 +193,23 @@ final class SalaryEligibilityService
         $issues = [];
 
         if ($vehicle->status !== 'sold') {
-            $issues[] = $this->issue($vehicle, self::ISSUE_STATUS_NOT_SOLD, 'status', '車輛尚未成交結案', '查看車輛狀態');
+            $issues[] = $this->issue($vehicle, self::ISSUE_STATUS_NOT_SOLD, 'status', '車輛尚未成交結案', '查看車輛狀態', 'vehicle_detail');
         }
 
         if ($vehicle->sold_at === null || $vehicle->sold_at->format('Y-m') !== $periodMonth) {
-            $issues[] = $this->issue($vehicle, self::ISSUE_SOLD_AT_OUTSIDE_PERIOD, 'sold_at', "成交日期不屬於 {$periodMonth}", '查看成交日期');
+            $issues[] = $this->issue($vehicle, self::ISSUE_SOLD_AT_OUTSIDE_PERIOD, 'sold_at', "成交日期不屬於 {$periodMonth}", '查看成交日期', 'vehicle_detail');
         }
 
         if ($vehicle->purchase_agent_id === null) {
-            $issues[] = $this->issue($vehicle, self::ISSUE_PURCHASE_AGENT_MISSING, 'purchase_agent_id', '尚未指定收車人', '補登獎金歸屬', '/vehicles/commission-attribution');
+            $issues[] = $this->issue($vehicle, self::ISSUE_PURCHASE_AGENT_MISSING, 'purchase_agent_id', '尚未指定收車人', '補登獎金歸屬', 'commission_attribution');
         }
 
         if ($vehicle->sales_agent_id === null) {
-            $issues[] = $this->issue($vehicle, self::ISSUE_SALES_AGENT_MISSING, 'sales_agent_id', '尚未指定賣車人', '補登獎金歸屬', '/vehicles/commission-attribution');
+            $issues[] = $this->issue($vehicle, self::ISSUE_SALES_AGENT_MISSING, 'sales_agent_id', '尚未指定賣車人', '補登獎金歸屬', 'commission_attribution');
         }
 
         if ($facts['has_pending']) {
-            $issues[] = $this->issue($vehicle, self::ISSUE_PENDING_MONEY_ENTRY, 'money_entries', '仍有待審核收支，請先核准或駁回', '查看車輛收支');
+            $issues[] = $this->issue($vehicle, self::ISSUE_PENDING_MONEY_ENTRY, 'money_entries', '仍有待審核收支，請先核准或駁回', '查看車輛收支', 'vehicle_money_entries');
         }
 
         $soldPrice = $vehicle->sold_price;
@@ -203,7 +221,7 @@ final class SalaryEligibilityService
             $message = $soldPrice === null
                 ? '尚未設定成交價，無法驗證已核准收款'
                 : "已核准訂金／尾款扣退款為 {$approvedNetCollection}，未達成交價 {$soldPrice}";
-            $issues[] = $this->issue($vehicle, self::ISSUE_COLLECTION_SHORTFALL, 'sold_price', $message, '查看銷售收款');
+            $issues[] = $this->issue($vehicle, self::ISSUE_COLLECTION_SHORTFALL, 'sold_price', $message, '查看銷售收款', 'vehicle_money_entries');
         }
 
         if ($vehicle->purchase_price === null || $facts['approved_purchase_payment_total'] !== (int) $vehicle->purchase_price) {
@@ -214,11 +232,12 @@ final class SalaryEligibilityService
                 'purchase_price',
                 "已核准購車付款為 {$facts['approved_purchase_payment_total']}，收購價為 {$expected}",
                 '查看購車付款',
+                'vehicle_money_entries',
             );
         }
 
         if ($facts['has_legacy_unknown']) {
-            $issues[] = $this->issue($vehicle, self::ISSUE_LEGACY_UNKNOWN_MONEY_ENTRY, 'money_entries', '存在來源未確認的既有收支，需先完成人工確認', '查看車輛收支');
+            $issues[] = $this->issue($vehicle, self::ISSUE_LEGACY_UNKNOWN_MONEY_ENTRY, 'money_entries', '存在來源未確認的既有收支，需先完成人工確認', '確認收支來源', 'money_entry_source_review');
         }
 
         if ($settledPeriodIds !== []) {
@@ -229,7 +248,7 @@ final class SalaryEligibilityService
                 'salary_period_id',
                 '已被其他已確認或已發薪的薪資月份引用',
                 '查看既有薪資月份',
-                "/salary-periods/{$periodId}",
+                'salary_period',
                 ['salary_period_ids' => $settledPeriodIds],
             );
         }
@@ -247,7 +266,7 @@ final class SalaryEligibilityService
         string $field,
         string $message,
         string $correctionLabel,
-        ?string $correctionPath = null,
+        string $correctionAction,
         array $context = [],
     ): array {
         return [
@@ -258,7 +277,7 @@ final class SalaryEligibilityService
             'message' => $message,
             'correction' => [
                 'label' => $correctionLabel,
-                'path' => $correctionPath ?? "/vehicles/{$vehicle->getKey()}",
+                'action' => $correctionAction,
             ],
             'context' => $context,
         ];
@@ -300,9 +319,9 @@ final class SalaryEligibilityService
                     : 'approved_expense_total';
                 $facts[$vehicleId][$totalField] = $this->safeAdd($facts[$vehicleId][$totalField], $amount);
 
-                if ($entry->direction === 'income' && in_array($entry->category, self::SALES_COLLECTION_CATEGORIES, true)) {
+                if ($entry->direction === 'income' && in_array($entry->category, VehicleMoneyCategories::SALES_COLLECTION_INCOME, true)) {
                     $facts[$vehicleId]['approved_collection_total'] = $this->safeAdd($facts[$vehicleId]['approved_collection_total'], $amount);
-                } elseif ($entry->direction === 'expense' && $entry->category === self::SALES_REFUND_CATEGORY) {
+                } elseif ($entry->direction === 'expense' && $entry->category === VehicleMoneyCategories::SALES_REFUND) {
                     $facts[$vehicleId]['approved_refund_total'] = $this->safeAdd($facts[$vehicleId]['approved_refund_total'], $amount);
                 } elseif ($entry->direction === 'expense' && $entry->category === self::PURCHASE_PAYMENT_CATEGORY) {
                     $facts[$vehicleId]['approved_purchase_payment_total'] = $this->safeAdd($facts[$vehicleId]['approved_purchase_payment_total'], $amount);
