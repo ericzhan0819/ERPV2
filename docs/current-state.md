@@ -1,10 +1,10 @@
-# ERPV2 current-state — v1.2 已封版，v1.3 第 5 部分完成
+# ERPV2 current-state — v1.2 已封版，v1.3 第 6 部分完成
 
-日期：2026-07-13
+日期：2026-07-14
 專案：ERPV2 / 中古車行內部營運系統
 目前穩定點：`b1edffa docs: 完成 v1.2 smoke 封版與交接文件`
 目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`
-狀態：v1.2 已完成並封版。v1.3「薪資結算」已完成 `PLAN_v1.3.md` 第 0～5 部分：前置盤點、薪資 schema、完整 Model、初始與版本化獎金方案、admin-only 薪資設定／獎金方案 API、車輛收／賣車人正式歸屬流程、salary MoneyEntry 保護與 approved-only 整月跨級獎金計算器；第 6 部分之後的資格檢查、結算、發薪、薪資管理前端與 Smoke 尚未開始。
+狀態：v1.2 已完成並封版。v1.3「薪資結算」已完成 `PLAN_v1.3.md` 第 0～6 部分：前置盤點、薪資 schema、完整 Model、初始與版本化獎金方案、admin-only 薪資設定／獎金方案 API、車輛收／賣車人正式歸屬流程、salary MoneyEntry 保護、approved-only 整月跨級獎金計算器，以及薪資資格與異常集中檢查；第 7 部分之後的月份結算、發薪、薪資管理前端與 Smoke 尚未開始。
 
 ---
 
@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 5 部分決策修正後最新完整回歸為 430 tests、1779 assertions、7 skipped，其中 7 個 skipped 是需專用環境或安全旗標的測試；新增的時區整合測試已另在真實 MariaDB 可拋棄 schema 通過 15 assertions。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 6 部分完成後最新完整回歸為 440 tests、1808 assertions、7 skipped，其中 7 個 skipped 是需專用環境或安全旗標的測試；時區整合測試已另在真實 MariaDB 可拋棄 schema 通過 15 assertions。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
 
 ---
 
@@ -348,7 +348,7 @@ v1.3 已鎖定為「薪資結算」，不是完整 HR。核心規則：
 
 v1.3 另包含底薪、固定津貼、勞保扣款、健保扣款、手動加扣項、每月草稿／確認／發薪，以及發薪後自動建立 `薪資 / 佣金` Money Entry。
 
-v1.3 第 1～5 部分已補齊：
+v1.3 第 1～6 部分已補齊：
 
 - `salary_profiles`、`commission_plans`／`commission_plan_tiers`、`salary_periods`、`salary_settlements`、`salary_settlement_items`。
 - Vehicle 正式 `purchase_agent_id`／`sales_agent_id`，歷史資料保持空值，不做 heuristic backfill。
@@ -379,10 +379,13 @@ v1.3 第 1～5 部分已補齊：
 - 全系統業務日期與月份邊界統一為 `Asia/Taipei`。Laravel app timezone、MySQL／MariaDB session timezone、Dashboard 月統計、預設收支日期、成交時間正規化、列印／稽核前端顯示及 API datetime offset 均採台北時間。
 - 既有 MySQL／MariaDB `TIMESTAMP` 由資料庫依 `+08:00` session timezone 顯示，不做推測式資料搬移；正式環境須保留 `APP_TIMEZONE=Asia/Taipei` 與 `DB_TIMEZONE=+08:00`。持久化 SQLite 不是正式部署目標，既有 UTC-naive 開發資料需重建，不做不安全回填。
 - 時區切換前提是舊環境實際以 UTC 運作；部署前必須查 `@@global.time_zone`、`@@session.time_zone`、`@@system_time_zone` 並比較 `NOW()`／`UTC_TIMESTAMP()`。若舊環境不是 UTC，停止部署並人工評估既有 TIMESTAMP，不得直接假設無需轉換。
+- `SalaryEligibilityService` 以台北月份選出 `status=sold` 候選車，並集中檢查歸屬、任意 pending 收支、approved 銷售淨收款、approved 購車付款、`legacy_unknown` 與其他 confirmed／paid 月份重複引用。
+- 本月候選車不因異常被靜默丟棄；結果保留車號、問題碼、業務可讀訊息與修正路徑。草稿可顯示異常，確認流程可使用 fail-closed 斷言以 422 阻擋。
+- 零毛利／虧損車只要其他資格完整仍列為 eligible，並回傳 approved-only 毛利；後續交給計算器保留明細與公司淨損益，但不推升賣車跨級台數。
 
 後續仍待實作：
 
-- 薪資資格與異常檢查、月份草稿／確認／發薪與批次 idempotency。
+- 月份草稿／確認／發薪與批次 idempotency。
 - 薪資管理前端與完整 manual smoke。
 
 Website MVP 延後到 v1.3 完成或進入正式部署準備時再獨立規劃，不得混入薪資結算。

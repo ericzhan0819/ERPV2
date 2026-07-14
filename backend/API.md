@@ -1,4 +1,4 @@
-# API 文件 — 中古車行內部營運系統（1.0 + v1.1 + v1.2 + v1.3 第 4 部分）
+# API 文件 — 中古車行內部營運系統（1.0 + v1.1 + v1.2 + v1.3 第 6 部分）
 
 Base URL：`http://localhost:8000`（依 `.env` `APP_URL` 而定）
 
@@ -987,3 +987,5 @@ Request body：
 ### GET /api/commission-plans/{commissionPlan}
 
 回傳單一 `CommissionPlanResource`，包含依 `sort_order` 排列的 tiers、建立者與 `is_used`。不存在回傳 `404`；非 admin 在進入 Controller 前即回傳 `403`。
+
+v1.3 第 6 部分新增的薪資資格與異常檢查目前是後端集中服務，供下一階段建立草稿、重算與確認時共用，本階段未新增對外 endpoint。它只選取台北月份內的 `sold` 車輛，並對每台候選車檢查收／賣車人、pending 收支、approved 銷售淨收款、approved 購車付款、`legacy_unknown` 與 confirmed／paid 重複引用；異常車不會被靜默略過。
