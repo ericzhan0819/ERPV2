@@ -294,6 +294,76 @@ class VehicleCommissionAttributionTest extends TestCase
             ->assertJsonMissingPath('commission_attribution_lock');
     }
 
+    public function test_locked_salary_month_locks_attribution_even_without_settlement_item_reference(): void
+    {
+        // 兩位歸屬人都沒有 active salary profile 的合格車不會留下 settlement item，
+        // 零獎金的早期資料亦同。寫入路徑依成交月份鎖定，唯讀契約必須一致。
+        $admin = User::factory()->admin()->create();
+        $agent = User::factory()->create();
+        $vehicle = Vehicle::factory()->create([
+            'status' => 'sold',
+            'sold_at' => '2026-06-20 10:00:00',
+        ]);
+        $plan = CommissionPlan::query()->create([
+            'name' => '測試方案',
+            'effective_from' => '2026-01-01',
+            'company_reserve_bps' => 4000,
+            'purchase_bonus_bps' => 2000,
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+        $period = SalaryPeriod::query()->create([
+            'period_month' => '2026-06-01',
+            'commission_plan_id' => $plan->id,
+            'status' => SalaryPeriod::STATUS_PAID,
+            'created_by' => $admin->id,
+        ]);
+
+        $this->assertDatabaseMissing('salary_settlement_items', ['vehicle_id' => $vehicle->id]);
+
+        $this->actingAs($admin, 'web')->patchJson("/api/vehicles/{$vehicle->id}/commission-attribution", [
+            'purchase_agent_id' => $agent->id,
+        ])->assertUnprocessable()->assertJsonValidationErrors('commission_attribution');
+
+        $this->actingAs($admin, 'web')->getJson("/api/vehicles/{$vehicle->id}")
+            ->assertOk()
+            ->assertJsonPath('commission_attribution_lock.id', $period->id)
+            ->assertJsonPath('commission_attribution_lock.period_month', '2026-06')
+            ->assertJsonPath('commission_attribution_lock.status', SalaryPeriod::STATUS_PAID);
+    }
+
+    public function test_draft_salary_month_does_not_lock_attribution_without_settlement_item_reference(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $agent = User::factory()->create();
+        $vehicle = Vehicle::factory()->create([
+            'status' => 'sold',
+            'sold_at' => '2026-06-20 10:00:00',
+        ]);
+        $plan = CommissionPlan::query()->create([
+            'name' => '測試方案',
+            'effective_from' => '2026-01-01',
+            'company_reserve_bps' => 4000,
+            'purchase_bonus_bps' => 2000,
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+        SalaryPeriod::query()->create([
+            'period_month' => '2026-06-01',
+            'commission_plan_id' => $plan->id,
+            'status' => SalaryPeriod::STATUS_DRAFT,
+            'created_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin, 'web')->patchJson("/api/vehicles/{$vehicle->id}/commission-attribution", [
+            'purchase_agent_id' => $agent->id,
+        ])->assertOk();
+
+        $this->actingAs($admin, 'web')->getJson("/api/vehicles/{$vehicle->id}")
+            ->assertOk()
+            ->assertJsonPath('commission_attribution_lock', null);
+    }
+
     private function reservationPayload(CashAccount $account): array
     {
         return [

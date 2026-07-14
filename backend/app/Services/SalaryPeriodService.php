@@ -330,8 +330,7 @@ final class SalaryPeriodService
     private function rebuildDraft(SalaryPeriod $period, CommissionPlan $plan, array $eligibility): void
     {
         $profiles = SalaryProfile::query()
-            ->where('is_active', true)
-            ->whereHas('user', fn ($query) => $query->where('is_active', true))
+            ->settlementActive()
             ->orderBy('user_id')
             ->lockForUpdate()
             ->get()

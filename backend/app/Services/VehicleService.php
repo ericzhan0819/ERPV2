@@ -1065,6 +1065,16 @@ class VehicleService
             ->orderByDesc('salary_periods.period_month')
             ->first(['salary_periods.id', 'salary_periods.period_month', 'salary_periods.status']);
 
+        // 歸屬人沒有 active salary profile 的合格車不會留下任何 settlement item，零獎金的
+        // 早期資料亦同；成交月份一旦確認／發薪，updateCommissionAttribution() 仍會依月份鎖住
+        // 歸屬，因此唯讀契約必須採用同一組定義，否則畫面會顯示成未鎖定。
+        if (! $period && $vehicle->sold_at !== null) {
+            $period = SalaryPeriod::query()
+                ->where('period_month', $vehicle->sold_at->format('Y-m-01'))
+                ->whereIn('status', [SalaryPeriod::STATUS_CONFIRMED, SalaryPeriod::STATUS_PAID])
+                ->first(['id', 'period_month', 'status']);
+        }
+
         if (! $period) {
             return null;
         }
