@@ -11,12 +11,7 @@ class SalaryPeriodResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
-        $eligibility = $this->status === SalaryPeriod::STATUS_DRAFT
-            ? app(SalaryEligibilityService::class)->inspectPeriod(
-                $this->period_month->format('Y-m'),
-                (int) $this->id,
-            )
-            : null;
+        $eligibility = $this->draftEligibility();
 
         return [
             'id' => $this->id,
@@ -48,6 +43,22 @@ class SalaryPeriodResource extends JsonResource
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
+    }
+
+    /** @return array<string, mixed>|null */
+    private function draftEligibility(): ?array
+    {
+        if ($this->status !== SalaryPeriod::STATUS_DRAFT) {
+            return null;
+        }
+        if ($this->resource->relationLoaded('draftEligibility')) {
+            return $this->resource->getRelation('draftEligibility');
+        }
+
+        return app(SalaryEligibilityService::class)->inspectPeriod(
+            $this->period_month->format('Y-m'),
+            (int) $this->id,
+        );
     }
 
     /** @return array<string, int>|null */

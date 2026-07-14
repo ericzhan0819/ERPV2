@@ -75,7 +75,7 @@ final class SalaryPeriodService
                 $this->rebuildDraft($period, $plan, $eligibility);
                 $this->auditLogService->recordSalaryPeriodAction($period, AuditLog::ACTION_CREATED, 'create_draft', $actor);
 
-                return $this->loadPeriod($period);
+                return $this->loadDraftPeriod($period, $eligibility);
             }, self::TRANSACTION_ATTEMPTS);
         } catch (QueryException $exception) {
             if (! $this->isPeriodMonthUniqueViolation($exception)) {
@@ -100,7 +100,7 @@ final class SalaryPeriodService
             $this->rebuildDraft($lockedPeriod, $plan, $eligibility);
             $this->auditLogService->recordSalaryPeriodAction($lockedPeriod, AuditLog::ACTION_UPDATED, 'recalculate', $actor);
 
-            return $this->loadPeriod($lockedPeriod);
+            return $this->loadDraftPeriod($lockedPeriod, $eligibility);
         }, self::TRANSACTION_ATTEMPTS);
     }
 
@@ -527,6 +527,16 @@ final class SalaryPeriodService
             'paidBy:id,name',
             'cashAccount:id,name,type',
         ]);
+    }
+
+    /** @param array<string, mixed> $eligibility */
+    private function loadDraftPeriod(SalaryPeriod $period, array $eligibility): SalaryPeriod
+    {
+        $period = $this->loadPeriod($period);
+        // 僅供同一次寫入回應沿用交易內結果；GET 詳情仍會重新檢查目前資格。
+        $period->setRelation('draftEligibility', $eligibility);
+
+        return $period;
     }
 
     /**

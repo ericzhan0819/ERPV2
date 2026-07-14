@@ -327,6 +327,18 @@ class SalaryHttpBoundaryTest extends TestCase
             'amount' => '1000',
             'description' => '臨時加給',
         ])->assertCreated()->assertJsonPath('data.amount', 1000);
+        $this->assertSame([
+            'id',
+            'type',
+            'vehicle_id',
+            'vehicle',
+            'amount',
+            'description',
+            'calculation',
+            'created_by',
+            'created_at',
+        ], array_keys($adjustment->json('data')));
+        $adjustment->assertJsonPath('data.vehicle', null);
         $itemId = $adjustment->json('data.id');
 
         $this->deleteJson("/api/salary-periods/{$periodId}/adjustments/{$itemId}")
@@ -437,6 +449,36 @@ class SalaryHttpBoundaryTest extends TestCase
                 || str_contains($sql, ' from "money_entries"')
                 || str_contains($sql, ' from `money_entries`'),
         ));
+    }
+
+    public function test_draft_write_responses_reuse_transaction_eligibility_but_show_inspects_live_data(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $employee = User::factory()->sales()->create(['is_active' => true]);
+        $this->profile($employee);
+        $this->plan($admin);
+        $this->validVehicle($employee);
+        $queries = [];
+        DB::listen(function ($query) use (&$queries): void {
+            $queries[] = strtolower($query->sql);
+        });
+
+        $created = $this->actingAs($admin)->postJson('/api/salary-periods', [
+            'period_month' => '2026-06',
+        ])->assertCreated();
+        $periodId = $created->json('data.id');
+        $this->assertSame(1, $this->eligibilityVehicleScanCount($queries), '建立草稿不應重複掃描候選車輛');
+        $this->assertSame(1, $this->eligibilityMoneyScanCount($queries), '建立草稿不應重複掃描資格收支');
+
+        $queries = [];
+        $this->getJson("/api/salary-periods/{$periodId}")->assertOk();
+        $this->assertSame(1, $this->eligibilityVehicleScanCount($queries), 'GET 詳情應即時掃描一次候選車輛');
+        $this->assertSame(1, $this->eligibilityMoneyScanCount($queries), 'GET 詳情應即時掃描一次資格收支');
+
+        $queries = [];
+        $this->postJson("/api/salary-periods/{$periodId}/recalculate")->assertOk();
+        $this->assertSame(1, $this->eligibilityVehicleScanCount($queries), '重算不應重複掃描候選車輛');
+        $this->assertSame(1, $this->eligibilityMoneyScanCount($queries), '重算不應重複掃描資格收支');
     }
 
     public function test_salary_period_show_uses_raw_json_whitelist(): void
@@ -628,5 +670,25 @@ class SalaryHttpBoundaryTest extends TestCase
         }
 
         return $keys;
+    }
+
+    /** @param array<int, string> $queries */
+    private function eligibilityVehicleScanCount(array $queries): int
+    {
+        return collect($queries)->filter(
+            fn (string $sql): bool => (str_contains($sql, ' from "vehicles"') || str_contains($sql, ' from `vehicles`'))
+                && (str_contains($sql, '"status" = ?') || str_contains($sql, '`status` = ?'))
+                && (str_contains($sql, '"sold_at" >= ?') || str_contains($sql, '`sold_at` >= ?')),
+        )->count();
+    }
+
+    /** @param array<int, string> $queries */
+    private function eligibilityMoneyScanCount(array $queries): int
+    {
+        return collect($queries)->filter(
+            fn (string $sql): bool => (str_contains($sql, ' from "money_entries"') || str_contains($sql, ' from `money_entries`'))
+                && (str_contains($sql, '"approval_status"') || str_contains($sql, '`approval_status`'))
+                && (str_contains($sql, '"source_type"') || str_contains($sql, '`source_type`')),
+        )->count();
     }
 }

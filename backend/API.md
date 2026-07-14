@@ -1035,7 +1035,7 @@ Request body：
 }
 ```
 
-`type` 只接受 `manual_addition` 或 `manual_deduction`，`amount` 必須為正整數，`description` 必填且最多 255 字元。前端不得指定 settlement、vehicle、snapshot、totals 或狀態欄位。
+`type` 只接受 `manual_addition` 或 `manual_deduction`，`amount` 必須為正整數，`description` 必填且最多 255 字元。前端不得指定 settlement、vehicle、snapshot、totals 或狀態欄位。回應與月份詳情使用相同 item 欄位集合；手動項目固定包含 `vehicle_id: null` 與 `vehicle: null`，不會因 relation 未預載而省略 key。
 
 ### DELETE /api/salary-periods/{salaryPeriod}/adjustments/{item}
 
@@ -1073,7 +1073,8 @@ Request body：
 - 確認時在同一 transaction 先鎖定整月候選車，再讀 MoneyEntry、草稿 snapshot 與方案；接著重跑資格與公式，並將重算結果和草稿 snapshot 比對。若資料已變動則回 `422` 要求先重算；若仍有負薪，`net_pay` 錯誤會列出員工姓名與金額。
 - confirmed／paid 後拒絕重算及手動加扣；已確認月份的成交回填與車輛獎金歸屬修改也會依台北月份阻擋，即使歷史資料沒有 settlement item reference 亦同。
 - 跨模組月份鎖使用 `period_month = YYYY-MM-01` 等值條件，命中 MySQL unique index；`SalaryPeriod` 亦強制以 `Y-m-d` 持久化，避免 SQLite 保存時間部分而破壞同一契約。
-- `SalaryPeriodResource` 的 draft 回應會即時呼叫 `SalaryEligibilityService::inspectPeriod()`，附上 `anomalies`、`vehicle_results`、`has_blocking_issues` 與既有 correction action。異常是衍生資料、不寫入 salary_periods；confirmed／paid 回應不重算目前資格，僅回傳鎖定的 settlement／item snapshot。
+- `SalaryPeriodResource` 的獨立 GET draft 回應會即時呼叫 `SalaryEligibilityService::inspectPeriod()`，附上 `anomalies`、`vehicle_results`、`has_blocking_issues` 與既有 correction action。異常是衍生資料、不寫入 salary_periods；confirmed／paid 回應不重算目前資格，僅回傳鎖定的 settlement／item snapshot。
+- 建立與重算的寫入回應會沿用同一 transaction 內 `inspectPeriodForUpdate()` 的 eligibility 結果，不在 commit 後重複掃描；獨立 `GET` 詳情仍即時呼叫 `inspectPeriod()`，反映目前資料。
 - 薪資 Resource 全部採白名單；不回傳 `idempotency_key`、`money_entry_id`、原始 `calculation_snapshot` 額外欄位或 audit metadata。SalaryPeriod／SalarySettlement Policy 僅允許 admin，未知角色 fail-closed。
 - Service 回傳月份時會預載 Resource 所需的方案建立人、月份建立／確認／發薪人、資金帳戶、item 車輛摘要與手動項目建立人；手動加扣 Request 會將 canonical 整數字串金額正規化為 int。SalarySettlementPolicy 提供 `adjust` 與 `deleteAdjustment` 兩個 admin-only ability。
 - 薪資月份與手動加扣會寫 Audit Log，但不複製薪資金額、加扣金額或說明內容到 audit metadata。

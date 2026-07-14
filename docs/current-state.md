@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 10 部分完成後最新完整回歸為 478 tests、466 passed、12 environment-gated skipped、2177 assertions。薪資確認／收支核准跨連線鎖測試已在真實 MariaDB 通過 13 assertions，薪資資格 TIMESTAMP 月界整合測試通過 11 assertions，薪資月份／成交結案鎖序測試通過 14 assertions；Claude review 另在可拋棄 MariaDB 10.11 schema 驗證原始發薪並發案例 5 tests／71 assertions 通過。review 修正後新增的 re-parent 與 migration retry MariaDB 案例已實作，待專用 allowlist 環境重跑。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 沿用第 7 部分已通過結果，本次未修改前端。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 10 部分 review 修正後最新完整回歸為 479 tests、467 passed、12 environment-gated skipped、2188 assertions。薪資確認／收支核准跨連線鎖測試已在真實 MariaDB 通過 13 assertions，薪資資格 TIMESTAMP 月界整合測試通過 11 assertions，薪資月份／成交結案鎖序測試通過 14 assertions；Claude review 另在可拋棄 MariaDB 10.11 schema 驗證原始發薪並發案例 5 tests／71 assertions 通過。review 修正後新增的 re-parent 與 migration retry MariaDB 案例已實作，待專用 allowlist 環境重跑。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 沿用第 7 部分已通過結果，本次未修改前端。
 
 ---
 
@@ -395,6 +395,7 @@ v1.3 第 1～10 部分已補齊：
 - `SalaryPeriodService::loadPeriod()` 與薪資 Resource 的 `whenLoaded()` 契約已對齊：方案建立人、月份建立／確認／發薪人、發薪帳戶，以及 item 的車輛摘要／手動項目建立人都由真實 Service 回傳預載，不依賴 Controller 額外補載。
 - 手動加扣 Request 會把 canonical 整數字串金額正規化為 int，再交給 Service 的嚴格整數契約；SalarySettlementPolicy 同時提供新增與刪除手動加扣的 admin-only ability，已由第 10 部分 routes 掛載。
 - `SalaryPeriodController` 已開放月份列表、建立、詳情、重算、手動加扣、確認與發薪端點；列表只使用 `SalaryPeriodListResource` 與 DB aggregate，不會逐月份掃描車輛資格，詳情才使用完整 `SalaryPeriodResource`。
+- 建立／重算會把 transaction 內既有 eligibility 結果帶給 `SalaryPeriodResource`，避免 commit 後再掃描一次造成成本與短暫顯示不一致；獨立 GET 詳情仍保留即時掃描。手動加扣 POST 同步預載 nullable vehicle relation，確保 item 回應固定包含 `vehicle: null`。
 - 手動加扣項刪除會先驗證 item 所屬 settlement 的 `salary_period_id` 與 URL 月份一致，再以該 settlement 執行 Policy 授權；跨月份 ID 組合固定 `404`，不會把 item 錯傳給 `SalarySettlementPolicy`。
 - `role` middleware 已排在 route model binding 前執行，薪資月份與 admin-only 車輛歸屬端點對 manager／sales 不論資源 ID 是否存在皆固定 `403`，避免用 `403`／`404` 差異枚舉敏感資源。
 - `SalarySettingsMysqlConcurrencyTest` 已新增並在可拋棄 MariaDB schema 實跑 salary period／closeSale fork/socket 鎖序案例：parent 持有 period 鎖時 child 必須等待，parent 仍可取得 vehicle 鎖；提交 confirmed 後 child 醒來回 `sold_at` 422，避免未來重構恢復 vehicle → period 反向鎖。

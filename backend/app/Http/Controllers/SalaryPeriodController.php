@@ -64,7 +64,10 @@ class SalaryPeriodController extends Controller
             $request->safe()->except('user_id'),
         );
 
-        return new SalarySettlementItemResource($item->load('createdBy:id,name'));
+        return new SalarySettlementItemResource($item->load([
+            'createdBy:id,name',
+            'vehicle:id,stock_no,brand,model',
+        ]));
     }
 
     public function destroyAdjustment(
