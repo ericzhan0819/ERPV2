@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AuditLog;
+use App\Models\CashAccount;
 use App\Models\CommissionPlan;
 use App\Models\MoneyEntry;
 use App\Models\SalaryPeriod;
@@ -12,6 +13,7 @@ use App\Models\Vehicle;
 use App\Services\CommissionPlanService;
 use App\Services\MoneyEntryService;
 use App\Services\SalaryEligibilityService;
+use App\Services\SalaryPeriodService;
 use App\Services\SalaryProfileService;
 use App\Services\VehicleService;
 use Illuminate\Database\Events\QueryExecuted;
@@ -332,6 +334,95 @@ class SalarySettingsMysqlConcurrencyTest extends TestCase
         }
     }
 
+    public function test_salary_payment_duplicate_key_loser_rolls_back_batch_and_reads_committed_winner(): void
+    {
+        $this->prepareDisposableMysqlDatabase();
+
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $employee = User::factory()->sales()->create(['is_active' => true]);
+        SalaryProfile::query()->create([
+            'user_id' => $employee->id,
+            'base_salary' => 30000,
+            'fixed_allowance' => 0,
+            'labor_insurance_deduction' => 0,
+            'health_insurance_deduction' => 0,
+            'commission_enabled' => true,
+            'is_active' => true,
+        ]);
+        $plan = CommissionPlan::query()->create([
+            'name' => '發薪並發測試方案',
+            'effective_from' => '2026-01-01',
+            'company_reserve_bps' => 4000,
+            'purchase_bonus_bps' => 2000,
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+        $plan->tiers()->create(['min_sales_count' => 1, 'sales_bonus_bps' => 2000, 'sort_order' => 1]);
+        $service = app(SalaryPeriodService::class);
+        $winnerPeriod = $service->confirm($admin, $service->createDraft($admin, '2026-06'));
+        $loserPeriod = $service->confirm($admin, $service->createDraft($admin, '2026-07'));
+        $winnerAccount = CashAccount::factory()->create(['is_active' => true]);
+        $loserAccount = CashAccount::factory()->create(['is_active' => true]);
+        $idempotencyKey = 'mysql-salary-payment-race';
+        [$parentSocket, $childSocket] = $this->createSocketPair();
+        $resultPath = $this->createResultPath('erpv2-salary-payment-race-');
+        $pid = pcntl_fork();
+
+        if ($pid === -1) {
+            @unlink($resultPath);
+            $this->fail('pcntl_fork 失敗，無法建立真正的第二個發薪請求。');
+        }
+
+        if ($pid === 0) {
+            fclose($parentSocket);
+            $this->runSalaryPaymentLoserInChild(
+                $childSocket,
+                $resultPath,
+                $admin->id,
+                $loserPeriod->id,
+                $loserAccount->id,
+                $idempotencyKey,
+            );
+        }
+
+        fclose($childSocket);
+        stream_set_timeout($parentSocket, self::CHILD_HANDSHAKE_TIMEOUT_SECONDS);
+
+        try {
+            $this->assertChildSignal($parentSocket, 'M', '輸家發薪未在 salary period update 前到達同步屏障。');
+            DB::purge();
+            $paid = app(SalaryPeriodService::class)->pay(
+                User::query()->findOrFail($admin->id),
+                SalaryPeriod::query()->findOrFail($winnerPeriod->id),
+                [
+                    'cash_account_id' => $winnerAccount->id,
+                    'payment_date' => '2026-06-30',
+                    'idempotency_key' => $idempotencyKey,
+                ],
+            );
+            $this->assertSame(SalaryPeriod::STATUS_PAID, $paid->status);
+
+            fwrite($parentSocket, 'C');
+            fclose($parentSocket);
+            $status = $this->waitForChildOrStop($pid);
+            $pid = 0;
+            $childResult = $this->readChildResult($resultPath);
+
+            $this->assertTrue(
+                pcntl_wifexited($status) && pcntl_wexitstatus($status) === 0,
+                '輸家應完整 rollback 後以新交易讀到另一月份的 winner。Child result: '.json_encode($childResult, JSON_UNESCAPED_UNICODE),
+            );
+            $this->assertSame(true, $childResult['ok'] ?? false);
+            $this->assertSame('validation', $childResult['result'] ?? null);
+            $this->assertSame(['idempotency_key'], $childResult['error_fields'] ?? null);
+            $this->assertSame(SalaryPeriod::STATUS_CONFIRMED, SalaryPeriod::query()->findOrFail($loserPeriod->id)->status);
+            $this->assertSame(1, MoneyEntry::query()->where('source_type', MoneyEntry::SOURCE_SALARY_SETTLEMENT)->count());
+            $this->assertSame(0, SalaryPeriod::query()->findOrFail($loserPeriod->id)->settlements()->whereNotNull('money_entry_id')->count());
+        } finally {
+            $this->cleanupParentResources($parentSocket, $pid, $resultPath);
+        }
+    }
+
     /**
      * @param  resource  $socket
      * @param  array<string, mixed>  $payload
@@ -507,6 +598,60 @@ class SalarySettingsMysqlConcurrencyTest extends TestCase
         } catch (Throwable $exception) {
             $this->writeChildException($resultPath, $exception);
             fwrite($socket, 'D');
+            fclose($socket);
+            exit(1);
+        }
+    }
+
+    /** @param resource $socket */
+    private function runSalaryPaymentLoserInChild(
+        $socket,
+        string $resultPath,
+        int $adminId,
+        int $periodId,
+        int $accountId,
+        string $idempotencyKey,
+    ): never {
+        DB::disconnect();
+        DB::purge();
+        $barrierReached = false;
+        SalaryPeriod::saving(function (SalaryPeriod $period) use (&$barrierReached, $idempotencyKey, $socket): void {
+            if ($barrierReached
+                || $period->status !== SalaryPeriod::STATUS_PAID
+                || $period->idempotency_key !== $idempotencyKey) {
+                return;
+            }
+
+            $barrierReached = true;
+            fwrite($socket, 'M');
+            if (fread($socket, 1) !== 'C') {
+                throw new RuntimeException('父行程未確認發薪 winner 已提交。');
+            }
+        });
+
+        try {
+            app(SalaryPeriodService::class)->pay(
+                User::query()->findOrFail($adminId),
+                SalaryPeriod::query()->findOrFail($periodId),
+                [
+                    'cash_account_id' => $accountId,
+                    'payment_date' => '2026-07-31',
+                    'idempotency_key' => $idempotencyKey,
+                ],
+            );
+            $this->writeChildResult($resultPath, ['ok' => false, 'result' => 'unexpected_success']);
+            fclose($socket);
+            exit(1);
+        } catch (ValidationException $exception) {
+            $this->writeChildResult($resultPath, [
+                'ok' => true,
+                'result' => 'validation',
+                'error_fields' => array_keys($exception->errors()),
+            ]);
+            fclose($socket);
+            exit(0);
+        } catch (Throwable $exception) {
+            $this->writeChildException($resultPath, $exception);
             fclose($socket);
             exit(1);
         }

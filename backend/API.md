@@ -1,4 +1,4 @@
-# API 文件 — 中古車行內部營運系統（1.0 + v1.1 + v1.2 + v1.3 第 6 部分）
+# API 文件 — 中古車行內部營運系統（1.0 + v1.1 + v1.2 + v1.3 第 8 部分）
 
 Base URL：`http://localhost:8000`（依 `.env` `APP_URL` 而定）
 
@@ -1001,3 +1001,11 @@ v1.3 第 7 部分已完成 `SalaryPeriodService` 的服務層契約，但對外 
 - 跨模組月份鎖使用 `period_month = YYYY-MM-01` 等值條件，命中 MySQL unique index；`SalaryPeriod` 亦強制以 `Y-m-d` 持久化，避免 SQLite 保存時間部分而破壞同一契約。
 - 第 9 部分實作 `SalaryPeriodResource` 時，draft 回應必須即時呼叫 `SalaryEligibilityService::inspectPeriod()`，附上 `anomalies`、`vehicle_results`、`has_blocking_issues` 與既有 correction action。異常是衍生資料、不寫入 salary_periods，但不得只回 settlements／totals 而讓被排除的車輛靜默消失。
 - 薪資月份與手動加扣會寫 Audit Log，但不複製薪資金額、加扣金額或說明內容到 audit metadata。
+
+v1.3 第 8 部分已完成同一 Service 的發薪契約；`POST /api/salary-periods/{salaryPeriod}/pay` 仍待 PLAN 第 9、10 部分補上 Request、Policy、Resource 與 route，因此目前不可由外部呼叫。服務層行為如下：
+
+- 只允許啟用中的 admin 對 confirmed 月份操作，輸入啟用中的 `cash_account_id`、`payment_date` 與最長 100 字元的 `idempotency_key`。
+- 同一 transaction 依序鎖定 period、資金帳戶及全部 settlement；每位 `net_pay > 0` 員工建立一筆 `expense`、`薪資 / 佣金`、`vehicle_id=null`、`source_type=salary_settlement`、直接 approved 的 MoneyEntry，並回填 `money_entry_id`。零元員工不建立空支出。
+- 全部支出成功後才把 period 切為 paid 並寫入帳戶、日期、操作者與時間；任何一筆失敗都會完整 rollback，不留下半套 MoneyEntry 或 settlement linkage。
+- 相同 key 與相同帳戶／日期 replay 已完成月份；相同 key 不同 payload、同月份不同 key、或 key 已被其他月份使用皆回 `422`。duplicate-key race 先完整 rollback，再以新 transaction 鎖定讀取已提交 winner，避免 MySQL REPEATABLE READ 舊快照誤判。
+- paid period、settlement 與 item 由資料庫 trigger 阻擋後續新增／更新／刪除；薪資 MoneyEntry 亦沿用既有不可一般 CRUD／approval 異動的資料庫與服務層保護。

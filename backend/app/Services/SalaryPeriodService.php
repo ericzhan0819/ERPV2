@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Models\AuditLog;
+use App\Models\CashAccount;
 use App\Models\CommissionPlan;
+use App\Models\MoneyEntry;
 use App\Models\SalaryPeriod;
 use App\Models\SalaryProfile;
 use App\Models\SalarySettlement;
@@ -12,6 +14,7 @@ use App\Models\User;
 use App\Support\SalaryPeriodMonth;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use OverflowException;
@@ -194,6 +197,113 @@ final class SalaryPeriodService
 
             return $this->loadPeriod($lockedPeriod);
         }, self::TRANSACTION_ATTEMPTS);
+    }
+
+    /**
+     * @param  array{cash_account_id: int, payment_date: string, idempotency_key: string}  $data
+     */
+    public function pay(User $actor, SalaryPeriod $period, array $data): SalaryPeriod
+    {
+        $this->assertAdmin($actor);
+        $payload = $this->normalizePaymentData($data);
+
+        try {
+            return DB::transaction(function () use ($actor, $period, $payload) {
+                $lockedPeriod = SalaryPeriod::query()->whereKey($period->id)->lockForUpdate()->firstOrFail();
+
+                if ($lockedPeriod->status === SalaryPeriod::STATUS_PAID) {
+                    return $this->replayOrRejectPayment($lockedPeriod, $payload);
+                }
+                if ($lockedPeriod->status !== SalaryPeriod::STATUS_CONFIRMED) {
+                    throw ValidationException::withMessages([
+                        'status' => ['只有已確認的薪資月份可以發薪'],
+                    ]);
+                }
+
+                $keyOwner = SalaryPeriod::query()
+                    ->where('idempotency_key', $payload['idempotency_key'])
+                    ->whereKeyNot($lockedPeriod->id)
+                    ->first();
+                if ($keyOwner) {
+                    throw ValidationException::withMessages([
+                        'idempotency_key' => ['此冪等鍵已被其他薪資月份使用，請重新產生後再試'],
+                    ]);
+                }
+
+                $account = CashAccount::query()->whereKey($payload['cash_account_id'])->lockForUpdate()->first();
+                if (! $account || ! $account->is_active) {
+                    throw ValidationException::withMessages([
+                        'cash_account_id' => ['找不到指定的啟用中資金帳戶'],
+                    ]);
+                }
+
+                $settlements = SalarySettlement::query()
+                    ->with('user:id,name')
+                    ->where('salary_period_id', $lockedPeriod->id)
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($settlements as $settlement) {
+                    if ($settlement->net_pay < 0) {
+                        throw ValidationException::withMessages([
+                            'net_pay' => ["{$settlement->user->name} 的實發薪資不得小於 0"],
+                        ]);
+                    }
+                    if ($settlement->money_entry_id !== null) {
+                        throw ValidationException::withMessages([
+                            'salary_period' => ['此薪資月份已有員工薪資支出，請勿重複發薪'],
+                        ]);
+                    }
+                    if ($settlement->net_pay === 0) {
+                        continue;
+                    }
+
+                    $entry = new MoneyEntry([
+                        'vehicle_id' => null,
+                        'cash_account_id' => $account->id,
+                        'entry_date' => $payload['payment_date'],
+                        'direction' => 'expense',
+                        'category' => '薪資 / 佣金',
+                        'amount' => $settlement->net_pay,
+                        'counterparty_name' => $settlement->user->name,
+                        'description' => $lockedPeriod->period_month->format('Y-m').' 薪資 / 佣金',
+                        'idempotency_key' => $this->salaryMoneyEntryKey(
+                            $payload['idempotency_key'],
+                            $settlement->id,
+                        ),
+                        'source_type' => MoneyEntry::SOURCE_SALARY_SETTLEMENT,
+                    ]);
+                    $entry->created_by = $actor->id;
+                    $entry->updated_by = $actor->id;
+                    $entry->approval_status = MoneyEntry::APPROVAL_APPROVED;
+                    $entry->approved_by = $actor->id;
+                    $entry->approved_at = now();
+                    $entry->save();
+
+                    $settlement->money_entry_id = $entry->id;
+                    $settlement->save();
+                }
+
+                $lockedPeriod->forceFill([
+                    'status' => SalaryPeriod::STATUS_PAID,
+                    'cash_account_id' => $account->id,
+                    'payment_date' => $payload['payment_date'],
+                    'idempotency_key' => $payload['idempotency_key'],
+                    'paid_by' => $actor->id,
+                    'paid_at' => now(),
+                ])->save();
+                $this->auditLogService->recordSalaryPeriodAction($lockedPeriod, AuditLog::ACTION_UPDATED, 'pay', $actor);
+
+                return $this->loadPeriod($lockedPeriod);
+            }, self::TRANSACTION_ATTEMPTS);
+        } catch (QueryException $exception) {
+            if (! $this->isSalaryPaymentKeyUniqueViolation($exception)) {
+                throw $exception;
+            }
+
+            return $this->replayRacedPaymentAfterRollback($exception, $period->id, $payload);
+        }
     }
 
     /** @param array<string, mixed> $eligibility */
@@ -388,7 +498,98 @@ final class SalaryPeriodService
             'settlements' => fn ($query) => $query->orderBy('user_id'),
             'settlements.user:id,name,email,role',
             'settlements.items' => fn ($query) => $query->orderBy('type')->orderBy('vehicle_id')->orderBy('id'),
+            'settlements.moneyEntry',
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{cash_account_id: int, payment_date: string, idempotency_key: string}
+     */
+    private function normalizePaymentData(array $data): array
+    {
+        if (! isset($data['cash_account_id']) || ! is_int($data['cash_account_id']) || $data['cash_account_id'] <= 0) {
+            throw ValidationException::withMessages(['cash_account_id' => ['資金帳戶為必填']]);
+        }
+
+        $paymentDate = $data['payment_date'] ?? null;
+        try {
+            $parsedDate = is_string($paymentDate) ? Carbon::createFromFormat('!Y-m-d', $paymentDate) : false;
+        } catch (\Throwable) {
+            $parsedDate = false;
+        }
+        if (! $parsedDate || $parsedDate->format('Y-m-d') !== $paymentDate) {
+            throw ValidationException::withMessages(['payment_date' => ['發薪日期必須是有效的 YYYY-MM-DD 日期']]);
+        }
+
+        $key = $data['idempotency_key'] ?? null;
+        if (! is_string($key) || trim($key) === '' || strlen($key) > 100) {
+            throw ValidationException::withMessages(['idempotency_key' => ['冪等鍵為必填，且長度不可超過 100 字元']]);
+        }
+
+        return [
+            'cash_account_id' => $data['cash_account_id'],
+            'payment_date' => $paymentDate,
+            'idempotency_key' => trim($key),
+        ];
+    }
+
+    /** @param array{cash_account_id: int, payment_date: string, idempotency_key: string} $payload */
+    private function replayOrRejectPayment(SalaryPeriod $period, array $payload): SalaryPeriod
+    {
+        if ($period->idempotency_key !== $payload['idempotency_key']
+            || (int) $period->cash_account_id !== $payload['cash_account_id']
+            || $period->payment_date?->toDateString() !== $payload['payment_date']) {
+            $field = $period->idempotency_key === $payload['idempotency_key'] ? 'idempotency_key' : 'status';
+            $message = $field === 'idempotency_key'
+                ? '此冪等鍵已用於不同的發薪內容'
+                : '此薪資月份已使用其他冪等鍵完成發薪';
+            throw ValidationException::withMessages([$field => [$message]]);
+        }
+
+        return $this->loadPeriod($period);
+    }
+
+    /**
+     * @param  array{cash_account_id: int, payment_date: string, idempotency_key: string}  $payload
+     */
+    private function replayRacedPaymentAfterRollback(
+        QueryException $original,
+        int $periodId,
+        array $payload,
+    ): SalaryPeriod {
+        return DB::transaction(function () use ($original, $periodId, $payload) {
+            // duplicate-key 發生時原交易已完整回滾；必須以新交易讀取已提交 winner，
+            // 不可在 MySQL REPEATABLE READ 的舊快照內假裝 replay。
+            $winner = SalaryPeriod::query()
+                ->where('idempotency_key', $payload['idempotency_key'])
+                ->lockForUpdate()
+                ->first();
+
+            if (! $winner) {
+                throw $original;
+            }
+            if ((int) $winner->id !== $periodId) {
+                throw ValidationException::withMessages([
+                    'idempotency_key' => ['此冪等鍵已被其他薪資月份使用，請重新產生後再試'],
+                ]);
+            }
+
+            return $this->replayOrRejectPayment($winner, $payload);
+        });
+    }
+
+    private function isSalaryPaymentKeyUniqueViolation(QueryException $exception): bool
+    {
+        return ($exception->errorInfo[0] ?? null) === '23000'
+            && str_contains($exception->getMessage(), 'salary_periods')
+            && str_contains($exception->getMessage(), 'idempotency_key');
+    }
+
+    private function salaryMoneyEntryKey(string $batchKey, int $settlementId): string
+    {
+        // 不直接使用可預測的 settlement id，避免一般收支先占用固定 key 而阻斷發薪。
+        return 'salary-payment:'.hash('sha256', $batchKey.':'.$settlementId);
     }
 
     private function lockDraft(SalaryPeriod $period): SalaryPeriod

@@ -138,11 +138,12 @@ class SalaryEligibilityTest extends TestCase
         $paidVehicle = $this->validVehicle();
         $currentVehicle = $this->validVehicle();
         $confirmedPeriod = $this->period('2026-05-01', SalaryPeriod::STATUS_CONFIRMED);
-        $paidPeriod = $this->period('2026-04-01', SalaryPeriod::STATUS_PAID);
+        $paidPeriod = $this->period('2026-04-01', SalaryPeriod::STATUS_CONFIRMED);
         $currentPeriod = $this->period('2026-06-01', SalaryPeriod::STATUS_CONFIRMED);
         $this->referenceVehicle($confirmedPeriod, $vehicle);
         $this->referenceVehicle($paidPeriod, $paidVehicle);
         $this->referenceVehicle($currentPeriod, $currentVehicle);
+        $paidPeriod->update(['status' => SalaryPeriod::STATUS_PAID]);
 
         $result = $this->service->inspectPeriod('2026-06', $currentPeriod->id);
 

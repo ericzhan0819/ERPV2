@@ -1,10 +1,10 @@
-# ERPV2 current-state — v1.2 已封版，v1.3 第 6 部分完成
+# ERPV2 current-state — v1.2 已封版，v1.3 第 8 部分完成
 
 日期：2026-07-14
 專案：ERPV2 / 中古車行內部營運系統
 目前穩定點：`b1edffa docs: 完成 v1.2 smoke 封版與交接文件`
 目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`
-狀態：v1.2 已完成並封版。v1.3「薪資結算」已完成 `PLAN_v1.3.md` 第 0～6 部分：前置盤點、薪資 schema、完整 Model、初始與版本化獎金方案、admin-only 薪資設定／獎金方案 API、車輛收／賣車人正式歸屬流程、salary MoneyEntry 保護、approved-only 整月跨級獎金計算器，以及薪資資格與異常集中檢查；第 7 部分之後的月份結算、發薪、薪資管理前端與 Smoke 尚未開始。
+狀態：v1.2 已完成並封版。v1.3「薪資結算」已完成 `PLAN_v1.3.md` 第 0～8 部分：前置盤點、薪資 schema、完整 Model、初始與版本化獎金方案、admin-only 薪資設定／獎金方案 API、車輛收／賣車人正式歸屬流程、salary MoneyEntry 保護、approved-only 整月跨級獎金計算器、薪資資格與異常集中檢查、月份草稿／重算／確認，以及整批發薪與薪資支出整合；第 9 部分之後的薪資 HTTP API 邊界、管理前端與 Smoke 尚未開始。
 
 ---
 
@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 7 部分 review 修正後最新完整回歸為 456 tests、1887 assertions、10 skipped，其中 skipped 項目需要專用環境或安全旗標。薪資確認／收支核准跨連線鎖測試已在真實 MariaDB 通過 13 assertions，薪資資格 TIMESTAMP 月界整合測試通過 11 assertions，本次新增的薪資月份／成交結案鎖序測試通過 14 assertions；可拋棄 schema 均已於驗證後刪除。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 8 部分完成後最新完整回歸為 462 tests、1930 assertions、11 skipped，其中 skipped 項目需要專用環境或安全旗標。薪資確認／收支核准跨連線鎖測試已在真實 MariaDB 通過 13 assertions，薪資資格 TIMESTAMP 月界整合測試通過 11 assertions，薪資月份／成交結案鎖序測試通過 14 assertions；本次新增的發薪 duplicate-key 真並發測試已實作，待於同一專用可拋棄 MariaDB allowlist 環境執行。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 沿用第 7 部分已通過結果，本次未修改前端。
 
 ---
 
@@ -348,7 +348,7 @@ v1.3 已鎖定為「薪資結算」，不是完整 HR。核心規則：
 
 v1.3 另包含底薪、固定津貼、勞保扣款、健保扣款、手動加扣項、每月草稿／確認／發薪，以及發薪後自動建立 `薪資 / 佣金` Money Entry。
 
-v1.3 第 1～7 部分已補齊：
+v1.3 第 1～8 部分已補齊：
 
 - `salary_profiles`、`commission_plans`／`commission_plan_tiers`、`salary_periods`、`salary_settlements`、`salary_settlement_items`。
 - Vehicle 正式 `purchase_agent_id`／`sales_agent_id`，歷史資料保持空值，不做 heuristic backfill。
@@ -394,10 +394,15 @@ v1.3 第 1～7 部分已補齊：
 - `SalarySettingsMysqlConcurrencyTest` 已新增並在可拋棄 MariaDB schema 實跑 salary period／closeSale fork/socket 鎖序案例：parent 持有 period 鎖時 child 必須等待，parent 仍可取得 vehicle 鎖；提交 confirmed 後 child 醒來回 `sold_at` 422，避免未來重構恢復 vehicle → period 反向鎖。
 - confirmed／paid 月份拒絕重算與手動項目異動；`closeSale()` 回填至已鎖月份會回 422 並要求聯絡管理員，已售車歸屬也會依 `sold_at` 月份防禦沒有 settlement item reference 的歷史缺口。draft 月份仍可成交或修正歸屬，之後重算納入。
 - 薪資月份建立、重算、確認與手動加扣新增／刪除皆有 Audit Log；metadata 不保存薪資金額、加扣金額或說明內容。
+- `SalaryPeriodService::pay()` 只允許啟用中的 admin 對 confirmed 月份發薪，會鎖定 period、啟用中的資金帳戶及所有 settlement；每位 `net_pay > 0` 員工各建立一筆直接 approved 的 `salary_settlement` MoneyEntry，零元員工不建立空支出。
+- 整批發薪與 period 切換 paid 使用同一 transaction；任何一筆 MoneyEntry 失敗會完整 rollback。批次 key 以 `salary_periods.idempotency_key` 保護，相同 key／payload 可 replay，相同 key／不同 payload與同月份不同 key皆拒絕。
+- duplicate-key race 會先離開並回滾原 transaction，再以新 transaction `lockForUpdate()` 讀取已提交 winner；真實 MariaDB 測試使用 fork/socket 讓兩個月份競爭同一 key，確認輸家不殘留 MoneyEntry 或 settlement linkage。
+- 發薪完成後回填 `cash_account_id`、`payment_date`、`paid_by`、`paid_at` 與 settlement 的 `money_entry_id`；正式帳戶餘額及 Dashboard monthly expense 會因 approved 薪資支出立即更新。
+- 資料庫 trigger 阻擋 paid period、settlement 與 settlement item 的後續新增／更新／刪除；既有 salary MoneyEntry 不可變規則持續保護正式薪資支出，歷史修正只能走後續月份手動調整或另建一般收支修正。
 
 後續仍待實作：
 
-- 薪資月份 Policy／Request／Resource／API routes（PLAN 第 9、10 部分）與發薪批次 idempotency（第 8 部分）。
+- 薪資月份 Policy／Request／Resource／API routes（PLAN 第 9、10 部分）；發薪 service 與批次 idempotency 已完成，但尚未暴露 HTTP endpoint。
 - 薪資管理前端與完整 manual smoke。
 
 Website MVP 延後到 v1.3 完成或進入正式部署準備時再獨立規劃，不得混入薪資結算。

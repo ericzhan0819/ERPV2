@@ -105,18 +105,23 @@ class SalaryProfileTest extends TestCase
         $period = SalaryPeriod::query()->create([
             'period_month' => '2026-07-01',
             'commission_plan_id' => $planId,
-            'status' => $status,
+            'status' => SalaryPeriod::STATUS_CONFIRMED,
             'created_by' => $admin->id,
             'confirmed_by' => $admin->id,
             'confirmed_at' => now(),
-            'paid_by' => $status === SalaryPeriod::STATUS_PAID ? $admin->id : null,
-            'paid_at' => $status === SalaryPeriod::STATUS_PAID ? now() : null,
         ]);
         $settlement = SalarySettlement::query()->create([
             'salary_period_id' => $period->id,
             'user_id' => $employee->id,
             'base_salary_snapshot' => 35000,
         ]);
+        if ($status === SalaryPeriod::STATUS_PAID) {
+            $period->update([
+                'status' => SalaryPeriod::STATUS_PAID,
+                'paid_by' => $admin->id,
+                'paid_at' => now(),
+            ]);
+        }
 
         $this->actingAs($admin, 'web')->putJson("/api/salary-profiles/{$employee->id}", $this->payload([
             'base_salary' => 50000,

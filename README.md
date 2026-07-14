@@ -2,7 +2,7 @@
 
 小型中古車行內部使用的前後端分離營運管理系統。v1.1 新增角色（`admin`／`manager`／`sales`）、敏感金額遮蔽、一般收支審核、客戶模組與建車入庫欄位補強，並以 `v1.1-smoke-passed` 封版。v1.2 新增車輛照片管理與官網公開唯讀車輛 API，已完成自動測試、瀏覽器 manual smoke，並以 `v1.2-smoke-passed` 封版。完整穩定狀態見 `docs/current-state.md`、`docs/v1.2-smoke-report.md` 與 `docs/v1.2-handoff.md`。
 
-v1.3 已完成 `PLAN_v1.3.md` 第 0～6 部分：薪資資料模型、完整 Salary Models、admin-only 員工薪資設定／版本化獎金方案 API、車輛收／賣車人欄位與正式歸屬流程、月份與結算 snapshot schema、受保護的 `salary_settlement` MoneyEntry 來源、approved-only 整月跨級獎金純計算器，以及不會靜默略過異常車輛的集中資格檢查。月份草稿／確認、發薪與薪資管理前端仍待後續階段。完整規格見 `企劃書_v1.3.md`，進度見 `PLAN_v1.3.md`，本階段交接見 `docs/v1.3-phase6-handoff.md`。
+v1.3 已完成 `PLAN_v1.3.md` 第 0～8 部分：薪資資料模型、完整 Salary Models、admin-only 員工薪資設定／版本化獎金方案 API、車輛收／賣車人正式歸屬、受保護的 `salary_settlement` MoneyEntry、approved-only 整月跨級獎金、資格異常檢查、月份草稿／重算／確認，以及具備 transaction、idempotency 與 paid 歷史保護的整批發薪服務。薪資月份 Policy／Request／Resource／HTTP routes 與管理前端仍待後續階段。完整規格、進度與本階段交接見 `企劃書_v1.3.md`、`PLAN_v1.3.md`、`docs/current-state.md`、`docs/v1.3-phase8-handoff.md`。
 
 ### v1.3 預定公式
 
