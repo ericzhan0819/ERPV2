@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 6 部分 review 修正後最新完整回歸為 445 tests、1815 assertions、9 skipped，其中 9 個 skipped 是需專用環境或安全旗標的測試。新增的薪資確認／收支核准跨連線鎖測試已在真實 MariaDB 通過 13 assertions，薪資資格 TIMESTAMP 月界整合測試通過 11 assertions；可拋棄 schema 已於驗證後刪除。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped；v1.3 第 6 部分 review 修正後最新完整回歸為 444 tests、1814 assertions、9 skipped，其中 9 個 skipped 是需專用環境或安全旗標的測試。新增的薪資確認／收支核准跨連線鎖測試已在真實 MariaDB 通過 13 assertions，薪資資格 TIMESTAMP 月界整合測試通過 11 assertions；可拋棄 schema 已於驗證後刪除。frontend lint（保留 2 個既有 Fast Refresh warnings）／typecheck／production build 通過。
 
 ---
 
@@ -383,11 +383,13 @@ v1.3 第 1～6 部分已補齊：
 - 本月候選車不因異常被靜默丟棄；結果保留車號、問題碼、業務可讀訊息與前端可映射的修正動作代碼，不在後端 Service 硬寫 SPA 路徑。草稿可顯示異常，確認流程以 422 fail-closed。
 - `assertPeriodEligible()` 是月份確認唯一入口：只能在 transaction 內執行，會重新從資料庫選取完整月份並 `lockForUpdate()` 候選車，不接受舊草稿傳入的任意集合。
 - 所有綁車 MoneyEntry 核准都會鎖定同一車輛列，確保維修等非銷售類 pending 支出核准與薪資確認互斥；銷售收款分類統一由 `VehicleMoneyCategories` 提供，避免關帳、可見範圍與薪資資格規則漂移。
+- 薪資資格服務的任意集合檢查已改為 private；第 7 部分只能由 `inspectPeriod()` 建草稿、由 `assertPeriodEligible()` 確認完整月份。
 - 零毛利／虧損車只要其他資格完整仍列為 eligible，並回傳 approved-only 毛利；後續交給計算器保留明細與公司淨損益，但不推升賣車跨級台數。
 
 後續仍待實作：
 
 - 月份草稿／確認／發薪與批次 idempotency。
+- 第 7 部分需阻擋 `closeSale()` 以 backdated `sold_at` 補進 confirmed／paid 月份，並讓歸屬修改依成交月份防禦歷史漏項；draft 月份仍可正常成交後重算。
 - 薪資管理前端與完整 manual smoke。
 
 Website MVP 延後到 v1.3 完成或進入正式部署準備時再獨立規劃，不得混入薪資結算。

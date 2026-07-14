@@ -104,7 +104,7 @@ final class SalaryEligibilityService
      *     has_blocking_issues: bool
      * }
      */
-    public function inspectVehicles(
+    private function inspectVehicles(
         string $periodMonth,
         iterable $vehicles,
         ?int $currentSalaryPeriodId = null,

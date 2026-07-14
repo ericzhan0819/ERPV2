@@ -173,18 +173,6 @@ class SalaryEligibilityTest extends TestCase
         $this->assertFalse($result['has_blocking_issues']);
     }
 
-    public function test_explicit_candidate_check_reports_status_and_month_defects_defensively(): void
-    {
-        $vehicle = $this->validVehicle(['status' => 'reserved', 'sold_at' => '2026-07-01 00:00:00']);
-
-        $result = $this->service->inspectVehicles('2026-06', [$vehicle]);
-
-        $this->assertSame([
-            SalaryEligibilityService::ISSUE_STATUS_NOT_SOLD,
-            SalaryEligibilityService::ISSUE_SOLD_AT_OUTSIDE_PERIOD,
-        ], array_column($result['vehicle_results'][$vehicle->id]['issues'], 'code'));
-    }
-
     public function test_period_selection_uses_taipei_inclusive_start_and_exclusive_next_month_boundary(): void
     {
         $before = $this->validVehicle(['sold_at' => '2026-05-31 23:59:59']);
@@ -224,7 +212,7 @@ class SalaryEligibilityTest extends TestCase
         $vehicle = $this->validVehicle();
         $vehicle->forceFill(['sales_agent_id' => null])->save();
 
-        $draftInspection = $this->service->inspectVehicles('2026-06', [$vehicle->fresh()]);
+        $draftInspection = $this->service->inspectPeriod('2026-06');
         $this->assertTrue($draftInspection['has_blocking_issues']);
 
         try {
