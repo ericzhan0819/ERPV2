@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\CommissionPlan;
 use App\Models\User;
 use App\Support\CommissionPlanRules;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -39,12 +40,26 @@ class CommissionPlanService
      */
     public function findEffectiveForMonth(string $periodMonth): ?CommissionPlan
     {
+        return $this->effectiveForMonthQuery($periodMonth)
+            ->with('tiers')
+            ->first();
+    }
+
+    /**
+     * 草稿建立會在 transaction 內先以 locking read 固定方案，避免在候選車上鎖前
+     * 由一般 SELECT 提早建立 MySQL REPEATABLE READ 的 read view。tiers 待車輛鎖定後載入。
+     */
+    public function findEffectiveForMonthForUpdate(string $periodMonth): ?CommissionPlan
+    {
+        return $this->effectiveForMonthQuery($periodMonth)->lockForUpdate()->first();
+    }
+
+    private function effectiveForMonthQuery(string $periodMonth): Builder
+    {
         return CommissionPlan::query()
             ->activeForMonth($periodMonth)
-            ->with('tiers')
             ->orderByDesc('effective_from')
-            ->orderByDesc('id')
-            ->first();
+            ->orderByDesc('id');
     }
 
     /**

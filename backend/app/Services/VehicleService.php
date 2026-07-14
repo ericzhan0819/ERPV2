@@ -943,7 +943,7 @@ class VehicleService
             // 薪資確認先鎖 period 再鎖候選車；回填成交也採相同順序，避免一邊確認、
             // 一邊回填時形成 period / vehicle 反向鎖。draft 仍允許成交，之後重算納入。
             $salaryPeriodStatus = SalaryPeriod::query()
-                ->whereDate('period_month', $soldAt->format('Y-m-01'))
+                ->where('period_month', $soldAt->format('Y-m-01'))
                 ->lockForUpdate()
                 ->value('status');
 
@@ -1072,7 +1072,7 @@ class VehicleService
             // 此處已持有車輛列鎖；薪資確認也必須取得同一列，因此不會在檢查後才競態確認。
             if (! $isLockedBySalaryPeriod && $lockedVehicle->sold_at !== null) {
                 $isLockedBySalaryPeriod = SalaryPeriod::query()
-                    ->whereDate('period_month', $lockedVehicle->sold_at->format('Y-m-01'))
+                    ->where('period_month', $lockedVehicle->sold_at->format('Y-m-01'))
                     ->whereIn('status', [SalaryPeriod::STATUS_CONFIRMED, SalaryPeriod::STATUS_PAID])
                     ->exists();
             }

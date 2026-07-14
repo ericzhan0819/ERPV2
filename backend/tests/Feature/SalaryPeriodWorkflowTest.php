@@ -13,7 +13,9 @@ use App\Models\Vehicle;
 use App\Services\SalaryPeriodService;
 use App\Services\VehicleService;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -77,6 +79,62 @@ class SalaryPeriodWorkflowTest extends TestCase
         $this->expectValidation(fn () => $this->service->createDraft($this->admin, '2026-06'), 'period_month');
     }
 
+    public function test_zero_salary_with_insurance_deductions_creates_negative_draft_and_confirmation_names_employee(): void
+    {
+        $this->plan('六月方案', '2026-01-01', 2000);
+        SalaryProfile::query()->where('user_id', $this->agent->id)->update([
+            'base_salary' => 0,
+            'fixed_allowance' => 0,
+            'labor_insurance_deduction' => 900,
+            'health_insurance_deduction' => 600,
+        ]);
+
+        $period = $this->service->createDraft($this->admin, '2026-06');
+        $settlement = $period->settlements->firstWhere('user_id', $this->agent->id);
+
+        $this->assertSame(-1500, $settlement->net_pay);
+        try {
+            $this->service->confirm($this->admin, $period);
+            $this->fail('負數實發薪資不得確認');
+        } catch (ValidationException $exception) {
+            $this->assertStringContainsString($this->agent->name, $exception->errors()['net_pay'][0]);
+            $this->assertStringContainsString('-1500', $exception->errors()['net_pay'][0]);
+        }
+        $this->assertSame(SalaryPeriod::STATUS_DRAFT, $period->fresh()->status);
+
+        $this->service->addAdjustment($this->admin, $settlement, [
+            'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
+            'amount' => 1500,
+            'description' => '淡月扣款補平',
+        ]);
+        $this->assertSame(0, $settlement->fresh()->net_pay);
+        $this->assertSame(SalaryPeriod::STATUS_CONFIRMED, $this->service->confirm($this->admin, $period)->status);
+    }
+
+    public function test_recalculate_keeps_negative_manual_deduction_for_deactivated_profile_editable(): void
+    {
+        $this->plan('六月方案', '2026-01-01', 2000);
+        $period = $this->service->createDraft($this->admin, '2026-06');
+        $settlement = $period->settlements->firstWhere('user_id', $this->agent->id);
+        $deduction = $this->service->addAdjustment($this->admin, $settlement, [
+            'type' => SalarySettlementItem::TYPE_MANUAL_DEDUCTION,
+            'amount' => 5000,
+            'description' => '借支扣還',
+        ]);
+        SalaryProfile::query()->where('user_id', $this->agent->id)->update(['is_active' => false]);
+
+        $recalculated = $this->service->recalculateDraft($this->admin, $period);
+        $updated = $recalculated->settlements->firstWhere('user_id', $this->agent->id);
+
+        $this->assertSame(0, $updated->gross_pay);
+        $this->assertSame(5000, $updated->deduction_total);
+        $this->assertSame(-5000, $updated->net_pay);
+        $this->assertDatabaseHas('salary_settlement_items', ['id' => $deduction->id, 'description' => '借支扣還']);
+
+        $this->service->deleteAdjustment($this->admin, $deduction);
+        $this->assertSame(0, $updated->fresh()->net_pay);
+    }
+
     public function test_recalculate_keeps_bound_plan_preserves_manual_adjustments_and_reapplies_monthwide_tier(): void
     {
         $boundPlan = $this->plan('原方案', '2026-01-01', 2000, [1 => 2000, 3 => 3000]);
@@ -130,6 +188,10 @@ class SalaryPeriodWorkflowTest extends TestCase
         $this->expectValidation(fn () => $this->service->addAdjustment($this->admin, $settlement, [
             'type' => SalarySettlementItem::TYPE_BASE_SALARY, 'amount' => 1, 'description' => 'x',
         ]), 'type');
+        $this->expectValidation(fn () => $this->service->addAdjustment($this->admin, $settlement, [
+            'type' => SalarySettlementItem::TYPE_MANUAL_DEDUCTION, 'amount' => 50000, 'description' => '過額扣款',
+        ]), 'amount');
+        $this->assertDatabaseMissing('salary_settlement_items', ['description' => '過額扣款']);
         $this->expectValidation(fn () => $this->service->deleteAdjustment($this->admin, $settlement->items->first()), 'item');
 
         $item = $this->service->addAdjustment($this->admin, $settlement, [
@@ -179,6 +241,33 @@ class SalaryPeriodWorkflowTest extends TestCase
         $this->assertNotNull($confirmed->confirmed_at);
         $this->assertDatabaseHas('salary_settlement_items', ['vehicle_id' => $lateVehicle->id]);
         $this->expectValidation(fn () => $this->service->recalculateDraft($this->admin, $confirmed), 'status');
+    }
+
+    public function test_recalculate_and_confirm_lock_candidate_vehicles_before_consistent_reads(): void
+    {
+        $this->plan('六月方案', '2026-01-01', 2000);
+        $this->validVehicle();
+        $period = $this->service->createDraft($this->admin, '2026-06');
+        $phase = 'recalculate';
+        $queries = ['recalculate' => [], 'confirm' => []];
+        DB::listen(function (QueryExecuted $query) use (&$phase, &$queries): void {
+            $queries[$phase][] = strtolower($query->sql);
+        });
+
+        $period = $this->service->recalculateDraft($this->admin, $period);
+        $phase = 'confirm';
+        $this->service->confirm($this->admin, $period);
+
+        foreach ($queries as $operation => $sql) {
+            $vehicleLock = $this->firstQueryIndexContaining($sql, 'from vehicles');
+            $moneyRead = $this->firstQueryIndexContaining($sql, 'from money_entries');
+            $settlementRead = $this->firstQueryIndexContaining($sql, 'from salary_settlements');
+            $planRead = $this->firstQueryIndexContaining($sql, 'from commission_plans');
+
+            $this->assertLessThan($moneyRead, $vehicleLock, "{$operation} 必須先鎖候選車再讀收支");
+            $this->assertLessThan($settlementRead, $vehicleLock, "{$operation} 必須先鎖候選車再讀 settlement snapshot");
+            $this->assertLessThan($planRead, $vehicleLock, "{$operation} 必須先鎖候選車再讀方案");
+        }
     }
 
     public function test_confirm_blocks_current_anomalies_without_mutating_draft(): void
@@ -319,5 +408,17 @@ class SalaryPeriodWorkflowTest extends TestCase
         } catch (ValidationException $exception) {
             $this->assertArrayHasKey($field, $exception->errors());
         }
+    }
+
+    /** @param string[] $queries */
+    private function firstQueryIndexContaining(array $queries, string $needle): int
+    {
+        foreach ($queries as $index => $query) {
+            if (str_contains(str_replace(['`', '"'], '', $query), $needle)) {
+                return $index;
+            }
+        }
+
+        $this->fail("找不到預期 SQL：{$needle}");
     }
 }

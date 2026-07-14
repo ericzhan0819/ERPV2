@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
 #[Fillable([
     'period_month',
@@ -33,11 +35,22 @@ class SalaryPeriod extends Model
     protected function casts(): array
     {
         return [
-            'period_month' => 'date',
             'confirmed_at' => 'datetime',
             'paid_at' => 'datetime',
             'payment_date' => 'date',
         ];
+    }
+
+    /**
+     * SQLite 不會像 MySQL DATE 自動截掉時間；明確以 Y-m-d 持久化，讓跨 driver 的
+     * 月首等值查詢都能命中 salary_periods.period_month unique index。
+     */
+    protected function periodMonth(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value): ?Carbon => $value === null ? null : Carbon::parse($value)->startOfDay(),
+            set: fn (mixed $value): string => Carbon::parse($value)->format('Y-m-d'),
+        );
     }
 
     public function plan(): BelongsTo

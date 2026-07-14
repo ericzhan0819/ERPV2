@@ -34,7 +34,7 @@ final class SalaryPeriodService
 
         try {
             return DB::transaction(function () use ($actor, $periodMonth) {
-                $plan = $this->commissionPlanService->findEffectiveForMonth($periodMonth);
+                $plan = $this->commissionPlanService->findEffectiveForMonthForUpdate($periodMonth);
                 if (! $plan) {
                     throw ValidationException::withMessages([
                         'period_month' => ['此月份沒有可用的薪資獎金方案'],
@@ -49,6 +49,7 @@ final class SalaryPeriodService
                 ]);
 
                 $eligibility = $this->eligibilityService->inspectPeriodForUpdate($periodMonth, $period->id);
+                $plan->load('tiers');
                 $this->rebuildDraft($period, $plan, $eligibility);
                 $this->auditLogService->recordSalaryPeriodAction($period, AuditLog::ACTION_CREATED, 'create_draft', $actor);
 
@@ -71,9 +72,9 @@ final class SalaryPeriodService
 
         return DB::transaction(function () use ($actor, $period) {
             $lockedPeriod = $this->lockDraft($period);
-            $plan = CommissionPlan::query()->with('tiers')->findOrFail($lockedPeriod->commission_plan_id);
             $periodMonth = $lockedPeriod->period_month->format('Y-m');
             $eligibility = $this->eligibilityService->inspectPeriodForUpdate($periodMonth, $lockedPeriod->id);
+            $plan = CommissionPlan::query()->with('tiers')->findOrFail($lockedPeriod->commission_plan_id);
             $this->rebuildDraft($lockedPeriod, $plan, $eligibility);
             $this->auditLogService->recordSalaryPeriodAction($lockedPeriod, AuditLog::ACTION_UPDATED, 'recalculate', $actor);
 
@@ -104,6 +105,12 @@ final class SalaryPeriodService
                 'created_by' => $actor->id,
             ]);
             $this->updateSettlementTotals($lockedSettlement);
+            if ($data['type'] === SalarySettlementItem::TYPE_MANUAL_DEDUCTION
+                && $lockedSettlement->net_pay < 0) {
+                throw ValidationException::withMessages([
+                    'amount' => ['此扣款會使實發薪資小於 0，請先調整其他薪資項目'],
+                ]);
+            }
             $this->auditLogService->recordSalaryAdjustmentAction($period, $item, AuditLog::ACTION_CREATED, $actor);
 
             return $item;
@@ -149,10 +156,10 @@ final class SalaryPeriodService
 
         return DB::transaction(function () use ($actor, $period) {
             $lockedPeriod = $this->lockDraft($period);
-            $before = $this->snapshotSignature($lockedPeriod);
-            $plan = CommissionPlan::query()->with('tiers')->findOrFail($lockedPeriod->commission_plan_id);
             $periodMonth = $lockedPeriod->period_month->format('Y-m');
             $eligibility = $this->eligibilityService->assertPeriodEligible($periodMonth, $lockedPeriod->id);
+            $before = $this->snapshotSignature($lockedPeriod);
+            $plan = CommissionPlan::query()->with('tiers')->findOrFail($lockedPeriod->commission_plan_id);
             $this->rebuildDraft($lockedPeriod, $plan, $eligibility);
             $after = $this->snapshotSignature($lockedPeriod);
 
@@ -162,9 +169,17 @@ final class SalaryPeriodService
                 ]);
             }
 
-            $hasNegativeNetPay = $lockedPeriod->settlements()->where('net_pay', '<', 0)->exists();
-            if ($hasNegativeNetPay) {
-                throw ValidationException::withMessages(['net_pay' => ['實發薪資不得小於 0']]);
+            $negativeSettlements = $lockedPeriod->settlements()
+                ->with('user:id,name')
+                ->where('net_pay', '<', 0)
+                ->orderBy('user_id')
+                ->get();
+            if ($negativeSettlements->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'net_pay' => $negativeSettlements
+                        ->map(fn (SalarySettlement $settlement): string => "{$settlement->user->name}：實發薪資為 {$settlement->net_pay}，不得小於 0")
+                        ->all(),
+                ]);
             }
 
             $lockedPeriod->status = SalaryPeriod::STATUS_CONFIRMED;
@@ -326,10 +341,6 @@ final class SalaryPeriodService
             $totals[SalarySettlementItem::TYPE_HEALTH_INSURANCE] ?? 0,
             $manualDeduction,
         ]);
-
-        if ($deductions > $gross) {
-            throw ValidationException::withMessages(['amount' => ['扣款合計不得超過應發薪資']]);
-        }
 
         $settlement->forceFill([
             'purchase_bonus_total' => $purchase,
