@@ -14,13 +14,9 @@ class DashboardService
     public function __construct(private readonly MoneyEntryService $moneyEntryService) {}
 
     /**
-     * Dashboard production consistency target is MySQL/MariaDB, where this
-     * explicitly sets REPEATABLE READ so every aggregate below reads against
-     * the same snapshot instead of racing with concurrent writes between the
-     * individual queries. SQLite is the automated-test driver only: it has
-     * no session-level isolation level to set (and none of its statements
-     * matter for cross-request concurrency in tests), so it just runs the
-     * queries inside a plain transaction.
+     * 正式環境使用 MySQL/MariaDB，這裡明確設定 REPEATABLE READ，讓下方每個彙總查詢
+     * 都讀取同一份資料快照，不會在查詢之間受到並行寫入影響。SQLite 僅用於自動測試，
+     * 不支援連線層級的隔離設定，因此只使用一般交易執行查詢。
      *
      * @return array<string, mixed>
      */

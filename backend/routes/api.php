@@ -16,10 +16,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login']);
 
-// Logout is intentionally outside the auth:sanctum guard so it stays
-// idempotent: a client retrying after a lost/timed-out response must not be
-// rejected with 401 just because the first attempt already invalidated the
-// session. CSRF and session handling still apply via statefulApi().
+// 此段說明相鄰程式碼的用途與預期行為。
 Route::post('/logout', [AuthController::class, 'logout']);
 
 // 官網公開唯讀車輛資料：不需登入，只回傳 status=listed 車輛與公開安全欄位

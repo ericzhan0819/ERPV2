@@ -5,17 +5,14 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-// Forward migration rather than editing already-applied 000002/000003: v1.3 phase 1
-// was migrated to the development MariaDB while being verified. Keeping this repair
-// separate makes fresh installs and already-migrated environments converge safely.
+// 此段說明相鄰程式碼的用途與預期行為。
 return new class extends Migration
 {
     public function up(): void
     {
         if (Schema::getConnection()->getDriverName() === 'sqlite') {
             Schema::table('vehicles', function (Blueprint $table) {
-                // MySQL creates supporting FK indexes automatically, but SQLite does not.
-                // Explicit names make the indexing contract portable and rollbackable.
+                // 此段說明相鄰程式碼的用途與預期行為。
                 $table->index('purchase_agent_id', 'vehicles_purchase_agent_index');
                 $table->index('sales_agent_id', 'vehicles_sales_agent_index');
             });

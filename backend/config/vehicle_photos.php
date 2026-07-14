@@ -39,7 +39,7 @@ return [
     // 檔案大小在 8MB 以內仍可能宣告超大像素尺寸（例如極端壓縮的 JPEG/PNG），這類圖片
     // 全解碼進記憶體的成本與像素數成正比，屬於 decompression bomb 風險，因此在解碼前
     // 先用 getimagesize() 讀檔頭檢查像素數，超過就直接拒絕，避免真的呼叫
-    // ImageManager::read()。
+    // 使用 ImageManager::read() 時會完整解碼圖片。
     //
     // 這個上限不能只憑「一般手機拍照多少 MP」隨意猜（Codex adversarial review 第二輪
     // 指出 40MP 太寬鬆，因為 GD 的像素緩衝區是 C 層原生記憶體配置，完全不受 PHP
@@ -51,10 +51,10 @@ return [
     // 依實際跑過 VehiclePhotoImageProcessor::process() 完整流程（decode → clone 展示圖
     // → scaleDown → 縮圖 → 兩次 toWebp 編碼）量測出的 RSS 峰值：
     //
-    //   4MP      → 110.7MB RSS
-    //   12MP     → 195.2MB RSS
+    //   4MP      → 110.7MB RSS（實測記憶體用量）
+    //   12MP     → 195.2MB RSS（實測記憶體用量）
     //   12.19MP  → 197.7MB RSS（4032x3024，iPhone 常見預設拍照解析度，直接實測）
-    //   24MP     → 335.0MB RSS
+    //   24MP     → 335.0MB RSS（實測記憶體用量）
     //   40MP     → 522.9MB RSS（Codex 在自己環境量到約 553MB，同量級）
     //
     // 這個上傳端點只開放 admin / manager 使用（見企劃書_v1.2.md 第 7 節權限表），
@@ -149,7 +149,7 @@ return [
     // 這裡另外設一個遠大於 upload_batch_pending_ttl_seconds 的「永久放棄」門檻：
     // 租約過期超過這麼久，代表已經不是「使用者正在重試中」的正常範圍，而是這批
     // 上傳被徹底放棄了，交由 vehicle-photos:sweep-stale-uploads 排程指令（見
-    // routes/console.php、VehiclePhotoService::abandonStaleIncompleteUploadBatches()）
+    // 由 routes/console.php 與 VehiclePhotoService::abandonStaleIncompleteUploadBatches() 使用。）
     // 主動把殘留的照片 soft-delete、刪除這筆 batch row，讓車輛照片清單恢復成
     // 「這次失敗的上傳完全沒發生過」的一致狀態，不需要等一個可能永遠不會出現的
     // 重試請求。預設 24 小時：遠大於任何合理的使用者重試時間窗，足以確定不會跟

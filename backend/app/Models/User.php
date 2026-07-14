@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+// 若啟用電子郵件驗證，可引入 Illuminate\Contracts\Auth\MustVerifyEmail。
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -29,7 +29,7 @@ class User extends Authenticatable
     public const ROLES = [self::ROLE_ADMIN, self::ROLE_MANAGER, self::ROLE_SALES];
 
     /**
-     * Get the attributes that should be cast.
+     * 取得需要轉型的欄位。
      *
      * @return array<string, string>
      */

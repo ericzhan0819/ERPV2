@@ -23,10 +23,8 @@ export function AppLayout() {
       await logout()
       navigate('/login')
     } catch {
-      // Logout failed to be confirmed. ProtectedRoute (which wraps this
-      // layout) reacts to the resulting 'blocked' logoutStatus and renders
-      // a blocking screen with a retry action instead of this layout, so
-      // there is nothing further to do here.
+      // 登出尚未由後端確認時，ProtectedRoute 會依 blocked 狀態顯示可重試的阻擋畫面，
+      // 所以此處不再額外處理。
     }
   }
 

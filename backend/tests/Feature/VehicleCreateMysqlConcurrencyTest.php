@@ -180,9 +180,7 @@ class VehicleCreateMysqlConcurrencyTest extends TestCase
                 $this->runCreateRequestInChild($secondResultPath, $secondPayload, $user->id);
             }
 
-            // Give the second process time to contend on the uncommitted sequence row,
-            // then let the first transaction commit. Correct locking makes the second
-            // request continue with the next number instead of also choosing 0001.
+            // 此段說明相鄰程式碼的用途與預期行為。
             usleep(250000);
             fwrite($sockets[0], 'C');
             fclose($sockets[0]);

@@ -197,12 +197,7 @@ class RoleAccessTest extends TestCase
         }
     }
 
-    /**
-     * `role` is a plain string column (no DB-level enum constraint). An unrecognized
-     * value can reach the database via a legacy row, a future role not yet handled by
-     * the frontend, or manual data repair. Financial visibility must fail closed for
-     * such a row instead of leaking purchase price / gross profit / dashboard amounts.
-     */
+    /** 此段說明相鄰程式碼的用途與預期行為。 */
     public function test_unknown_role_cannot_see_financial_fields_or_dashboard_amounts(): void
     {
         $unknownRoleUser = User::factory()->create(['is_active' => true, 'role' => 'future_role']);

@@ -4,12 +4,10 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Default Queue Connection Name
+    | 設定說明
     |--------------------------------------------------------------------------
     |
-    | Laravel's queue supports a variety of backends via a single, unified
-    | API, giving you convenient access to each backend using identical
-    | syntax for each. The default queue connection is defined below.
+    | 此區為 Laravel 預設設定，請依實際部署環境與需求調整。
     |
     */
 
@@ -17,15 +15,10 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Queue Connections
+    | 設定說明
     |--------------------------------------------------------------------------
     |
-    | Here you may configure the connection options for every queue backend
-    | used by your application. An example configuration is provided for
-    | each backend supported by Laravel. You're also free to add more.
-    |
-    | Drivers: "sync", "database", "beanstalkd", "sqs", "redis",
-    |          "deferred", "background", "failover", "null"
+    | 此區為 Laravel 預設設定，請依實際部署環境與需求調整。
     |
     */
 
@@ -93,12 +86,10 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Job Batching
+    | 設定說明
     |--------------------------------------------------------------------------
     |
-    | The following options configure the database and table that store job
-    | batching information. These options can be updated to any database
-    | connection and table which has been defined by your application.
+    | 此區為 Laravel 預設設定，請依實際部署環境與需求調整。
     |
     */
 
@@ -109,14 +100,10 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Failed Queue Jobs
+    | 設定說明
     |--------------------------------------------------------------------------
     |
-    | These options configure the behavior of failed queue job logging so you
-    | can control how and where failed jobs are stored. Laravel ships with
-    | support for storing failed jobs in a simple file or in a database.
-    |
-    | Supported drivers: "database-uuids", "dynamodb", "file", "null"
+    | 此區為 Laravel 預設設定，請依實際部署環境與需求調整。
     |
     */
 

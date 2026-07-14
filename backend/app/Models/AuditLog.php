@@ -73,7 +73,7 @@ class AuditLog extends Model
     }
 
     /**
-     * Audit records are append-only. Application code must never update them.
+     * 稽核紀錄只能新增，應用程式不可更新。
      */
     protected static function booted(): void
     {

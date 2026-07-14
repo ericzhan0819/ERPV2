@@ -189,10 +189,8 @@ class MoneyEntrySourceTypeReviewService
 
         $rowsToChange = $entries->filter(fn (MoneyEntry $entry) => $entry->source_type !== $to);
 
-        // Backup is written before any DB mutation and before any review log row,
-        // and only for rows that will actually have source_type mutated. If the
-        // backup cannot be written and read back, this throws and nothing below
-        // (source_type update, review log insert, candidate resolution) happens.
+        // 先備份、再修改資料庫或寫入審查紀錄，而且只備份真的會變更 source_type 的資料列。
+        // 備份無法寫入或讀回驗證時直接拋錯，後續更新、審查紀錄與候選結案都不會執行。
         $backupPath = null;
 
         if ($rowsToChange->isNotEmpty()) {
@@ -210,10 +208,8 @@ class MoneyEntrySourceTypeReviewService
 
             if ($entry->source_type === $to) {
                 if ($isUnresolvedCandidate) {
-                    // Candidate row already matches --to, but has never had an explicit
-                    // human review decision recorded. Write a review log confirming the
-                    // current value is correct (previous === new) and resolve the
-                    // candidate. No data mutation happens, so no backup is needed.
+                    // 候選資料已符合 --to，但尚未留下人工確認。寫入目前值正確的審查紀錄
+                    // （previous === new）並完成候選處理；沒有改資料，因此不需備份。
                     $reviewId = $this->writeReviewLog($entry, $entry->source_type, $to, $approver, $reason, null);
                     $this->resolveCandidate($candidate->id, $approver, $reviewId);
 
@@ -343,10 +339,8 @@ class MoneyEntrySourceTypeReviewService
 
         $disk = Storage::disk('local');
 
-        // put() with the default (throw=false) local disk config can return false
-        // instead of throwing when the write fails. Any mutation to money_entries
-        // or the review log must not happen unless the backup is verifiably
-        // written and readable, so every failure mode here throws.
+        // 本機磁碟採預設 throw=false 時，put() 寫入失敗會回傳 false 而非拋錯。
+        // 備份必須確認已寫入且可讀，否則不可修改 money_entries 或審查紀錄；所有失敗都要拋錯。
         if ($disk->put($relativePath, $payload) !== true) {
             throw new RuntimeException("備份寫入失敗，已中止本次來源修正，未異動任何資料：{$relativePath}");
         }

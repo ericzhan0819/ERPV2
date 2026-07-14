@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Auth;
 class AuditLogService
 {
     /**
-     * Values for these fields must never be persisted in audit records.
+     * 這些欄位的值不可寫入稽核紀錄。
      */
     private const SENSITIVE_FIELDS = [
         'password',
@@ -146,8 +146,7 @@ class AuditLogService
     }
 
     /**
-     * Salary amounts are deliberately excluded. The audit trail records who was
-     * affected and which fields changed, without becoming a second payroll store.
+     * 刻意不記錄薪資金額。稽核只留下受影響的人與變更欄位，不作為第二份薪資資料。
      *
      * @param  string[]  $changedFields
      */

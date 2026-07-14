@@ -4,13 +4,10 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Third Party Services
+    | 設定說明
     |--------------------------------------------------------------------------
     |
-    | This file is for storing the credentials for third party services such
-    | as Mailgun, Postmark, AWS and more. This file provides the de facto
-    | location for this type of information, allowing packages to have
-    | a conventional file to locate the various service credentials.
+    | 此區為 Laravel 預設設定，請依實際部署環境與需求調整。
     |
     */
 

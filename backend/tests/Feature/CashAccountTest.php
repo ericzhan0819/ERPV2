@@ -106,12 +106,7 @@ class CashAccountTest extends TestCase
         $admin = User::factory()->admin()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create(['name' => '原始名稱', 'is_active' => true]);
 
-        // A legacy/cached client that still sends is_active on the generic
-        // update endpoint - even as null, "", or [] - must get a loud
-        // rejection, not a silent 200 that discards the field while implying
-        // the status change took effect. `missing` (not `prohibited`) is what
-        // makes null/""/[] rejected too, since `prohibited` only rejects
-        // "truthy" values.
+        // 此段說明相鄰程式碼的用途與預期行為。
         $this->actingAs($admin, 'web')->putJson("/api/cash-accounts/{$cashAccount->id}", [
             'name' => '被忽略的名稱',
             'type' => $cashAccount->type,
@@ -147,10 +142,7 @@ class CashAccountTest extends TestCase
             'is_active' => true,
         ]);
 
-        // Simulates an admin who opened the edit form while the account was
-        // still active, and only submits (name/type/opening_balance only, per
-        // the current client contract) after a second admin deactivates it
-        // concurrently via the dedicated status endpoint.
+        // 此段說明相鄰程式碼的用途與預期行為。
         $metadataOnlyUpdate = [
             'name' => '編輯後名稱',
             'type' => 'bank',
@@ -202,8 +194,7 @@ class CashAccountTest extends TestCase
         $this->actingAs($admin, 'web')->patchJson("/api/cash-accounts/{$cashAccount->id}/status", ['is_active' => false])
             ->assertOk()->assertJsonPath('data.is_active', false);
 
-        // Simulates a client retry (e.g. after a lost response) resending the
-        // same target state; it must land on the same state, not flip back on.
+        // 此段說明相鄰程式碼的用途與預期行為。
         $this->actingAs($admin, 'web')->patchJson("/api/cash-accounts/{$cashAccount->id}/status", ['is_active' => false])
             ->assertOk()->assertJsonPath('data.is_active', false);
 

@@ -206,8 +206,7 @@ class MoneyEntryService
         // manager/sales 建立進 pending，待 admin 核准後才計入正式餘額。
         $entry->approval_status = $user->isAdmin() ? MoneyEntry::APPROVAL_APPROVED : MoneyEntry::APPROVAL_PENDING;
 
-        // Let a duplicate-key QueryException escape so DB::transaction rolls back;
-        // it is caught and retried against a fresh transaction/snapshot by the caller.
+        // 讓重複鍵例外離開，DB::transaction 才會回滾；呼叫端會在新的交易與快照中捕捉並重試。
         $entry->save();
 
         return $entry;
@@ -432,8 +431,7 @@ class MoneyEntryService
         // 收支（購車付款／單車支出／收訂金／退款）一律進 pending，待 admin 核准。
         $entry->approval_status = $this->isCreatorAdmin($userId) ? MoneyEntry::APPROVAL_APPROVED : MoneyEntry::APPROVAL_PENDING;
 
-        // Let a duplicate-key QueryException escape so DB::transaction rolls back;
-        // it is caught and retried against a fresh transaction/snapshot by the caller.
+        // 讓重複鍵例外離開，DB::transaction 才會回滾；呼叫端會在新的交易與快照中捕捉並重試。
         $entry->save();
 
         return $entry;
@@ -459,10 +457,8 @@ class MoneyEntryService
     private function replayRacedEntryAfterRollback(QueryException $original, string $idempotencyKey, array $effectiveData, bool $entryDateWasSupplied): MoneyEntry
     {
         return DB::transaction(function () use ($original, $idempotencyKey, $effectiveData, $entryDateWasSupplied) {
-            // Fresh transaction after rollback: under MySQL REPEATABLE READ, re-reading the
-            // idempotency_key inside the same (now rolled-back) transaction could still see
-            // the pre-race snapshot and miss the winner's row. Start a new transaction and
-            // take a locking read so we observe the committed winner.
+            // 回滾後要開新交易：MySQL 的 REPEATABLE READ 在原交易重讀時，仍可能看到競態前的快照，
+            // 因而漏掉已提交的勝出資料。改用加鎖讀取，才能看到該筆資料。
             $racedEntry = MoneyEntry::query()
                 ->where('idempotency_key', $idempotencyKey)
                 ->lockForUpdate()
@@ -507,9 +503,8 @@ class MoneyEntryService
             return false;
         }
 
-        // A retry that omits entry_date is a replay of "whatever date the entry was
-        // originally recorded on" — it must not be forced to match "today", which would
-        // make retries fail purely because they crossed midnight.
+        // 重試未帶 entry_date 時，表示沿用原本記錄的日期；不可強迫它符合「今天」，
+        // 否則只因跨過午夜就會被誤判為不同請求。
         if ($entryDateWasSupplied && $entry->entry_date?->toDateString() !== $effectiveData['entry_date']) {
             return false;
         }

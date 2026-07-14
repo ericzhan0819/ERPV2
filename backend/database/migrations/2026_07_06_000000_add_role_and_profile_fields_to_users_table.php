@@ -10,11 +10,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            // Default 'manager' backfills every existing row (including is_admin=false
+            // 此段說明相鄰程式碼的用途與預期行為。
             // accounts) in the same statement that adds the column - see 企劃書_v1.1.md
-            // §3.3: demoting existing non-admin accounts straight to 'sales' would be a
-            // breaking, unrequested privilege drop, so they land on 'manager' and an
-            // admin can re-assign 'sales' afterward.
+            // 此段說明相鄰程式碼的用途與預期行為。
             $table->string('role')->default('manager')->after('is_admin');
             $table->string('phone')->nullable()->after('role');
             $table->string('job_title')->nullable()->after('phone');

@@ -25,9 +25,7 @@ class LogoutTest extends TestCase
     {
         $user = User::factory()->create();
 
-        // A client retry after a lost/timed-out response must not be
-        // rejected with 401 just because the first call already logged the
-        // session out and invalidated it.
+        // 此段說明相鄰程式碼的用途與預期行為。
         $this->actingAs($user, 'web')
             ->logoutRequest()
             ->assertSuccessful();
@@ -42,10 +40,7 @@ class LogoutTest extends TestCase
 
     private function logoutRequest(): \Illuminate\Testing\TestResponse
     {
-        // Referer must match a configured Sanctum stateful domain (see
-        // SANCTUM_STATEFUL_DOMAINS in .env) so EnsureFrontendRequestsAreStateful
-        // starts the session for this request, matching how a real SPA call
-        // from the frontend dev server behaves.
+        // 此段說明相鄰程式碼的用途與預期行為。
         return $this->withHeaders(['Referer' => 'http://localhost:5173'])->postJson('/api/logout');
     }
 }

@@ -4,9 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-// Forward hardening for 000009: besides validating creation, protect an existing
-// salary source from direct source_type mutation or deletion even when code bypasses
-// MoneyEntryService. General CRUD already rejects it at the application boundary.
+// 此段說明相鄰程式碼的用途與預期行為。
 return new class extends Migration
 {
     public function up(): void
@@ -81,9 +79,7 @@ return new class extends Migration
         DB::unprepared('DROP TRIGGER IF EXISTS salary_money_entry_contract_delete');
         DB::unprepared('DROP TRIGGER IF EXISTS salary_money_entry_contract_update');
 
-        // Restore 000009's contract-only UPDATE trigger so rolling back this single
-        // hardening migration returns to the exact prior schema rather than leaving
-        // the source contract partially unprotected.
+        // 此段說明相鄰程式碼的用途與預期行為。
         if (Schema::getConnection()->getDriverName() === 'sqlite') {
             DB::unprepared(<<<'SQL'
                 CREATE TRIGGER salary_money_entry_contract_update

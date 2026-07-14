@@ -277,8 +277,7 @@ class VehicleService
             // （sales 不可建車）上報的購車付款一律進 pending，待 admin 核准。
             $entry->approval_status = $this->isCreatorAdmin($userId) ? MoneyEntry::APPROVAL_APPROVED : MoneyEntry::APPROVAL_PENDING;
 
-            // Let a duplicate-key QueryException escape so DB::transaction rolls back
-            // the vehicle insert too; it is caught and retried by the caller.
+            // 讓重複鍵例外離開，DB::transaction 會連同建車一併回滾；呼叫端再捕捉並重試。
             $entry->save();
         }
 
@@ -291,8 +290,8 @@ class VehicleService
     private function replayRacedVehicleCreationAfterRollback(QueryException $original, string $idempotencyKey, array $effectiveData): Vehicle
     {
         return DB::transaction(function () use ($original, $idempotencyKey, $effectiveData) {
-            // Same MySQL REPEATABLE READ stale-snapshot concern as reserve/final-payment:
-            // after a rollback, re-read the idempotency_key in a fresh transaction/locking read.
+            // 與保留、收尾款相同：MySQL 的 REPEATABLE READ 回滾後可能還是舊快照，
+            // 所以要在新的交易中加鎖重讀 idempotency_key。
             $racedVehicle = Vehicle::query()
                 ->where('idempotency_key', $idempotencyKey)
                 ->lockForUpdate()
@@ -394,19 +393,10 @@ class VehicleService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            // seller_customer_id may simply be absent from this request (as opposed to
-            // explicitly cleared to null) while the vehicle already has a link. That
-            // link is not being touched, so the snapshot must not move either way:
-            // - it must NOT be re-derived from the customer's *current* data, since
-            //   seller_name/phone are a historical snapshot captured at link time —
-            //   letting a later, unrelated vehicle edit (e.g. just updating mileage)
-            //   silently pull in whatever the customer has been renamed to since would
-            //   retroactively rewrite history.
-            // - it must NOT take whatever free-text seller_name/phone happened to be
-            //   in this request either, since that could silently diverge from the
-            //   customer the vehicle is still linked to.
-            // Either way the existing stored values win, so any submitted values for
-            // these two fields are dropped before fill() when the link is untouched.
+            // 請求可能未帶 seller_customer_id，但車輛原本已有客戶連結。這代表不變更連結，
+            // 因此既有快照不可改用客戶目前資料重算，也不可採用這次帶入的自由文字，
+            // 否則後續無關編輯會改寫歷史資料，或讓快照與連結客戶不一致。
+            // 未變更連結時，以已儲存的賣方姓名與電話為準，填值前捨棄請求帶入的這兩欄。
             if (! array_key_exists('seller_customer_id', $data) && $lockedVehicle->seller_customer_id) {
                 unset($data['seller_name'], $data['seller_phone']);
             }
@@ -687,8 +677,7 @@ class VehicleService
         // 收款達成交價為準（見 closeSale()）。
         $entry->approval_status = $this->isCreatorAdmin($userId) ? MoneyEntry::APPROVAL_APPROVED : MoneyEntry::APPROVAL_PENDING;
 
-        // Let a duplicate-key QueryException escape so DB::transaction rolls back;
-        // it is caught and retried against a fresh transaction/snapshot by the caller.
+            // 讓重複鍵例外離開，DB::transaction 才會回滾；呼叫端會在新的交易與快照中捕捉並重試。
         $entry->save();
 
         return $lockedVehicle;
@@ -700,8 +689,8 @@ class VehicleService
     private function replayRacedReservationAfterRollback(QueryException $original, int $vehicleId, string $idempotencyKey, array $effectiveData): Vehicle
     {
         return DB::transaction(function () use ($original, $vehicleId, $idempotencyKey, $effectiveData) {
-            // Same MySQL REPEATABLE READ stale-snapshot concern as final payment: after a
-            // rollback, re-read the idempotency_key in a fresh transaction/locking read.
+            // 與收尾款相同：MySQL 的 REPEATABLE READ 回滾後可能還是舊快照，
+            // 所以要在新的交易中加鎖重讀 idempotency_key。
             $racedEntry = MoneyEntry::query()
                 ->where('idempotency_key', $idempotencyKey)
                 ->lockForUpdate()
@@ -750,10 +739,8 @@ class VehicleService
             return false;
         }
 
-        // buyer_name / buyer_phone are derived snapshots when buyer_customer_id
-        // is present. A later customer profile edit must not turn an otherwise exact
-        // retry into a different request, so compare those free-text fields only when
-        // the reservation was not linked to a customer.
+        // 有 buyer_customer_id 時，買方姓名與電話是當時建立的快照。客戶後續編輯不可讓
+        // 原本相同的重試被判成不同請求，因此只有未連結客戶的保留資料才比對自由文字欄位。
         if ($effectiveData['buyer_customer_id'] === null
             && $entry->counterparty_name !== $effectiveData['buyer_name']) {
             return false;
@@ -767,9 +754,8 @@ class VehicleService
             return false;
         }
 
-        // Deposit entry 本身沒有記錄 sold_price/buyer_phone，但 reserve request 會把
-        // 這些欄位寫進 vehicle。retry 必須確認 vehicle 上目前的值仍與 request 一致，
-        // 否則會 silently replay 成功但漏掉 sold_price/buyer_phone 已被改過的事實。
+        // 訂金收支本身沒有記錄 sold_price 與 buyer_phone，但保留請求會把這些欄位寫進車輛。
+        // 重試必須確認車輛目前值仍與請求一致，否則會在兩欄已被修改時仍錯誤地回放成功。
         $vehicle = Vehicle::query()->whereKey($entry->vehicle_id)->first();
 
         if (! $vehicle) {
@@ -837,10 +823,8 @@ class VehicleService
             return $effectiveData;
         }
 
-        // Resolve and lock the customer inside the same transaction that writes
-        // the vehicle snapshot. This prevents a concurrent update/delete from making
-        // the linked customer and captured snapshot disagree or surfacing as a raw FK
-        // failure after validation already succeeded.
+        // 在寫入車輛快照的同一筆交易中查詢並鎖定客戶，避免並行更新或刪除造成
+        // 連結客戶與已擷取快照不一致，或在驗證通過後才拋出原始外鍵錯誤。
         $customer = Customer::query()
             ->whereKey($effectiveData['buyer_customer_id'])
             ->lockForUpdate()
@@ -923,8 +907,7 @@ class VehicleService
         // 一律進 pending，待 admin 核准後才計入正式餘額。
         $entry->approval_status = $this->isCreatorAdmin($userId) ? MoneyEntry::APPROVAL_APPROVED : MoneyEntry::APPROVAL_PENDING;
 
-        // Let a duplicate-key QueryException escape so DB::transaction rolls back;
-        // it is caught and retried against a fresh transaction/snapshot by the caller.
+        // 讓重複鍵例外離開，DB::transaction 才會回滾；呼叫端會在新的交易與快照中捕捉並重試。
         $entry->save();
 
         return [
@@ -940,10 +923,7 @@ class VehicleService
     private function replayRacedFinalPaymentAfterRollback(QueryException $original, int $vehicleId, string $idempotencyKey, array $effectiveData): array
     {
         return DB::transaction(function () use ($original, $vehicleId, $idempotencyKey, $effectiveData) {
-            // Fresh transaction after rollback: under MySQL REPEATABLE READ, re-reading the
-            // idempotency_key inside the same (now rolled-back) transaction could still see
-            // the pre-race snapshot and miss the winner's row. Start a new transaction and
-            // take a locking read so we observe the committed winner.
+            // 回滾後要開新交易：MySQL 的 REPEATABLE READ 在原交易重讀時，仍可能看到競態前的快照，n+            // 因而漏掉已提交的勝出資料。改用加鎖讀取，才能看到該筆資料。
             $racedEntry = MoneyEntry::query()
                 ->where('idempotency_key', $idempotencyKey)
                 ->lockForUpdate()
@@ -1253,8 +1233,7 @@ class VehicleService
             'amount' => (int) $data['amount'],
             'cash_account_id' => (int) $data['cash_account_id'],
             'description' => $data['description'] ?? null,
-            // Only used to populate a brand-new entry's date; retries that omit entry_date
-            // are not compared against this value (see entry_date_was_supplied below).
+            // 僅用於新收支預設日期；重試未帶 entry_date 時，不會拿此值來比對。
             'entry_date' => $entryDateWasSupplied ? $data['entry_date'] : now()->toDateString(),
             'entry_date_was_supplied' => $entryDateWasSupplied,
         ];
@@ -1305,9 +1284,8 @@ class VehicleService
             return false;
         }
 
-        // A retry that omits entry_date is a replay of "whatever date the entry was
-        // originally recorded on" — it must not be forced to match "today", which would
-        // make retries fail purely because they crossed midnight.
+        // 重試未帶 entry_date 時，表示沿用原本記錄的日期；不可強迫它符合「今天」，
+        // 否則只因跨過午夜就會被誤判為不同請求。
         if ($effectiveData['entry_date_was_supplied'] && $entry->entry_date?->toDateString() !== $effectiveData['entry_date']) {
             return false;
         }
@@ -1379,11 +1357,9 @@ class VehicleService
         $stockDate = now()->toDateString();
         $prefix = 'V'.now()->format('Ymd');
 
-        // Lock a stable per-day sequence row instead of the latest vehicle row. On the
-        // first vehicle of a day there is no vehicle row to lock, so two transactions
-        // could previously both generate ...0001 and one would fail with a deadlock or
-        // stock_no unique violation. insertOrIgnore is safe for the row-creation race;
-        // the following locking read serializes every sequence increment.
+        // 鎖定每日固定的流水號資料列，不鎖最新車輛。當天第一台車尚無資料可鎖，過去兩筆交易
+        // 都可能產生 ...0001，進而造成死鎖或 stock_no 重複。insertOrIgnore 可安全處理
+        // 建立流水號列的競態，後續加鎖讀取會將每次遞增依序執行。
         DB::table('vehicle_stock_sequences')->insertOrIgnore([
             'stock_date' => $stockDate,
             'last_sequence' => 0,
@@ -1398,9 +1374,8 @@ class VehicleService
             throw new \RuntimeException('無法取得車輛庫存編號序號');
         }
 
-        // A newly deployed sequence table can coexist with vehicles created before the
-        // migration. Reconcile against the highest existing number before incrementing
-        // so the first post-deploy create cannot reuse an existing stock_no.
+        // 新部署的流水號表可能與 migration 前既有車輛並存。遞增前先對照目前最大編號，
+        // 避免部署後第一台新車重複使用既有 stock_no。
         $lastStockNo = Vehicle::query()
             ->where('stock_no', 'like', "{$prefix}%")
             ->orderByDesc('stock_no')

@@ -151,7 +151,7 @@ return new class extends Migration
 
         if (DB::table('money_entry_source_type_review_candidate_capture_state')->exists()) {
             // 000003 已經在這個環境自行建立並完成 state 初始化，不需要
-            // repair。
+            // 此段說明相鄰程式碼的用途與預期行為。
             return;
         }
 

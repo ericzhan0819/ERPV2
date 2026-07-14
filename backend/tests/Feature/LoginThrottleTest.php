@@ -50,8 +50,7 @@ class LoginThrottleTest extends TestCase
     {
         User::factory()->create(['email' => 'admin@example.com']);
 
-        // 10 failures spread across 10 different IPs stays under the 5/IP limiter
-        // but must trip the 10/15min account-only limiter on the 11th attempt.
+        // 此段說明相鄰程式碼的用途與預期行為。
         for ($i = 0; $i < 10; $i++) {
             $this->loginAs('admin@example.com', 'wrong-password', "10.0.0.$i")->assertStatus(422);
         }
@@ -63,8 +62,7 @@ class LoginThrottleTest extends TestCase
     {
         User::factory()->create(['email' => 'victim@example.com']);
 
-        // 30 failures against 30 different (mostly non-existent) accounts from the
-        // same IP must trip the 30/60s IP-wide limiter on the 31st attempt.
+        // 此段說明相鄰程式碼的用途與預期行為。
         for ($i = 0; $i < 30; $i++) {
             $this->loginAs("attacker{$i}@example.com", 'wrong-password', '203.0.113.5')->assertStatus(422);
         }
@@ -79,9 +77,7 @@ class LoginThrottleTest extends TestCase
             'password' => bcrypt('correct-password'),
         ]);
 
-        // Successful logins must never hit the IP-wide limiter (it only counts
-        // failures), so 31 consecutive successes from the same IP must all
-        // succeed instead of tripping the 30/60s IP-wide quota.
+        // 此段說明相鄰程式碼的用途與預期行為。
         for ($i = 0; $i < 31; $i++) {
             $this->loginAs('admin@example.com', 'correct-password', '198.51.100.10')->assertSuccessful();
 
@@ -103,8 +99,7 @@ class LoginThrottleTest extends TestCase
             $this->loginAs('admin@example.com', 'wrong-password')->assertStatus(422);
         }
 
-        // Even with the correct password, a blocked email+IP pair must be
-        // rejected with 429 instead of reaching Auth::attempt and logging in.
+        // 此段說明相鄰程式碼的用途與預期行為。
         $this->loginAs('admin@example.com', 'correct-password')->assertStatus(429);
 
         $this->assertGuest();
@@ -123,8 +118,7 @@ class LoginThrottleTest extends TestCase
 
         $this->loginAs('admin@example.com', 'correct-password')->assertSuccessful();
 
-        // Previous failures against this email+IP must not carry over after a
-        // successful login clears the email_ip and account limiters.
+        // 此段說明相鄰程式碼的用途與預期行為。
         $this->loginAs('admin@example.com', 'wrong-password')->assertStatus(422);
     }
 

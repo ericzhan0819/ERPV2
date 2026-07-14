@@ -34,7 +34,7 @@ return new class extends Migration
             // 目前已成功建立的 vehicle_photos.id 清單（JSON array，依處理順序遞增）。
             // 建立時即初始化為 []，隨著每個檔案成功建立照片同步寫回；長度等於這次
             // 請求的檔案總數代表整批已完成，可直接回放（見
-            // VehiclePhotoService::uploadPhotos() / beginUploadBatch()）。
+            // 此段說明相鄰程式碼的用途與預期行為。
             $table->text('photo_ids')->nullable();
             $table->timestamps();
         });

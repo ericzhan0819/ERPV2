@@ -139,9 +139,7 @@ export function CustomerDetail() {
     setSubmitting(true)
     try {
       await updateCustomer(customerId, {
-        // Update must send explicit null (not omit the key) for cleared fields —
-        // the backend only overwrites a nullable column when the key is present
-        // in the request body, so `undefined` here would silently keep the old value.
+        // 清空欄位時要明確送出 null；若省略欄位，後端會保留原本的可空欄位值。
         name: form.name,
         phone: form.phone || null,
         line_id: form.line_id || null,

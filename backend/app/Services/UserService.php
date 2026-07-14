@@ -20,16 +20,11 @@ use Illuminate\Validation\ValidationException;
 
 class UserService
 {
-    // MySQL error 1451: "Cannot delete or update a parent row: a foreign key constraint fails".
+    // MySQL 錯誤 1451：無法刪除或更新父資料列，因為外鍵限制失敗。
     private const MYSQL_ERROR_FOREIGN_KEY_CONSTRAINT_FAILS = 1451;
 
-    // Retried automatically by DB::transaction() on deadlock / lock wait timeout (see
-    // Illuminate\Database\Concerns\ManagesTransactions::handleTransactionException()).
-    // This module's writes deliberately take multiple row locks in a fixed order to
-    // avoid deadlocks by construction (see lockTargetAndActiveAdmins()), but proving
-    // that no ordering conflict exists against every other lock path in the app is
-    // not practical to guarantee by hand-reasoning alone - this retry is the standard,
-    // supported fallback for the rare deadlock that construction doesn't rule out.
+    // 遇到死鎖或等鎖逾時時，DB::transaction() 會自動重試。本模組以固定順序鎖多筆資料來
+    // 避免死鎖，但無法僅靠人工推論保證不會與系統其他鎖定路徑衝突；這是少數情況的標準備援。
     private const TRANSACTION_ATTEMPTS = 3;
 
     public function listUsers(): Collection
@@ -129,12 +124,9 @@ class UserService
 
             $expectedIsAdmin = $role === User::ROLE_ADMIN;
 
-            // Always reconcile is_admin against the target role, even when role
-            // itself is unchanged: a row written by older code (or otherwise left
-            // desynced) could have role='manager' with a stale is_admin=true, and
-            // EnsureUserIsAdmin middleware still authorizes on is_admin. Gating the
-            // write on "role changed" alone would silently leave that stale grant
-            // in place forever on a no-op role reassignment.
+            // 即使角色未變，也要讓 is_admin 與目標角色一致。舊程式可能留下 role=manager、
+            // is_admin=true 的不同步資料，而權限中介層仍會看 is_admin。若只在角色改變時更新，
+            // 重新指定相同角色也無法清掉這個過期權限。
             if ($target->role !== $role || $target->is_admin !== $expectedIsAdmin) {
                 $target->role = $role;
                 $target->is_admin = $expectedIsAdmin;
@@ -162,22 +154,13 @@ class UserService
         }
 
         DB::transaction(function () use ($user) {
-            // Lock any vehicles/money entries referencing this user BEFORE locking the
-            // user row itself (see lockTargetAndActiveAdmins() below). Elsewhere in the
-            // app, saving a vehicle/money entry update locks that child row first and
-            // only then needs an implicit shared FK lock on the referenced user row
-            // (to save updated_by). Locking the user row first here, as before, inverted
-            // that order and could deadlock against a concurrent vehicle/money-entry
-            // update: this transaction holding the user row while waiting on the child
-            // row, and that one holding the child row while waiting on the user row.
-            // Matching the child-then-parent order everywhere removes that cycle.
+            // 先鎖住所有參照此使用者的車輛與收支，再鎖使用者本身。系統其他地方儲存車輛或收支時，
+            // 也會先鎖子資料，再因更新 updated_by 對使用者取得共享外鍵鎖。若這裡反過來先鎖使用者，
+            // 就可能與並行更新互相等待而死鎖；全系統維持子資料再父資料的順序即可避免此循環。
             //
-            // lockForUpdate() also forces a current (non-snapshot) read here: under
-            // MySQL's default REPEATABLE READ, a plain read would still see the snapshot
-            // established by the first plain read in this transaction, silently missing
-            // a vehicle/money entry that referenced this user and committed afterward -
-            // and the delete below would then fail on the FK constraint with an
-            // unhandled 500 instead of this graceful 422.
+            // lockForUpdate() 也會強制讀取目前資料，而不是舊快照。MySQL 預設 REPEATABLE READ
+            // 下，一般查詢可能漏掉交易開始後才提交、但已參照此使用者的車輛或收支，讓刪除操作
+            // 最後撞上外鍵限制並變成未處理的 500，而不是這裡預期回傳的 422。
             // VehiclePhoto::withTrashed()：VehiclePhoto 有 SoftDeletes（見
             // VehiclePhotoService::deletePhoto() 的 tombstone 設計），一筆照片被刪除
             // 後，storage 清理完成前仍可能以 soft-deleted tombstone row 的型態留著，
@@ -219,10 +202,8 @@ class UserService
                 $this->assertAnotherActiveAdminRemains($locked, $target);
             }
 
-            // Safety net on top of the hasRelatedRecords check above: if some
-            // reference we didn't (or couldn't) account for still exists at
-            // delete time, surface it as the same graceful 422 instead of
-            // letting MySQL's raw FK error escape as an unhandled 500.
+            // 作為 hasRelatedRecords 檢查外的最後防線：若刪除時仍有未涵蓋的關聯資料，
+            // 回傳相同的明確 422，而不是讓 MySQL 原始外鍵錯誤變成未處理的 500。
             try {
                 $target->delete();
             } catch (QueryException $e) {
@@ -250,7 +231,7 @@ class UserService
      * 改成應用層自行控制順序：先不鎖地讀出候選 id 清單，於 PHP 端依 id 遞增排序，
      * 再逐一各自發送一次 SELECT ... FOR UPDATE 取得鎖。只要每個 transaction 都用
      * 同一種全域遞增順序鎖定它所需要的列（即使候選清單彼此不完全相同），任兩個
-     * transaction 對共同列的鎖定順序就必然一致，deadlock 便無法形成。
+     * 交易對共同資料列的鎖定順序就必然一致，死鎖便無法形成。
      *
      * @return array{0: User, 1: Collection<int, User>}
      */
@@ -267,11 +248,8 @@ class UserService
             ->sort()
             ->values();
 
-        // A non-target candidate (an admin snapshotted before locking) may have
-        // been deleted by a concurrent request by the time we reach it here;
-        // that's fine to skip, since a row that no longer exists can't count
-        // toward "remaining admins" either way. Only the target row missing is
-        // an actual error for this operation.
+        // 非目標的候選管理員，可能在取得快照後被並行請求刪除；可略過，因為不存在的資料列
+        // 本來就不算剩餘管理員。只有目標使用者不存在才是這個操作的真正錯誤。
         $locked = new Collection;
         foreach ($candidateIds as $id) {
             $lockedUser = User::query()->lockForUpdate()->find($id);

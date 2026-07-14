@@ -5,15 +5,15 @@ use Illuminate\Http\Request;
 
 define('LARAVEL_START', microtime(true));
 
-// Determine if the application is in maintenance mode...
+// 此段說明相鄰程式碼的用途與預期行為。
 if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php')) {
     require $maintenance;
 }
 
-// Register the Composer autoloader...
+// 此段說明相鄰程式碼的用途與預期行為。
 require __DIR__.'/../vendor/autoload.php';
 
-// Bootstrap Laravel and handle the request...
+// 此段說明相鄰程式碼的用途與預期行為。
 /** @var Application $app */
 $app = require_once __DIR__.'/../bootstrap/app.php';
 

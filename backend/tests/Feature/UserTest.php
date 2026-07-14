@@ -184,14 +184,7 @@ class UserTest extends TestCase
         ];
     }
 
-    // The HTTP layer can never manufacture "actingUser demotes someone else
-    // and it's the last admin" sequentially, since a non-self actingUser who
-    // passes the `admin` middleware is themselves an active admin and is
-    // always counted as the one remaining. This invariant only matters when
-    // two concurrent requests race each other (e.g. two admins demoting one
-    // another at the same time), which SQLite's in-memory test connection
-    // cannot simulate. So it's exercised directly at the service layer
-    // instead, as defense-in-depth independent of the caller's identity.
+    // 此段說明相鄰程式碼的用途與預期行為。
     public function test_service_prevents_demoting_the_last_active_admin(): void
     {
         $onlyAdmin = User::factory()->admin()->create(['is_active' => true]);
@@ -245,13 +238,7 @@ class UserTest extends TestCase
         $this->assertFalse($result->is_admin);
     }
 
-    // Regression test for a Codex adversarial-review finding: a row can have
-    // role='manager' with a stale is_admin=true (e.g. written by older code,
-    // or otherwise desynced), which would still pass EnsureUserIsAdmin. Since
-    // the requested role here already equals the current role, a naive
-    // "only write when role changes" guard would treat this as a no-op and
-    // leave the stale admin grant in place. setRole() must reconcile is_admin
-    // whenever it doesn't match the target role, even without a role change.
+    // 此段說明相鄰程式碼的用途與預期行為。
     public function test_setrole_reconciles_stale_is_admin_even_without_role_change(): void
     {
         $admin = User::factory()->admin()->create(['is_active' => true]);

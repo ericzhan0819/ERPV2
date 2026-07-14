@@ -17,12 +17,10 @@ final class SalaryCommissionCalculator
     private const BASIS_POINTS_DENOMINATOR = 10000;
 
     /**
-     * Calculate commissions for one month's already-eligible sold vehicles.
+     * 計算單一月份、已符合資格的成交車輛獎金。
      *
-     * Eligibility is deliberately outside this calculator. The caller must pass
-     * exactly one period's eligible vehicles and the agents whose salary profiles
-     * enable commission. This calculator performs no silent filtering and only
-     * reads approved money entries for those vehicles.
+     * 資格判定不在此計算器處理。呼叫端必須傳入同一期間的合格車輛，以及薪資設定已啟用獎金的
+     * 人員。本計算器不會暗中篩選，只讀取這些車輛已核准的收支。
      *
      * @param  iterable<int, Vehicle>  $vehicles
      * @param  iterable<int, int>  $commissionEnabledAgentIds
@@ -160,8 +158,7 @@ final class SalaryCommissionCalculator
     }
 
     /**
-     * Pure single-vehicle formula. Exposed so formula edge cases can be tested
-     * without a database and later reused for previews.
+     * 純粹的單車計算公式。公開此方法可在不連資料庫時測試邊界情況，也可供日後預覽使用。
      *
      * @return array<string, int>
      */

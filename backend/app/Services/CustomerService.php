@@ -63,11 +63,8 @@ class CustomerService
     public function deleteCustomer(Customer $customer): void
     {
         DB::transaction(function () use ($customer) {
-            // Lock the customer row before checking relations. Under MySQL/InnoDB, a
-            // concurrent request that links a vehicle to this customer must acquire a
-            // shared lock on the referenced parent row to satisfy the FK constraint, so
-            // it blocks until this transaction commits/rolls back — closing the window
-            // where a vehicle could be linked between the check and the delete below.
+            // 先鎖住客戶再檢查關聯。MySQL/InnoDB 要把車輛連到此客戶時，也必須取得父資料列的共享鎖，
+            // 因此會等到這筆交易提交或回滾，避免在檢查與刪除之間又被連上一台車。
             $lockedCustomer = Customer::query()
                 ->whereKey($customer->id)
                 ->lockForUpdate()
@@ -82,10 +79,8 @@ class CustomerService
                     throw $e;
                 }
 
-                // Backstop for any race the row lock above didn't catch (e.g. a
-                // different locking model): the FK constraint itself refused the
-                // delete, so report the same friendly, non-silent rejection instead
-                // of letting the raw DB error surface.
+                // 若仍有未被前述鎖定涵蓋的競態狀況，外鍵也會擋下刪除；改回傳相同的明確訊息，
+                // 不直接把資料庫原始錯誤丟給使用者。
                 throw ValidationException::withMessages([
                     'customer' => ['此客戶已有關聯車輛，不得刪除'],
                 ]);

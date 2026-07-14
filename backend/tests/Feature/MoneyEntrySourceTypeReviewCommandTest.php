@@ -342,7 +342,7 @@ class MoneyEntrySourceTypeReviewCommandTest extends TestCase
             'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
             'created_at' => now(),
             'updated_at' => now(),
-            // source_type omitted -> default manual
+            // 此段說明相鄰程式碼的用途與預期行為。
         ]);
 
         (require $migrationPath)->up();
@@ -582,7 +582,7 @@ class MoneyEntrySourceTypeReviewCommandTest extends TestCase
             'idempotency_key' => (string) \Illuminate\Support\Str::uuid(),
             'created_at' => now(),
             'updated_at' => now(),
-            // source_type intentionally omitted -> falls back to column default 'manual'
+            // 此段說明相鄰程式碼的用途與預期行為。
         ]);
 
         $state = DB::table('money_entry_source_type_quarantine_state')->first();

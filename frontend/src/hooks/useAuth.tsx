@@ -6,19 +6,10 @@ import type { User } from '../types/auth'
 
 export type LogoutStatus = 'idle' | 'pending' | 'blocked'
 
-// Cross-tab logout coordination. A boolean flag can't distinguish "still in
-// flight" from "confirmed failed" from "confirmed done", so this stores one
-// of LogoutMarker's three values instead (absence of the key means idle).
-// Every tab reacts to changes via the window 'storage' event, which fires in
-// every OTHER tab automatically - the tab that wrote the value has to update
-// its own React state directly since it never receives its own event.
+// 用三種登出狀態在分頁間同步；寫入的分頁收不到自己的 storage 事件，必須自行更新 React 狀態。
 const LOGOUT_STATE_KEY = 'erpv2:logout-state'
 
-// Marker used by a previous version of this app. An unresolved value here
-// means an older tab/session started a logout that was never confirmed
-// server-side; it must be migrated to the new marker before anything else
-// runs, otherwise it is silently ignored and /api/me can resurrect a
-// session whose server-side logout is still unconfirmed.
+// 舊版留下未確認的登出標記時，先轉為新版狀態，避免 /api/me 意外恢復尚未確認登出的工作階段。
 const LEGACY_LOGOUT_PENDING_KEY = 'erpv2:logout-pending'
 
 type LogoutMarker = 'pending' | 'failed' | 'completed'
@@ -29,15 +20,13 @@ function migrateLegacyLogoutMarker(): LogoutMarker | null {
     return null
   }
 
-  // Treat as 'failed' rather than 'pending': there is no in-flight request
-  // to wait for anymore (it belonged to a previous page load), so the safe
-  // assumption is that the server-side revocation was never confirmed.
+  // 前一頁留下的未完成登出不再有請求可等待，因此保守視為後端未確認。
   const existing = localStorage.getItem(LOGOUT_STATE_KEY) as LogoutMarker | null
   const migrated = existing ?? 'failed'
   if (!existing) {
     localStorage.setItem(LOGOUT_STATE_KEY, migrated satisfies LogoutMarker)
   }
-  // Only drop the legacy key once the new marker is guaranteed to exist.
+  // 確定已寫入新版標記後，才移除舊版標記。
   localStorage.removeItem(LEGACY_LOGOUT_PENDING_KEY)
   return migrated
 }
@@ -58,10 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [logoutStatus, setLogoutStatus] = useState<LogoutStatus>('idle')
 
-  // Guards the initial /api/me request against resolving after a logout
-  // marker has since appeared (from another tab, or from this tab starting
-  // its own logout). Without this, a slow /api/me response can setUser()
-  // after the marker already cleared the user, resurrecting protected UI.
+  // 登出標記出現後，讓尚在執行的 /api/me 回應失效，避免它重新顯示受保護畫面。
   const meRequestValidRef = useRef(true)
 
   useEffect(() => {
@@ -83,10 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (marker === 'completed') {
-      // Logout was already confirmed (possibly in another tab, or before a
-      // refresh). The session cookie is gone server-side, so there is no
-      // point calling /api/me - and doing so risks a race where a stale
-      // cookie briefly resurrects the authenticated UI.
+      // 登出已確認時不再呼叫 /api/me，避免舊 cookie 的回應短暫恢復登入畫面。
       meRequestValidRef.current = false
       setUser(null)
       setLogoutStatus('idle')
@@ -98,8 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .me()
       .then((fetchedUser) => {
         if (!meRequestValidRef.current) {
-          // A logout marker arrived while this request was in flight; the
-          // response is stale and must not resurrect the authenticated UI.
+          // 請求期間收到登出標記，這份回應已過期，不可恢復登入畫面。
           return
         }
         setUser(fetchedUser)
@@ -133,9 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null)
         setLogoutStatus('idle')
       }
-      // marker === null means the key was cleared by a fresh login in
-      // another tab; this tab has no session to protect either way, so
-      // there is nothing to react to here.
+      // 其他分頁剛登入而清除標記時，此分頁沒有可保護的工作階段，不需處理。
     }
 
     window.addEventListener('storage', handleStorage)
@@ -144,8 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     const loggedInUser = await authApi.login(email, password)
-    // Any earlier /api/me from this mount is now moot regardless of marker
-    // state - a fresh, authoritative user just came back from /api/login.
+    // 新登入取得的使用者資料最具權威性，先讓本次掛載期間較早的 /api/me 回應失效。
     meRequestValidRef.current = false
     localStorage.removeItem(LOGOUT_STATE_KEY)
     setLogoutStatus('idle')
@@ -153,9 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const performLogout = useCallback(async () => {
-    // Same-tab equivalent of the storage-event invalidation below: this tab
-    // never receives its own 'storage' event, so the in-flight-request guard
-    // has to be set directly here too.
+    // 本分頁不會收到自己的 storage 事件，因此在此直接讓既有 /api/me 請求失效。
     meRequestValidRef.current = false
     localStorage.setItem(LOGOUT_STATE_KEY, 'pending' satisfies LogoutMarker)
     setLogoutStatus('pending')
@@ -163,8 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await authApi.logout()
     } catch {
-      // The failure may be a stale/expired CSRF token, so refresh it and
-      // retry once (the backend logout is idempotent) before giving up.
+      // 可能是 CSRF token 過期，先更新 token 並重試一次；登出 API 可安全重複呼叫。
       try {
         await ensureCsrfCookie()
         await authApi.logout()
@@ -178,9 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setUser(null)
     setLogoutStatus('idle')
-    // Left in place (not removed) until the next successful login, so any
-    // tab opened or refreshed afterward also stays logged out instead of
-    // silently restoring the authenticated UI.
+    // 保留完成標記到下次成功登入，讓之後開啟或重新整理的分頁也維持登出狀態。
     localStorage.setItem(LOGOUT_STATE_KEY, 'completed' satisfies LogoutMarker)
   }, [])
 

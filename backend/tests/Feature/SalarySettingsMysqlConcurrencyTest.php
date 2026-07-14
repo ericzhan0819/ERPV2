@@ -52,8 +52,7 @@ class SalarySettingsMysqlConcurrencyTest extends TestCase
         try {
             $this->assertChildSignal($parentSocket, 'M', '輸家請求未在時限內完成 salary profile miss lookup。');
 
-            // READ COMMITTED prevents an absent-row gap lock from blocking the winner
-            // insert while the child is paused immediately after its miss lookup.
+            // 此段說明相鄰程式碼的用途與預期行為。
             DB::statement('SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED');
             $winner = app(SalaryProfileService::class)->upsertProfile($admin, $employee, $payload);
 

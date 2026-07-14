@@ -34,10 +34,8 @@ class CommissionPlanService
     }
 
     /**
-     * The plan effective for a month is the active plan with the latest
-     * effective_from on or before that month's first day. If two plans share
-     * that date, the newest id wins deterministically. periodMonth must use
-     * the shared YYYY-MM salary month contract.
+     * 某月份採用該月第一天以前生效、且生效日最新的啟用方案；生效日相同時取 id 較新的方案。
+     * periodMonth 必須使用系統共用的 YYYY-MM 薪資月份格式。
      */
     public function findEffectiveForMonth(string $periodMonth): ?CommissionPlan
     {
@@ -77,8 +75,7 @@ class CommissionPlanService
 
         try {
             return DB::transaction(function () use ($actor, $data, $tiers) {
-                // Let a duplicate name escape so this whole plan + tiers transaction
-                // rolls back before the committed winner is checked.
+                // 名稱重複時先讓例外離開，整個方案與級距交易才會先完整回滾，再查詢勝出的資料。
                 $plan = CommissionPlan::query()->create([
                     'name' => $data['name'],
                     'effective_from' => $data['effective_from'],
@@ -104,8 +101,7 @@ class CommissionPlanService
     private function rejectRacedDuplicateNameAfterRollback(QueryException $original, string $name): never
     {
         DB::transaction(function () use ($original, $name) {
-            // Use a fresh locking read after rollback so MySQL REPEATABLE READ can
-            // observe the plan committed by the winning request.
+            // 回滾後必須在新的交易中加鎖讀取，MySQL 的 REPEATABLE READ 才看得到另一個請求已提交的方案。
             $winner = CommissionPlan::query()
                 ->where('name', $name)
                 ->lockForUpdate()

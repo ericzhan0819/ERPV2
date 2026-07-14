@@ -487,7 +487,7 @@ class MoneyEntryTest extends TestCase
                 'idempotency_key' => (string) Str::uuid(),
                 'created_at' => now(),
                 'updated_at' => now(),
-                // source_type intentionally omitted -> falls back to column default 'manual'
+                // 此段說明相鄰程式碼的用途與預期行為。
             ]);
         }
 

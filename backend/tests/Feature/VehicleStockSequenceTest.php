@@ -76,7 +76,7 @@ class VehicleStockSequenceTest extends TestCase
                 ]), $user->id);
                 $this->fail('停用帳戶應讓建車交易失敗');
             } catch (ValidationException) {
-                // Expected.
+                // 此段說明相鄰程式碼的用途與預期行為。
             }
 
             $vehicle = $service->createVehicle($this->payload('AAA-0001'), $user->id);

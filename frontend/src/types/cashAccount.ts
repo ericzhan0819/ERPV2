@@ -26,9 +26,7 @@ export interface CashAccountPayload {
   is_active: boolean
 }
 
-// Update only changes metadata; is_active can only be changed via the dedicated
-// status endpoint so a stale edit-form submission can never silently undo a
-// concurrent deactivation.
+// 一般更新只可修改帳戶資料；啟用狀態必須走專用端點，避免舊表單覆蓋並行停用。
 export interface CashAccountUpdatePayload {
   name: string
   type: CashAccountType

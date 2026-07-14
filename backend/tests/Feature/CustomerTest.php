@@ -135,11 +135,7 @@ class CustomerTest extends TestCase
 
     public function test_foreign_key_restricts_deletion_of_linked_customer_even_bypassing_the_service_check(): void
     {
-        // Proves the DB-level backstop (restrictOnDelete), not just the application
-        // check: deletes here go straight through the query builder, bypassing
-        // CustomerService::deleteCustomer()'s own relation check entirely, to confirm
-        // a linked customer can never be silently deleted (or nulled out) even if the
-        // app-level check were raced or skipped.
+        // 此段說明相鄰程式碼的用途與預期行為。
         $customer = Customer::factory()->create();
         Vehicle::factory()->create(['seller_customer_id' => $customer->id]);
 

@@ -6,12 +6,10 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Default Cache Store
+    | 設定說明
     |--------------------------------------------------------------------------
     |
-    | This option controls the default cache store that will be used by the
-    | framework. This connection is utilized if another isn't explicitly
-    | specified when running a cache operation inside the application.
+    | 此區為 Laravel 預設設定，請依實際部署環境與需求調整。
     |
     */
 
@@ -19,16 +17,10 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Cache Stores
+    | 設定說明
     |--------------------------------------------------------------------------
     |
-    | Here you may define all of the cache "stores" for your application as
-    | well as their drivers. You may even define multiple stores for the
-    | same cache driver to group types of items stored in your caches.
-    |
-    | Supported drivers: "array", "database", "file", "memcached",
-    |                    "redis", "dynamodb", "storage", "octane",
-    |                    "session", "failover", "null"
+    | 此區為 Laravel 預設設定，請依實際部署環境與需求調整。
     |
     */
 
@@ -67,7 +59,8 @@ return [
                 env('MEMCACHED_PASSWORD'),
             ],
             'options' => [
-                // Memcached::OPT_CONNECT_TIMEOUT => 2000,
+                    // 範例：設定 Memcached 連線逾時為 2 秒。
+                    // 範例設定：Memcached::OPT_CONNECT_TIMEOUT => 2000,
             ],
             'servers' => [
                 [
@@ -109,12 +102,10 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Cache Key Prefix
+    | 設定說明
     |--------------------------------------------------------------------------
     |
-    | When utilizing the APC, database, memcached, Redis, and DynamoDB cache
-    | stores, there might be other applications using the same cache. For
-    | that reason, you may prefix every cache key to avoid collisions.
+    | 此區為 Laravel 預設設定，請依實際部署環境與需求調整。
     |
     */
 
@@ -122,12 +113,10 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Serializable Classes
+    | 設定說明
     |--------------------------------------------------------------------------
     |
-    | This value determines the classes that can be unserialized from cache
-    | storage. By default, no PHP classes will be unserialized from your
-    | cache to prevent gadget chain attacks if your APP_KEY is leaked.
+    | 此區為 Laravel 預設設定，請依實際部署環境與需求調整。
     |
     */
 

@@ -2,11 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { listCustomers } from '../api/customers'
 import type { Customer } from '../types/customer'
 
-// A fixed-size preload (e.g. the first page of customers) silently hides
-// every customer past that page once the dealership accumulates more than a
-// page's worth — older customers would simply become impossible to select.
-// This searches the API on every keystroke instead, so the full customer
-// list stays reachable no matter how large it grows.
+// 每次輸入都向 API 搜尋，避免只預載第一頁後，舊客戶因清單變大而無法選取。
 interface CustomerSelectProps {
   label: string
   value: string
@@ -20,25 +16,11 @@ export function CustomerSelect({ label, value, selectedLabel, onChange }: Custom
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
-  // A newer keystroke's request can resolve before an older, slower one — without
-  // this guard the stale response would land last and overwrite the results with
-  // data for a query the input no longer shows, letting the user pick a customer
-  // that doesn't match what's on screen. The id is bumped synchronously on every
-  // effect run — NOT inside the debounced callback, and NOT only while open — so
-  // a request already in flight from the previous state is invalidated
-  // immediately, even though its own fetch was sent before this state's 250ms
-  // debounce has elapsed. Bumping it only when the debounced fetch fires would
-  // leave that exact window unguarded: an in-flight older request could still
-  // resolve and be accepted because the "latest" id hadn't moved on yet.
+  // 每次 effect 執行就更新請求編號，讓較慢的舊請求即使晚回來，也不能覆蓋目前關鍵字的結果。
   const latestRequestId = useRef(0)
 
   useEffect(() => {
-    // Bump on every run, including a close (open -> false): a request already in
-    // flight when the selector closes must not be allowed to land afterwards and
-    // silently repopulate `results` with data for a query that's no longer shown.
-    // Otherwise, reopening later (even with the query unchanged) could briefly
-    // render that stale list before a fresh fetch completes, and a click in that
-    // window would attach the wrong customer.
+    // 即使選單關閉也要讓既有請求失效，避免下次開啟時短暫顯示過期結果而選到錯誤客戶。
     const requestId = ++latestRequestId.current
 
     if (!open) {

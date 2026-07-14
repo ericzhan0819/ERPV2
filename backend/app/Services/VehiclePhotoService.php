@@ -394,7 +394,7 @@ class VehiclePhotoService
         // 若不鎖，這次呼叫跟另一個幾乎同時抵達、對同一批照片做 replay 的並發請求
         // 可能都在對方插入之前完成查詢、都判斷「還沒有紀錄」，最終各自补插入一筆
         // 重複的 created 稽核紀錄（Codex stop-time review 指出：concurrent replay
-        // can duplicate upload audit backfills）。
+    // 可能重複補寫上傳稽核紀錄）。
         DB::transaction(function () use ($vehicle, $result) {
             Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
             $this->auditLogMissingUploadEvents($result);

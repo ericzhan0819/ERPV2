@@ -74,9 +74,7 @@ class VehicleTest extends TestCase
             'model' => 'Camry',
             'license_plate' => 'ABC-1234',
             'seller_customer_id' => $customer->id,
-            // Deliberately mismatched free-text values: the customer link must win,
-            // otherwise the vehicle record could point at one customer while
-            // displaying a different name/phone for the seller.
+            // 此段說明相鄰程式碼的用途與預期行為。
             'seller_name' => '不一致的名字',
             'seller_phone' => '0999999999',
             'idempotency_key' => (string) Str::uuid(),
@@ -115,9 +113,7 @@ class VehicleTest extends TestCase
 
     public function test_updating_a_linked_vehicle_without_touching_seller_customer_id_does_not_desync_snapshot(): void
     {
-        // A request that never mentions seller_customer_id (as opposed to explicitly
-        // clearing it to null) must not let free-text seller_name/phone silently
-        // drift away from the customer the vehicle is still linked to.
+        // 此段說明相鄰程式碼的用途與預期行為。
         $user = User::factory()->create(['is_active' => true]);
         $customer = Customer::factory()->create(['name' => '已連結客戶', 'phone' => '0933333333']);
         $vehicle = Vehicle::factory()->create([
@@ -130,7 +126,7 @@ class VehicleTest extends TestCase
             'brand' => $vehicle->brand,
             'model' => $vehicle->model,
             'license_plate' => $vehicle->license_plate,
-            // seller_customer_id intentionally omitted entirely.
+            // 此段說明相鄰程式碼的用途與預期行為。
             'seller_name' => '不同的名字',
             'seller_phone' => '0900000001',
         ]);
@@ -150,10 +146,7 @@ class VehicleTest extends TestCase
 
     public function test_unrelated_vehicle_update_does_not_pull_in_the_customers_current_data(): void
     {
-        // The seller snapshot is captured at link time and must stay frozen even
-        // after the linked customer is later renamed — an update to a completely
-        // unrelated vehicle field (here: mileage) must not become a side channel
-        // for the customer's current data to retroactively overwrite history.
+        // 此段說明相鄰程式碼的用途與預期行為。
         $user = User::factory()->create(['is_active' => true]);
         $customer = Customer::factory()->create(['name' => '原始姓名', 'phone' => '0911111111']);
         $vehicle = Vehicle::factory()->create([
@@ -170,8 +163,7 @@ class VehicleTest extends TestCase
             'model' => $vehicle->model,
             'license_plate' => $vehicle->license_plate,
             'mileage_km' => 12000,
-            // seller_customer_id and seller_name/seller_phone are all omitted —
-            // this update has nothing to do with the seller.
+            // 此段說明相鄰程式碼的用途與預期行為。
         ]);
 
         $response->assertOk();
@@ -190,8 +182,7 @@ class VehicleTest extends TestCase
 
     public function test_updating_a_linked_vehicle_can_explicitly_unlink_the_customer(): void
     {
-        // Explicitly sending seller_customer_id = null is a deliberate unlink, unlike
-        // omitting the field — the caller's free-text seller_name/phone must apply.
+        // 此段說明相鄰程式碼的用途與預期行為。
         $user = User::factory()->create(['is_active' => true]);
         $customer = Customer::factory()->create(['name' => '原客戶', 'phone' => '0944444444']);
         $vehicle = Vehicle::factory()->create([

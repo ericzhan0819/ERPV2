@@ -24,9 +24,7 @@ export interface UserPayload {
   notes?: string | null
 }
 
-// Update only changes metadata; is_active and role can only be changed via
-// their dedicated endpoints so a stale edit-form submission can never silently
-// undo a concurrent deactivation or re-grant/revoke a role.
+// 一般更新只可修改基本資料；啟用狀態與角色必須走專用端點，避免舊表單覆蓋並行變更。
 export interface UserUpdatePayload {
   name: string
   email: string

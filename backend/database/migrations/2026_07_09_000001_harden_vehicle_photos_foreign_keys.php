@@ -5,38 +5,18 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-// Forward-only fix: environments that already ran 2026_07_09_000000 recorded it in
-// migrations and will never re-run its (edited) body. This migration corrects the
-// live schema instead: vehicle_id was CASCADE (a vehicle delete could silently wipe
-// photo rows before storage cleanup) and uploaded_by was nullable + SET NULL (a user
-// delete could erase photo upload attribution). Both are hardened to RESTRICT, matching
-// the app-level guards added in VehicleService::deleteVehicle() and UserService::deleteUser().
+// 此為 forward-only 修正：已執行舊 migration 的環境不會重跑原內容，因此在此修正實際 schema。
+// vehicle_id 原本使用 CASCADE，刪車可能在清理檔案前刪掉照片列；uploaded_by 原本可為 NULL 且
+// 使用 SET NULL，刪使用者會失去上傳歸屬。兩者都改為 RESTRICT，與服務層保護規則一致。
 //
-// Whichever columns need fixing (drop the old FK, adjust nullability if needed,
-// add the new FK) are all issued together as ONE combined ALTER TABLE statement
-// per up()/down() call — not one statement per column, and not a sequence of
-// separate statements. A single ALTER TABLE statement is atomic in InnoDB — it
-// either fully applies or fully rolls back — so there is never a window where a
-// column's old FK has been dropped but the new one hasn't landed yet, AND there is
-// no second DDL statement whose safety would depend on a lock surviving between
-// two ALTERs: in the common case (both columns need hardening on first run),
-// there is exactly one ALTER TABLE for the whole method. Verified directly:
-// forcing a combined statement to fail (e.g. a duplicate constraint name) left
-// every column's original FK completely untouched.
+// 每次 up()/down() 將所有必要調整合成一條 ALTER TABLE，而非分欄位執行。InnoDB 的單一 ALTER
+// 是原子操作，會完整套用或完整回滾，不會出現已移除舊外鍵、卻尚未加入新外鍵的空窗。
 //
-// MariaDB will not let a single statement DROP and ADD a FOREIGN KEY under the same
-// constraint name (errno 121, duplicate key), so the RESTRICT-hardened constraint
-// uses a distinct name (suffixed "_restrict") from the original Laravel-convention
-// name. currentForeignKey() below looks up the FK by column, not by name, so this
-// naming detail doesn't affect idempotency, rerun-safety, or the equally-atomic
-// down() path back to the original name.
+// MariaDB 不能在同一條指令用相同名稱刪除後再新增外鍵，因此強化版外鍵加上 _restrict 後綴。
+// currentForeignKey() 依欄位查詢外鍵，名稱差異不影響重跑安全性或 down() 的原子性。
 //
-// The whole check-then-alter sequence for each column is additionally wrapped in an
-// explicit table lock (vehicle_photos WRITE, vehicles/users READ) as defense in
-// depth against a concurrent write between the "is this already correct" check and
-// the ALTER — reducing spurious failures under real concurrent load — but the core
-// safety property (never left without adequate FK protection) no longer depends on
-// the lock: it comes from the ALTER TABLE statement's own atomicity.
+// 檢查後再調整的整段流程另以資料表鎖保護，降低並行寫入造成的偶發失敗；核心安全性仍來自
+// 單一 ALTER TABLE 的原子性，而非依賴鎖在多條 DDL 之間持續存在。
 return new class extends Migration
 {
     private const TABLE = 'vehicle_photos';
@@ -48,9 +28,8 @@ return new class extends Migration
             $this->assertNoOrphanedForeignKeyValues('vehicle_id', 'vehicles');
             $this->assertNoOrphanedForeignKeyValues('uploaded_by', 'users');
 
-            // SQLite has no incremental ALTER TABLE for constraints: Laravel recreates
-            // the whole table under one transaction per Schema::table() call, so this
-            // is already atomic and doesn't need the raw-SQL approach below.
+            // SQLite 無法逐步修改外鍵；Laravel 每次 Schema::table() 都在交易中重建整張表，
+            // 已具原子性，因此不需要下方 MySQL/MariaDB 的原生 SQL 作法。
             Schema::table(self::TABLE, function (Blueprint $table) {
                 $table->dropForeign(['vehicle_id']);
                 $table->dropForeign(['uploaded_by']);
@@ -69,13 +48,8 @@ return new class extends Migration
             $vehicleIdNeedsFix = ! $this->isForeignKeyCorrect('vehicle_id', 'vehicles', 'RESTRICT');
             $uploadedByNeedsFix = ! $this->isForeignKeyCorrect('uploaded_by', 'users', 'RESTRICT') || $this->columnIsNullable('uploaded_by');
 
-            // Fail fast: validate every precondition for BOTH columns that need
-            // fixing before performing DDL for either one. Without this, a run
-            // that's already doomed to fail on known-bad uploaded_by data would
-            // still apply a real, unrelated fix to vehicle_id first, only to
-            // abort on uploaded_by afterwards: a needless partial application of
-            // a migration that could never have fully succeeded in the first
-            // place.
+            // 先驗證兩欄的所有前提，再執行任一 DDL。若 uploaded_by 已知無法修正，
+            // 就不應先修改無關的 vehicle_id，避免不可能完整成功的 migration 留下部分結果。
             if ($vehicleIdNeedsFix) {
                 $this->assertNoOrphanedForeignKeyValues('vehicle_id', 'vehicles');
             }
@@ -106,11 +80,7 @@ return new class extends Migration
                 ];
             }
 
-            // Both fixes (when both are needed, the common first-run case) are
-            // issued as ONE combined ALTER TABLE statement, not two sequential
-            // ones — see replaceForeignKeysAtomically(). This removes any
-            // dependency on a table lock surviving across multiple DDL
-            // statements: there is at most one ALTER TABLE for the whole method.
+            // 兩項修正合成一條 ALTER TABLE，不依賴資料表鎖跨越多條 DDL；整個方法最多只會執行一條。
             $this->replaceForeignKeysAtomically($fixes);
         });
     }
@@ -136,8 +106,7 @@ return new class extends Migration
             $vehicleIdNeedsFix = ! $this->isForeignKeyCorrect('vehicle_id', 'vehicles', 'CASCADE');
             $uploadedByNeedsFix = ! $this->isForeignKeyCorrect('uploaded_by', 'users', 'SET NULL') || ! $this->columnIsNullable('uploaded_by');
 
-            // Same fail-fast discipline as up(): validate both columns before
-            // touching either, so a doomed run never partially applies.
+            // 與 up() 相同，先驗證兩欄再修改，避免必定失敗的回滾只完成一部分。
             if ($vehicleIdNeedsFix) {
                 $this->assertNoOrphanedForeignKeyValues('vehicle_id', 'vehicles');
             }
@@ -167,8 +136,7 @@ return new class extends Migration
                 ];
             }
 
-            // Same single-combined-statement discipline as up(): at most one
-            // ALTER TABLE for the whole rollback.
+            // 與 up() 相同，整個回滾最多只會執行一條合併的 ALTER TABLE。
             $this->replaceForeignKeysAtomically($fixes);
         });
     }
@@ -179,21 +147,8 @@ return new class extends Migration
     }
 
     /**
-     * Hold vehicle_photos WRITE + vehicles/users READ for the duration of
-     * $callback. Defense in depth only (see class-level comment): reduces spurious
-     * failures under real concurrent load by serializing writes around the
-     * check-then-alter sequence, but the core "never left without adequate FK
-     * protection" guarantee comes from replaceForeignKeysAtomically()'s use of a
-     * single atomic ALTER TABLE statement per call, not from this lock — and
-     * because that method combines every column that needs fixing into that one
-     * statement, up()/down() never issue more than one ALTER TABLE each, so there
-     * is no second DDL statement whose safety would depend on this lock spanning
-     * multiple ALTERs in the first place.
-     *
-     * Verified against a live MariaDB 10.11.18 server (this project's actual DB):
-     * a second connection's INSERT into vehicle_photos blocks while this lock is
-     * held and hits lock_wait_timeout, for the duration of a combined multi-column
-     * ALTER TABLE statement.
+     * 執行 callback 期間鎖住 vehicle_photos 的寫入及 vehicles/users 的讀取，讓檢查與調整
+     * 不會被並行寫入打斷。此鎖只是額外保護；真正保證外鍵不會短暫失效的是單一原子 ALTER TABLE。
      */
     private function withTableLock(\Closure $callback): void
     {
@@ -216,33 +171,11 @@ return new class extends Migration
     }
 
     /**
-     * Replace whatever FK currently exists on each fixed column (if any) with a new
-     * one, all in a SINGLE ALTER TABLE statement combining every column's DROP
-     * FOREIGN KEY, optional nullability change, and ADD CONSTRAINT clause. This is
-     * what actually removes the "does the table lock survive across multiple ALTER
-     * TABLE statements" question for the common case where both vehicle_id and
-     * uploaded_by need fixing: there is only ever at most one ALTER TABLE per
-     * up()/down() call, so there's no second statement for a released lock (were
-     * it ever released, which separate testing shows it isn't) to matter for.
+     * 將每個需要修正欄位的舊外鍵、可選的 NULL 調整及新外鍵合併在一條 ALTER TABLE 中。
+     * InnoDB 會將整條指令原子執行：任何子項失敗都完整回滾，不會只套用部分欄位。
      *
-     * InnoDB executes one ALTER TABLE statement, however many clauses it has, as
-     * one atomic operation: it either fully lands or fully rolls back, leaving
-     * every listed column exactly as it was before if anything in it fails —
-     * there's no partial-application state where some columns' fixes landed and
-     * others didn't.
-     *
-     * Each $fixes entry is ['column', 'referencedTable', 'newConstraintName',
-     * 'onDeleteClause', 'modifyColumnClause'? ]. newConstraintName is a fixed,
-     * deliberately-chosen name per call site, but the CURRENT constraint's actual
-     * name isn't guaranteed to differ from it: earlier revisions of this same
-     * migration (and the SQLite code path above, which lets Laravel's Blueprint
-     * pick its own default name) hardened columns using Laravel's plain default
-     * naming convention rather than this file's current suffixed names. If an
-     * environment's column was hardened by one of those, its current name can
-     * collide with the desired new name. MariaDB rejects a single statement that
-     * DROPs and ADDs a FOREIGN KEY under the identical name (errno 121, duplicate
-     * key) — so detect that collision per column and disambiguate at runtime
-     * rather than assuming it never happens.
+     * 若既有外鍵名稱剛好與要新增的名稱相同，MariaDB 無法在同一條指令內先刪再加同名外鍵，
+     * 因此執行時加上隨機後綴避開衝突。
      */
     private function replaceForeignKeysAtomically(array $fixes): void
     {
@@ -284,13 +217,8 @@ return new class extends Migration
     }
 
     /**
-     * MySQL/MariaDB validates ALL existing rows against the referenced table when
-     * adding a foreign key, regardless of its ON DELETE action — so a row whose
-     * $column value doesn't match any id in $referencedTable would make the ADD
-     * FOREIGN KEY clause in replaceForeignKeyAtomically() fail (and, per that
-     * method's atomicity, the whole combined ALTER TABLE statement fails cleanly
-     * with $column untouched). Catching that here first gives a clear, business-
-     * readable error instead of a raw constraint-violation message.
+     * MySQL/MariaDB 新增外鍵時會檢查所有既有資料，與 ON DELETE 規則無關。若 $column 指向的
+     * $referencedTable 資料不存在，整條 ALTER TABLE 會失敗；先在這裡檢查可回傳清楚訊息。
      */
     private function assertNoOrphanedForeignKeyValues(string $column, string $referencedTable): void
     {

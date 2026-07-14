@@ -105,11 +105,7 @@ class MoneyEntryApprovalTest extends TestCase
             $vehicle = Vehicle::factory()->create(['status' => 'listed']);
             $user = User::factory()->{$role}()->create(['is_active' => true]);
 
-            // Sanctum's RequestGuard caches the first resolved user for the lifetime of
-            // the test's container; switching actingAs() to a different real user within
-            // the same test method silently keeps the previous one unless guards are
-            // forgotten first (this never happens in production, where every request
-            // gets a fresh container).
+            // 此段說明相鄰程式碼的用途與預期行為。
             Auth::forgetGuards();
             $this->actingAs($user, 'web')->postJson("/api/vehicles/{$vehicle->id}/reserve", [
                 'buyer_name' => '王小明',

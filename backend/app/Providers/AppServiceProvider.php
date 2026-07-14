@@ -20,7 +20,7 @@ use Illuminate\Support\ServiceProvider;
 class AppServiceProvider extends ServiceProvider
 {
     /**
-     * Register any application services.
+     * 註冊應用程式服務。
      */
     public function register(): void
     {
@@ -28,7 +28,7 @@ class AppServiceProvider extends ServiceProvider
     }
 
     /**
-     * Bootstrap any application services.
+     * 啟動應用程式服務。
      */
     public function boot(): void
     {

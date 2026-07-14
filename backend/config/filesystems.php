@@ -4,12 +4,10 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Default Filesystem Disk
+    | 設定說明
     |--------------------------------------------------------------------------
     |
-    | Here you may specify the default filesystem disk that should be used
-    | by the framework. The "local" disk, as well as a variety of cloud
-    | based disks are available to your application for file storage.
+    | 此區為 Laravel 預設設定，請依實際部署環境與需求調整。
     |
     */
 
@@ -17,14 +15,10 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Filesystem Disks
+    | 設定說明
     |--------------------------------------------------------------------------
     |
-    | Below you may configure as many filesystem disks as necessary, and you
-    | may even configure multiple disks for the same driver. Examples for
-    | most supported storage drivers are configured here for reference.
-    |
-    | Supported drivers: "local", "ftp", "sftp", "s3"
+    | 此區為 Laravel 預設設定，請依實際部署環境與需求調整。
     |
     */
 
@@ -64,12 +58,10 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Symbolic Links
+    | 設定說明
     |--------------------------------------------------------------------------
     |
-    | Here you may configure the symbolic links that will be created when the
-    | `storage:link` Artisan command is executed. The array keys should be
-    | the locations of the links and the values should be their targets.
+    | 此區為 Laravel 預設設定，請依實際部署環境與需求調整。
     |
     */
 

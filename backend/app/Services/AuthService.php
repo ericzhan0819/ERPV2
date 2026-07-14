@@ -35,15 +35,13 @@ class AuthService
         $limiters = $this->limiters($email);
         [$ipKey, $maxIpAttempts, $ipDecaySeconds] = $limiters['ip'];
 
-        // The IP-wide limiter only ever counts failed logins, so it is safe to
-        // admission-check it read-only here without reserving an attempt.
+        // IP 的總限制只計登入失敗次數，所以這裡只讀取是否超限，不會先占用一次額度。
         if (RateLimiter::tooManyAttempts($ipKey, $maxIpAttempts)) {
             throw new TooManyLoginAttemptsException(RateLimiter::availableIn($ipKey));
         }
 
-        // Reserve (hit-then-admit) the email+IP and account attempts before calling
-        // Auth::attempt, so concurrent requests can't all read "under the limit"
-        // and slip through before any of them records a hit.
+        // 呼叫 Auth::attempt 前，先把帳號加 IP 與帳號本身的額度各記一次。
+        // 這樣多個請求同時進來時，不會都先看到「尚未超限」而一起通過。
         foreach (['email_ip', 'account'] as $name) {
             [$key, $maxAttempts, $decaySeconds] = $limiters[$name];
 
@@ -75,7 +73,7 @@ class AuthService
         try {
             $this->auditLogService->recordAuthentication('login', $user);
         } catch (Throwable $e) {
-            // A successful session must not survive if its login cannot be audited.
+            // 無法留下登入稽核紀錄時，不可保留已登入的工作階段。
             Auth::guard('web')->logout();
             request()->session()->invalidate();
             request()->session()->regenerateToken();
@@ -102,8 +100,7 @@ class AuthService
     }
 
     /**
-     * Idempotent: safe to call repeatedly (e.g. client retries after a lost
-     * response) whether or not a session is currently authenticated.
+     * 可重複安全呼叫：即使使用者已登出，或用戶端因未收到回應而重試，也不會出錯。
      */
     public function logout(): void
     {
@@ -114,8 +111,7 @@ class AuthService
                 $this->auditLogService->recordAuthentication('logout', $user);
             }
         } finally {
-            // Logout remains security-first: even if audit persistence fails, the
-            // authenticated session is always invalidated before the error escapes.
+            // 登出以安全為優先：就算稽核紀錄寫入失敗，也一定先讓登入工作階段失效。
             if (Auth::guard('web')->check()) {
                 Auth::guard('web')->logout();
             }

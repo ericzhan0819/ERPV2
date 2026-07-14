@@ -9,9 +9,7 @@ class DatabaseSeeder extends Seeder
 {
     use WithoutModelEvents;
 
-    /**
-     * Seed the application's database.
-     */
+    /** 此段說明相鄰程式碼的用途與預期行為。 */
     public function run(): void
     {
         $this->call([

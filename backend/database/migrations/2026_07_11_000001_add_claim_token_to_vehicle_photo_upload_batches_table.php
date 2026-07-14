@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Schema;
 // fencing 條件——只有 token 相符（代表呼叫端此刻仍然是真正的擁有者）才會真的寫入，
 // 一旦被取代（token 已經換過），寫入會影響 0 筆，呼叫端必須偵測到這件事並停止繼續
 // 動這個 batch（見 VehiclePhotoService::applyBatchUpdateIfOwned() /
-// uploadPhotos()）。
+// 此段說明相鄰程式碼的用途與預期行為。
 return new class extends Migration
 {
     public function up(): void

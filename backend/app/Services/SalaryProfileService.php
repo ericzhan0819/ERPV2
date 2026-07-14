@@ -32,9 +32,8 @@ class SalaryProfileService
     {
         try {
             return DB::transaction(function () use ($actor, $user, $data) {
-                // Keep the same child-then-parent lock order as UserService::deleteUser().
-                // On a first insert there may be no child row to lock, so the unique
-                // user_id constraint remains the final arbiter for concurrent creates.
+                // 與 UserService::deleteUser() 一樣先鎖子資料再鎖父資料。首次新增時可能沒有
+                // 子資料可鎖，因此並行建立的最後判斷仍由 user_id 的唯一限制負責。
                 $profile = SalaryProfile::query()
                     ->where('user_id', $user->id)
                     ->lockForUpdate()
@@ -51,8 +50,7 @@ class SalaryProfileService
                     $changedFields = $profile->exists
                         ? array_keys($profile->getDirty())
                         : array_keys($profile->getAttributes());
-                    // Let a duplicate-key QueryException escape this closure so the
-                    // transaction fully rolls back before the winner is re-read.
+                    // 讓重複鍵例外離開此閉包，交易完整回滾後才能重新讀取勝出的資料。
                     $profile->save();
                     $this->auditLogService->recordSalaryProfileChange($profile, $action, $changedFields, $actor);
                 }
@@ -75,9 +73,8 @@ class SalaryProfileService
         array $data,
     ): SalaryProfile {
         return DB::transaction(function () use ($original, $user, $data) {
-            // This must be a fresh transaction/locking read. Reusing the failed
-            // transaction could retain an old MySQL REPEATABLE READ snapshot and
-            // incorrectly miss the committed winner.
+            // 必須使用新的交易與加鎖讀取。重用失敗交易可能保留 MySQL REPEATABLE READ 的舊快照，
+            // 而誤漏已提交的勝出資料。
             $winner = SalaryProfile::query()
                 ->where('user_id', $user->id)
                 ->lockForUpdate()

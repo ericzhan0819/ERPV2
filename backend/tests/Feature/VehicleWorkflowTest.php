@@ -349,9 +349,7 @@ class VehicleWorkflowTest extends TestCase
 
         $response = $this->actingAs($user, 'web')
             ->postJson("/api/vehicles/{$vehicle->id}/reserve", [
-                // Deliberately mismatched free-text values: the customer link must
-                // win, so the vehicle's buyer snapshot always matches the customer
-                // it is actually linked to.
+                // 此段說明相鄰程式碼的用途與預期行為。
                 'buyer_name' => '不一致的名字',
                 'buyer_phone' => '0999999999',
                 'buyer_customer_id' => $customer->id,
@@ -652,10 +650,7 @@ class VehicleWorkflowTest extends TestCase
 
     public function test_final_payment_replays_when_retry_omits_entry_date_even_though_first_call_set_it(): void
     {
-        // New semantics: omitting entry_date on retry means "replay whatever date was
-        // originally stored", not "change the date to null/today". Only an explicitly
-        // supplied, mismatching entry_date should be rejected (see the "different date
-        // explicitly supplied" test below).
+        // 此段說明相鄰程式碼的用途與預期行為。
         $user = User::factory()->admin()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
         $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
@@ -877,14 +872,7 @@ class VehicleWorkflowTest extends TestCase
         }
     }
 
-    /**
-     * Covers only the duplicate-key error recovery path (rollback -> fresh read -> replay),
-     * driven by injecting a duplicate insert before save() that is committed independently
-     * of the current (losing) transaction — simulating a concurrent request that already
-     * committed its winning row. It does NOT exercise the MySQL REPEATABLE READ
-     * stale-snapshot scenario, since SQLite has no second connection/transaction to race
-     * against — see the MySQL-only test below for that.
-     */
+    /** 此段說明相鄰程式碼的用途與預期行為。 */
     public function test_final_payment_replays_after_duplicate_key_error_from_same_connection_insert(): void
     {
         $user = User::factory()->admin()->create(['is_active' => true]);
@@ -906,11 +894,7 @@ class VehicleWorkflowTest extends TestCase
 
             $raced = true;
 
-            // Commit the currently-open transaction early so the "winning" insert below is
-            // durable and survives the rollback that will happen once this request's own
-            // insert fails on the unique constraint, then reopen a transaction so the rest
-            // of the current call proceeds as normal. This mimics a genuinely concurrent
-            // request that committed before our insert executed.
+            // 此段說明相鄰程式碼的用途與預期行為。
             DB::commit();
 
             DB::table('money_entries')->insert([
@@ -947,28 +931,7 @@ class VehicleWorkflowTest extends TestCase
             ->count());
     }
 
-    /**
-     * MySQL-only: reproduces the REPEATABLE READ stale-snapshot problem that the SQLite
-     * duplicate-key test above cannot reach (SQLite has no second connection/transaction
-     * to race against). Uses two independent DB connections against a real MySQL instance
-     * and explicit transaction ordering as a deterministic barrier (no sleep, no forking):
-     *
-     *  1. Connection B opens a transaction and takes its REPEATABLE READ snapshot by
-     *     reading for the idempotency_key (finds nothing yet).
-     *  2. Connection A (the default connection, i.e. what the real request/service uses)
-     *     runs the actual recordFinalPayment() call end-to-end and commits the winning row.
-     *  3. We assert B's still-open transaction cannot see A's committed row — this is the
-     *     exact staleness that made the old "re-SELECT inside the same transaction" recovery
-     *     path broken in production.
-     *  4. After rolling B back and re-reading, the row becomes visible — this is what
-     *     VehicleService::replayRacedFinalPaymentAfterRollback() relies on: rollback the
-     *     failed transaction, then do a fresh read in a new transaction.
-     *
-     * This suite runs under SQLite by default (see phpunit.xml), so this test is skipped
-     * unless it is executed against a real MySQL connection, e.g.:
-     *   DB_CONNECTION=mysql DB_DATABASE=erpv2_testing php artisan test --filter=mysql_repeatable_read
-     * Point DB_DATABASE at a disposable schema — do not run this against a shared dev database.
-     */
+    /** 此段說明相鄰程式碼的用途與預期行為。 */
     public function test_final_payment_replay_survives_mysql_repeatable_read_stale_snapshot_across_two_connections(): void
     {
         $this->markTestSkipped('Replaced by VehicleFinalPaymentMysqlConcurrencyTest, which runs a committed two-process duplicate-key race without RefreshDatabase.');

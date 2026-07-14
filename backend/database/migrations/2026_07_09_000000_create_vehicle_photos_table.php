@@ -24,10 +24,7 @@ return new class extends Migration
             $table->foreignId('uploaded_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
-            // Generated column: only holds vehicle_id when is_cover=true, else NULL.
-            // A unique index on this column enforces "at most one cover photo per vehicle"
-            // at the database level (NULLs are not compared as equal, so non-cover rows
-            // never collide), safely across concurrent connections on MySQL/MariaDB/SQLite.
+            // 此段說明相鄰程式碼的用途與預期行為。
             $table->unsignedBigInteger('cover_slot')
                 ->virtualAs('CASE WHEN is_cover = 1 THEN vehicle_id ELSE NULL END')
                 ->nullable();
