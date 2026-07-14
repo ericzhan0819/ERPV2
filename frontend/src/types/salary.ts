@@ -33,7 +33,8 @@ export interface SalarySettlement {
 export interface SalaryTotals {
   purchase_bonus_total: number; sales_bonus_total: number; manual_addition_total: number
   manual_deduction_total: number; gross_pay: number; deduction_total: number; net_pay: number
-  company_reserve_total: number; company_remaining_total: number
+  company_reserve_total: number | null; company_remaining_total: number | null
+  company_totals_available: boolean
 }
 export interface SalaryAnomaly {
   vehicle_id: number; stock_no: string; code: string; field: string; message: string

@@ -5,6 +5,7 @@ import type { DashboardSummary } from '../types/dashboard'
 import { useAuth } from '../hooks/useAuth'
 import { canManageVehicles, canRunSalesFlow, canViewFinancials } from '../utils/permissions'
 import { listSalaryPeriods } from '../api/salaryPeriods'
+import type { SalaryPeriodListItem } from '../types/salary'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
@@ -43,7 +44,8 @@ export function Dashboard() {
   const canRunSales = canRunSalesFlow(user?.role)
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [monthlySalary, setMonthlySalary] = useState<number | null>(null)
+  const [currentSalaryPeriod, setCurrentSalaryPeriod] = useState<SalaryPeriodListItem | null | undefined>(undefined)
+  const [salaryError, setSalaryError] = useState(false)
 
   useEffect(() => {
     getDashboardSummary()
@@ -54,7 +56,10 @@ export function Dashboard() {
   useEffect(() => {
     if (user?.role !== 'admin') return
     const currentMonth = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' }).slice(0, 7)
-    listSalaryPeriods().then((periods) => setMonthlySalary(periods.find((period) => period.period_month === currentMonth)?.net_pay_total ?? null)).catch(() => {})
+    setSalaryError(false)
+    listSalaryPeriods()
+      .then((periods) => setCurrentSalaryPeriod(periods.find((period) => period.period_month === currentMonth) ?? null))
+      .catch(() => setSalaryError(true))
   }, [user?.role])
 
   if (error) {
@@ -94,7 +99,22 @@ export function Dashboard() {
         {canViewFinance && summary.monthly_net_flow !== undefined && (
           <Card label="本月淨流入" value={formatCurrency(summary.monthly_net_flow)} />
         )}
-        {user?.role === 'admin' && monthlySalary !== null && <Card label="本月預估薪資" value={formatCurrency(monthlySalary)} />}
+        {user?.role === 'admin' && (
+          <Card
+            label={currentSalaryPeriod?.status === 'paid'
+              ? '本月實發薪資'
+              : currentSalaryPeriod?.status === 'confirmed'
+                ? '本月已確認薪資'
+                : '本月預估薪資'}
+            value={salaryError
+              ? '載入失敗'
+              : currentSalaryPeriod === undefined
+                ? '載入中...'
+                : currentSalaryPeriod === null
+                  ? '尚未建立'
+                  : formatCurrency(currentSalaryPeriod.net_pay_total)}
+          />
+        )}
         <Card label="本月成交台數" value={`${summary.monthly_sold_count} 台`} />
         <Card label="整備中車輛" value={`${summary.vehicle_counts.preparing} 台`} />
         <Card label="上架中車輛" value={`${summary.vehicle_counts.listed} 台`} />

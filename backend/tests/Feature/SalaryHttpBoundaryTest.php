@@ -244,6 +244,30 @@ class SalaryHttpBoundaryTest extends TestCase
         $this->assertArrayNotHasKey('settlements', $list);
     }
 
+    public function test_company_totals_include_eligible_vehicle_when_both_agents_have_no_active_salary_profile(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $agentWithoutProfile = User::factory()->sales()->create(['is_active' => true]);
+        $this->plan($admin);
+        $this->validVehicle($agentWithoutProfile);
+
+        $service = app(SalaryPeriodService::class);
+        $draft = $service->createDraft($admin, '2026-06');
+        $draftData = $this->resourceData(new SalaryPeriodResource($draft), $admin);
+
+        $this->assertFalse($draftData['has_blocking_issues']);
+        $this->assertSame([], $draftData['settlements']);
+        $this->assertSame(20000, $draftData['totals']['company_reserve_total']);
+        $this->assertSame(30000, $draftData['totals']['company_remaining_total']);
+        $this->assertTrue($draftData['totals']['company_totals_available']);
+
+        $confirmed = $service->confirm($admin, $draft);
+        $confirmedData = $this->resourceData(new SalaryPeriodResource($confirmed), $admin);
+        $this->assertSame('confirmed', $confirmedData['status']);
+        $this->assertSame(20000, $confirmedData['totals']['company_reserve_total']);
+        $this->assertSame(30000, $confirmedData['totals']['company_remaining_total']);
+    }
+
     public function test_paid_period_service_result_contains_resource_actor_account_and_vehicle_relations(): void
     {
         $admin = User::factory()->admin()->create(['is_active' => true]);

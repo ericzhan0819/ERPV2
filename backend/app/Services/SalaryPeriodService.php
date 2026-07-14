@@ -356,6 +356,10 @@ final class SalaryPeriodService
             $eligibility['eligible_vehicles'],
             $enabledAgentIds,
         );
+        $period->forceFill([
+            'company_reserve_total' => $calculation['totals']['company_reserve'],
+            'company_remaining_total' => $calculation['totals']['company_remaining'],
+        ])->save();
 
         foreach ($settlements as $userId => $settlement) {
             $profile = $profiles->get($userId);

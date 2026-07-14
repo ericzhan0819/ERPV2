@@ -13,6 +13,8 @@ use Illuminate\Support\Carbon;
     'period_month',
     'commission_plan_id',
     'status',
+    'company_reserve_total',
+    'company_remaining_total',
     'created_by',
     'confirmed_by',
     'confirmed_at',
@@ -35,6 +37,8 @@ class SalaryPeriod extends Model
     protected function casts(): array
     {
         return [
+            'company_reserve_total' => 'integer',
+            'company_remaining_total' => 'integer',
             'confirmed_at' => 'datetime',
             'paid_at' => 'datetime',
             'payment_date' => 'date',

@@ -34,7 +34,8 @@ class SalaryFoundationSchemaTest extends TestCase
                 'sort_order', 'created_at', 'updated_at',
             ],
             'salary_periods' => [
-                'id', 'period_month', 'commission_plan_id', 'status', 'created_by',
+                'id', 'period_month', 'commission_plan_id', 'status',
+                'company_reserve_total', 'company_remaining_total', 'created_by',
                 'confirmed_by', 'confirmed_at', 'paid_by', 'paid_at', 'payment_date',
                 'cash_account_id', 'idempotency_key', 'created_at', 'updated_at',
             ],
