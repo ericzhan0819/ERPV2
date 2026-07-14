@@ -7,7 +7,9 @@ use App\Models\CashAccount;
 use App\Models\CommissionPlan;
 use App\Models\Customer;
 use App\Models\MoneyEntry;
+use App\Models\SalaryPeriod;
 use App\Models\SalaryProfile;
+use App\Models\SalarySettlementItem;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehiclePhoto;
@@ -180,6 +182,42 @@ class AuditLogService
                 'effective_from' => $plan->effective_from->toDateString(),
                 'is_active' => $plan->is_active,
                 'tier_count' => $plan->tiers()->count(),
+            ],
+            actor: $actor,
+        );
+    }
+
+    public function recordSalaryPeriodAction(SalaryPeriod $period, string $action, string $operation, User $actor): AuditLog
+    {
+        return $this->record(
+            action: $action,
+            subjectType: 'salary_period',
+            subjectId: $period->id,
+            subjectLabel: '薪資月份：'.$period->period_month->format('Y-m'),
+            afterValues: [
+                'period_month' => $period->period_month->format('Y-m'),
+                'operation' => $operation,
+                'status' => $period->status,
+            ],
+            actor: $actor,
+        );
+    }
+
+    public function recordSalaryAdjustmentAction(
+        SalaryPeriod $period,
+        SalarySettlementItem $item,
+        string $action,
+        User $actor,
+    ): AuditLog {
+        return $this->record(
+            action: $action,
+            subjectType: 'salary_settlement_item',
+            subjectId: $item->id,
+            subjectLabel: '薪資手動加扣項：'.$period->period_month->format('Y-m'),
+            afterValues: [
+                'salary_period_id' => $period->id,
+                'salary_settlement_id' => $item->salary_settlement_id,
+                'type' => $item->type,
             ],
             actor: $actor,
         );

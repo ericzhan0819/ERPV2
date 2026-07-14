@@ -348,7 +348,7 @@ v1.3 已鎖定為「薪資結算」，不是完整 HR。核心規則：
 
 v1.3 另包含底薪、固定津貼、勞保扣款、健保扣款、手動加扣項、每月草稿／確認／發薪，以及發薪後自動建立 `薪資 / 佣金` Money Entry。
 
-v1.3 第 1～6 部分已補齊：
+v1.3 第 1～7 部分已補齊：
 
 - `salary_profiles`、`commission_plans`／`commission_plan_tiers`、`salary_periods`、`salary_settlements`、`salary_settlement_items`。
 - Vehicle 正式 `purchase_agent_id`／`sales_agent_id`，歷史資料保持空值，不做 heuristic backfill。
@@ -383,13 +383,17 @@ v1.3 第 1～6 部分已補齊：
 - 本月候選車不因異常被靜默丟棄；結果保留車號、問題碼、業務可讀訊息與前端可映射的修正動作代碼，不在後端 Service 硬寫 SPA 路徑。草稿可顯示異常，確認流程以 422 fail-closed。
 - `assertPeriodEligible()` 是月份確認唯一入口：只能在 transaction 內執行，會重新從資料庫選取完整月份並 `lockForUpdate()` 候選車，不接受舊草稿傳入的任意集合。
 - 所有綁車 MoneyEntry 核准都會鎖定同一車輛列，確保維修等非銷售類 pending 支出核准與薪資確認互斥；銷售收款分類統一由 `VehicleMoneyCategories` 提供，避免關帳、可見範圍與薪資資格規則漂移。
-- 薪資資格服務的任意集合檢查已改為 private；第 7 部分只能由 `inspectPeriod()` 建草稿、由 `assertPeriodEligible()` 確認完整月份。
+- 薪資資格服務的任意集合檢查已改為 private；一般預覽使用 `inspectPeriod()`，第 7 部分的草稿建立／重算使用 transaction-only `inspectPeriodForUpdate()` 鎖定完整月份，確認則使用 `assertPeriodEligible()` 重新鎖定並阻擋異常。
 - 零毛利／虧損車只要其他資格完整仍列為 eligible，並回傳 approved-only 毛利；後續交給計算器保留明細與公司淨損益，但不推升賣車跨級台數。
+- `SalaryPeriodService` 已完成月份草稿、重算、手動加扣與確認鎖定。建立草稿才選取最新有效方案，後續重算固定沿用 `commission_plan_id`，不受新建回溯方案影響。
+- 只有 active user + active salary profile 建立 settlement；沒有啟用薪資設定的使用者採明確排除。草稿重算會更新薪資 snapshot 與所有自動項目，但保留既有手動加扣；設定後來停用的既有 settlement 自動項目歸零，不會暗刪手動資料。
+- 草稿建立／重算會鎖定整月 sold 候選車，與獎金歸屬修改及綁車 MoneyEntry 核准共用車輛列鎖。確認時同一 transaction 重新選取、鎖定、驗資格、重算並比對 snapshot；stale preview 會回 422 要求先重算。
+- confirmed／paid 月份拒絕重算與手動項目異動；`closeSale()` 回填至已鎖月份會回 422 並要求聯絡管理員，已售車歸屬也會依 `sold_at` 月份防禦沒有 settlement item reference 的歷史缺口。draft 月份仍可成交或修正歸屬，之後重算納入。
+- 薪資月份建立、重算、確認與手動加扣新增／刪除皆有 Audit Log；metadata 不保存薪資金額、加扣金額或說明內容。
 
 後續仍待實作：
 
-- 月份草稿／確認／發薪與批次 idempotency。
-- 第 7 部分需阻擋 `closeSale()` 以 backdated `sold_at` 補進 confirmed／paid 月份，並讓歸屬修改依成交月份防禦歷史漏項；draft 月份仍可正常成交後重算。
+- 薪資月份 Policy／Request／Resource／API routes（PLAN 第 9、10 部分）與發薪批次 idempotency（第 8 部分）。
 - 薪資管理前端與完整 manual smoke。
 
 Website MVP 延後到 v1.3 完成或進入正式部署準備時再獨立規劃，不得混入薪資結算。

@@ -989,3 +989,12 @@ Request body：
 回傳單一 `CommissionPlanResource`，包含依 `sort_order` 排列的 tiers、建立者與 `is_used`。不存在回傳 `404`；非 admin 在進入 Controller 前即回傳 `403`。
 
 v1.3 第 6 部分新增的薪資資格與異常檢查目前是後端集中服務，供下一階段建立草稿、重算與確認時共用，本階段未新增對外 endpoint。它只選取台北月份內的 `sold` 車輛，並對每台候選車檢查收／賣車人、pending 收支、approved 銷售淨收款、approved 購車付款、`legacy_unknown` 與 confirmed／paid 重複引用；異常車不會被靜默略過。
+
+v1.3 第 7 部分已完成 `SalaryPeriodService` 的服務層契約，但對外 Policy／Request／Resource／Routes 仍依 PLAN 第 9、10 部分後續實作，本階段不提前開放 endpoint。服務層行為如下：
+
+- 建立草稿時以 `findEffectiveForMonth()` 選取方案並固定 `commission_plan_id`；同月份重複建立或沒有有效方案皆回 `422`。
+- 只有「啟用使用者 + 啟用薪資設定」建立 settlement；啟用但沒有薪資設定的使用者採明確排除，不會以零薪資靜默納入。
+- 草稿重算沿用已綁定方案，重新建立自動項目並保留手動加扣；已存在 settlement 的薪資設定若後來停用，其自動項目歸零，既有手動項目仍保留供管理員明確處理。
+- 確認時在同一 transaction 重新鎖定整月候選車、重跑資格與公式，並將重算結果和草稿 snapshot 比對；若資料已變動則回 `422`，要求先重算，不會直接確認 stale preview。
+- confirmed／paid 後拒絕重算及手動加扣；已確認月份的成交回填與車輛獎金歸屬修改也會依台北月份阻擋，即使歷史資料沒有 settlement item reference 亦同。
+- 薪資月份與手動加扣會寫 Audit Log，但不複製薪資金額、加扣金額或說明內容到 audit metadata。

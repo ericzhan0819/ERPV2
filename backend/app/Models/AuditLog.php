@@ -38,6 +38,8 @@ class AuditLog extends Model
         'authentication',
         'salary_profile',
         'commission_plan',
+        'salary_period',
+        'salary_settlement_item',
     ];
 
     protected $fillable = [

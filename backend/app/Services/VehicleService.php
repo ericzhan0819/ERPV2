@@ -935,7 +935,24 @@ class VehicleService
      */
     public function closeSale(Vehicle $vehicle, array $data, int $userId): Vehicle
     {
-        return DB::transaction(function () use ($vehicle, $data, $userId) {
+        $soldAt = isset($data['sold_at'])
+            ? Carbon::parse($data['sold_at'])->setTimezone(config('app.timezone'))
+            : now();
+
+        return DB::transaction(function () use ($vehicle, $userId, $soldAt) {
+            // 薪資確認先鎖 period 再鎖候選車；回填成交也採相同順序，避免一邊確認、
+            // 一邊回填時形成 period / vehicle 反向鎖。draft 仍允許成交，之後重算納入。
+            $salaryPeriodStatus = SalaryPeriod::query()
+                ->whereDate('period_month', $soldAt->format('Y-m-01'))
+                ->lockForUpdate()
+                ->value('status');
+
+            if (in_array($salaryPeriodStatus, [SalaryPeriod::STATUS_CONFIRMED, SalaryPeriod::STATUS_PAID], true)) {
+                throw ValidationException::withMessages([
+                    'sold_at' => ["{$soldAt->format('Y-m')} 薪資月份已鎖定，無法回填成交，請聯絡管理員"],
+                ]);
+            }
+
             $lockedVehicle = Vehicle::query()
                 ->whereKey($vehicle->id)
                 ->lockForUpdate()
@@ -999,9 +1016,7 @@ class VehicleService
             }
 
             $lockedVehicle->status = 'sold';
-            $lockedVehicle->sold_at = isset($data['sold_at'])
-                ? Carbon::parse($data['sold_at'])->setTimezone(config('app.timezone'))
-                : now();
+            $lockedVehicle->sold_at = $soldAt;
             $lockedVehicle->updated_by = $userId;
             $lockedVehicle->save();
 
@@ -1052,6 +1067,15 @@ class VehicleService
                     SalaryPeriod::STATUS_PAID,
                 ]))
                 ->exists();
+
+            // 防禦早期資料或零獎金車輛沒有 settlement item reference 的歷史缺口。
+            // 此處已持有車輛列鎖；薪資確認也必須取得同一列，因此不會在檢查後才競態確認。
+            if (! $isLockedBySalaryPeriod && $lockedVehicle->sold_at !== null) {
+                $isLockedBySalaryPeriod = SalaryPeriod::query()
+                    ->whereDate('period_month', $lockedVehicle->sold_at->format('Y-m-01'))
+                    ->whereIn('status', [SalaryPeriod::STATUS_CONFIRMED, SalaryPeriod::STATUS_PAID])
+                    ->exists();
+            }
 
             if ($isLockedBySalaryPeriod) {
                 throw ValidationException::withMessages([

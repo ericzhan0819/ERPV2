@@ -67,6 +67,20 @@ final class SalaryEligibilityService
         return $result;
     }
 
+    /**
+     * 草稿建立／重算可保留異常，但仍必須與歸屬修改及收支核准共用車輛列鎖。
+     *
+     * @return array<string, mixed>
+     */
+    public function inspectPeriodForUpdate(string $periodMonth, ?int $currentSalaryPeriodId = null): array
+    {
+        if (DB::transactionLevel() < 1) {
+            throw new LogicException('鎖定薪資資格資料必須在資料庫 transaction 內執行');
+        }
+
+        return $this->inspectPeriodFromDatabase($periodMonth, $currentSalaryPeriodId, true);
+    }
+
     /** @return array<string, mixed> */
     private function inspectPeriodFromDatabase(
         string $periodMonth,
