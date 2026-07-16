@@ -52,19 +52,19 @@ export function CommissionPlans() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex justify-between">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-xl font-semibold text-fg">獎金方案</h1>
           <p className="mt-1 text-sm text-fg-muted">已使用方案永久唯讀；規則變更請建立新版本。</p>
         </div>
-        <Link to="/salary" className="text-sm text-primary">返回薪資月份</Link>
+        <Link to="/salary" className="flex min-h-11 items-center text-sm font-medium text-primary">返回薪資月份</Link>
       </div>
 
       {error && <p className="text-sm text-error">{error}</p>}
       {loading && <p className="text-sm text-fg-muted">載入中...</p>}
       <button
         onClick={() => setShowForm((visible) => !visible)}
-        className="w-fit rounded-lg bg-primary px-4 py-2 text-sm text-primary-fg"
+        className="min-h-11 w-full rounded-lg bg-primary px-4 py-2 text-sm text-primary-fg sm:w-fit"
       >
         建立新方案
       </button>
@@ -130,29 +130,33 @@ function CommissionPlanForm({
       <h3 className="mt-5 text-sm font-medium">賣車跨級獎金</h3>
       <div className="mt-2 grid gap-2">
         {form.tiers.map((tier, index) => (
-          <div key={index} className="flex gap-2">
-            <input
-              aria-label={`第 ${index + 1} 級起始台數`}
-              type="number"
-              min="1"
-              value={tier.min_sales_count}
-              onChange={(event) => updateTier(index, 'min_sales_count', Number(event.target.value))}
-              className="w-32 rounded-lg border border-border-strong bg-surface px-3 py-2"
-            />
-            <input
-              aria-label={`第 ${index + 1} 級獎金基點`}
-              type="number"
-              value={tier.sales_bonus_bps}
-              onChange={(event) => updateTier(index, 'sales_bonus_bps', Number(event.target.value))}
-              className="w-40 rounded-lg border border-border-strong bg-surface px-3 py-2"
-            />
+          <div key={index} className="grid gap-2 rounded-lg border border-border bg-surface-2 p-3 sm:grid-cols-2">
+            <label className="text-sm text-fg-muted">
+              第 {index + 1} 級起始台數 <span className="text-error">*</span>
+              <input
+                type="number"
+                min="1"
+                value={tier.min_sales_count}
+                onChange={(event) => updateTier(index, 'min_sales_count', Number(event.target.value))}
+                className="mt-1 w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-fg"
+              />
+            </label>
+            <label className="text-sm text-fg-muted">
+              第 {index + 1} 級獎金基點 <span className="text-error">*</span>
+              <input
+                type="number"
+                value={tier.sales_bonus_bps}
+                onChange={(event) => updateTier(index, 'sales_bonus_bps', Number(event.target.value))}
+                className="mt-1 w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-fg"
+              />
+            </label>
           </div>
         ))}
       </div>
       <button
         disabled={saving || !form.name}
         onClick={onSave}
-        className="mt-4 rounded-lg bg-primary px-4 py-2 text-sm text-primary-fg disabled:opacity-50"
+        className="mt-4 min-h-11 w-full rounded-lg bg-primary px-4 py-2 text-sm text-primary-fg disabled:opacity-50 sm:w-auto"
       >
         {saving ? '建立中...' : '建立方案'}
       </button>
@@ -163,8 +167,8 @@ function CommissionPlanForm({
 function CommissionPlanCard({ plan }: { plan: CommissionPlan }) {
   return (
     <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-      <div className="flex justify-between">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <h2 className="font-semibold text-fg">{plan.name}</h2>
           <p className="text-xs text-fg-muted">{plan.effective_from} 起生效</p>
         </div>

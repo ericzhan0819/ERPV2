@@ -103,6 +103,11 @@ export function SalaryPeriodDetail() {
   }
 
   const tiers = [...period.commission_plan.tiers].sort((a, b) => a.min_sales_count - b.min_sales_count)
+  const commissionDisabledAgentIds = new Set(
+    (period.commission_warnings ?? [])
+      .filter((warning) => warning.code === 'commission_disabled')
+      .map((warning) => warning.agent_id),
+  )
 
   return (
     <div className="flex flex-col gap-6">
@@ -155,6 +160,7 @@ export function SalaryPeriodDetail() {
             settlement={settlement}
             tiers={tiers}
             draft={period.status === 'draft'}
+            commissionEnabled={!commissionDisabledAgentIds.has(settlement.user_id)}
             expanded={expanded === settlement.id}
             onToggle={() => setExpanded(expanded === settlement.id ? null : settlement.id)}
             onAddAdjustment={() => setAdjustment({
@@ -183,15 +189,15 @@ export function SalaryPeriodDetail() {
 
 function PeriodHeader({ period }: { period: SalaryPeriod }) {
   return (
-    <div className="flex flex-wrap justify-between gap-3">
-      <div>
-        <div className="flex items-center gap-3">
+    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-xl font-semibold text-fg">{period.period_month} 薪資</h1>
           <SalaryStatusBadge status={period.status} />
         </div>
         <p className="mt-1 text-sm text-fg-muted">適用方案：{period.commission_plan.name}</p>
       </div>
-      <Link to="/salary" className="text-sm text-primary">返回薪資月份</Link>
+      <Link to="/salary" className="flex min-h-11 items-center text-sm font-medium text-primary">返回薪資月份</Link>
     </div>
   )
 }
@@ -218,16 +224,16 @@ function DraftActions({ busy, blocked, onRecalculate, onConfirm }: {
     if (window.confirm('確認後薪資快照與車輛歸屬將鎖定，確定要確認結算？')) onConfirm()
   }
   return (
-    <div className="flex flex-wrap gap-2">
-      <button disabled={busy} onClick={onRecalculate} className="rounded-lg border border-border-strong px-4 py-2 text-sm">
-        重算草稿
+    <div className="grid gap-2 sm:flex sm:flex-wrap">
+      <button disabled={busy} onClick={onRecalculate} className="min-h-11 rounded-lg border border-border-strong px-4 py-2 text-sm disabled:opacity-50">
+        {busy ? '處理中...' : '重算草稿'}
       </button>
       <button
         disabled={busy || blocked}
         onClick={confirm}
-        className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-fg disabled:opacity-50"
+        className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm text-primary-fg disabled:opacity-50"
       >
-        確認結算
+        {busy ? '處理中...' : '確認結算'}
       </button>
     </div>
   )
@@ -250,31 +256,31 @@ function PaymentPanel({ period, accounts, form, busy, onChange, onPay }: {
   return (
     <section className="rounded-2xl border border-border bg-surface p-5">
       <h2 className="font-semibold">發薪</h2>
-      <div className="mt-3 flex flex-wrap items-end gap-3">
-        <label className="text-sm">
+      <div className="mt-3 grid gap-3 sm:flex sm:flex-wrap sm:items-end">
+        <label className="min-w-0 text-sm sm:min-w-52">
           資金帳戶 <span className="text-error">*</span>
           <select
             value={form.cash_account_id}
             onChange={(event) => update('cash_account_id', event.target.value)}
-            className="mt-1 block rounded-lg border border-border-strong bg-surface px-3 py-2"
+            className="mt-1 block w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-fg"
           >
             <option value="">請選擇</option>
             {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
           </select>
         </label>
-        <label className="text-sm">
+        <label className="min-w-0 text-sm sm:min-w-44">
           發薪日期 <span className="text-error">*</span>
           <input
             type="date"
             value={form.payment_date}
             onChange={(event) => update('payment_date', event.target.value)}
-            className="mt-1 block rounded-lg border border-border-strong bg-surface px-3 py-2"
+            className="mt-1 block w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-fg"
           />
         </label>
         <button
           disabled={busy || !form.cash_account_id}
           onClick={pay}
-          className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-fg disabled:opacity-50"
+          className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm text-primary-fg disabled:opacity-50"
         >
           確認發薪
         </button>
@@ -294,12 +300,16 @@ function AnomalyPanel({ anomalies }: { anomalies: SalaryAnomaly[] }) {
             className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-error/5 p-3 text-sm"
           >
             <span><b>{anomaly.stock_no}</b>：{anomaly.message}</span>
-            <Link
-              to={correctionPath(anomaly)}
-              className="font-medium text-primary"
-            >
-              {anomaly.correction.label}
-            </Link>
+            {correctionPath(anomaly) ? (
+              <Link
+                to={correctionPath(anomaly) ?? '#'}
+                className="flex min-h-11 items-center font-medium text-primary"
+              >
+                {anomaly.correction.label}
+              </Link>
+            ) : (
+              <span className="text-fg-muted">請由系統管理員在後端完成來源確認後再重算草稿。</span>
+            )}
           </div>
         ))}
       </div>
@@ -321,7 +331,7 @@ function CommissionWarningPanel({ warnings }: { warnings: SalaryCommissionWarnin
             className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-warning/10 p-3 text-sm"
           >
             <span><b>{warning.stock_no}</b>：{warning.message}</span>
-            <Link to="/salary/profiles" className="font-medium text-primary">
+            <Link to="/salary/profiles" className="flex min-h-11 items-center font-medium text-primary">
               {warning.correction.label}
             </Link>
           </div>
@@ -335,6 +345,7 @@ function SettlementCard({
   settlement,
   tiers,
   draft,
+  commissionEnabled,
   expanded,
   onToggle,
   onAddAdjustment,
@@ -343,6 +354,7 @@ function SettlementCard({
   settlement: SalarySettlement
   tiers: CommissionPlanTier[]
   draft: boolean
+  commissionEnabled: boolean
   expanded: boolean
   onToggle: () => void
   onAddAdjustment: () => void
@@ -353,9 +365,9 @@ function SettlementCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold text-fg">{settlement.user.name}</h2>
-          <p className="text-xs text-fg-muted">
-            當月成交 {settlement.eligible_sales_count} 台・適用 {formatPercent(settlement.sales_bonus_bps)}・
-            {nextTierText(settlement, tiers)}
+          <p className="mt-1 text-xs leading-5 text-fg-muted">
+            獎金級距計入台數 {settlement.eligible_sales_count} 台・適用 {formatPercent(settlement.sales_bonus_bps)}・
+            {nextTierText(settlement, tiers, commissionEnabled, draft)}
           </p>
         </div>
         <div className="text-right">
@@ -364,11 +376,11 @@ function SettlementCard({
         </div>
       </div>
       <SettlementMetrics settlement={settlement} />
-      <div className="mt-4 flex gap-2">
-        <button onClick={onToggle} className="text-sm font-medium text-primary">
+      <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
+        <button onClick={onToggle} className="min-h-11 rounded-lg border border-border-strong px-3 py-2 text-sm font-medium text-primary">
           {expanded ? '收合明細' : '展開薪資與車輛獎金明細'}
         </button>
-        {draft && <button onClick={onAddAdjustment} className="text-sm text-fg-muted">新增加扣項</button>}
+        {draft && <button onClick={onAddAdjustment} className="min-h-11 rounded-lg border border-border-strong px-3 py-2 text-sm text-fg-muted">新增加扣項</button>}
       </div>
       {expanded && <SettlementItems settlement={settlement} draft={draft} onDeleteItem={onDeleteItem} />}
     </section>
@@ -396,15 +408,35 @@ function SettlementItems({ settlement, draft, onDeleteItem }: {
   onDeleteItem: (itemId: number) => void
 }) {
   return (
-    <div className="mt-3 overflow-x-auto">
-      <table className="min-w-full text-sm">
+    <div className="mt-3">
+      <div className="grid gap-2 sm:hidden">
+        {settlement.items.map((item) => (
+          <article key={item.id} className="rounded-lg border border-border bg-surface-2 p-3 text-sm">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <span className="font-medium">{itemLabels[item.type] ?? item.type}</span>
+              <span className="font-semibold tabular-nums">{formatCurrency(item.amount)}</span>
+            </div>
+            <div className="mt-2 break-words text-fg-muted">
+              {item.vehicle ? (
+                <Link className="inline-flex min-h-11 items-center font-medium text-primary" to={`/vehicles/${item.vehicle.id}`}>
+                  {item.vehicle.stock_no} {item.vehicle.brand} {item.vehicle.model}
+                </Link>
+              ) : item.description}
+            </div>
+            {draft && item.type.startsWith('manual_') && (
+              <button onClick={() => onDeleteItem(item.id)} className="mt-2 min-h-11 text-error">刪除</button>
+            )}
+          </article>
+        ))}
+      </div>
+      <table className="hidden min-w-full text-sm sm:table">
         <tbody className="divide-y divide-border">
           {settlement.items.map((item) => (
             <tr key={item.id}>
               <td className="py-2">{itemLabels[item.type] ?? item.type}</td>
               <td className="py-2">
                 {item.vehicle ? (
-                  <Link className="text-primary" to={`/vehicles/${item.vehicle.id}`}>
+                  <Link className="inline-flex min-h-11 items-center text-primary" to={`/vehicles/${item.vehicle.id}`}>
                     {item.vehicle.stock_no} {item.vehicle.brand} {item.vehicle.model}
                   </Link>
                 ) : item.description}
@@ -412,7 +444,7 @@ function SettlementItems({ settlement, draft, onDeleteItem }: {
               <td className="py-2 text-right tabular-nums">{formatCurrency(item.amount)}</td>
               <td className="py-2 text-right">
                 {draft && item.type.startsWith('manual_') && (
-                  <button onClick={() => onDeleteItem(item.id)} className="text-error">刪除</button>
+                  <button onClick={() => onDeleteItem(item.id)} className="min-h-11 text-error">刪除</button>
                 )}
               </td>
             </tr>
@@ -431,8 +463,8 @@ function AdjustmentModal({ form, busy, onChange, onSave, onCancel }: {
   onCancel: () => void
 }) {
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-surface p-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-4">
+      <div className="max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-4 shadow-lg sm:p-6">
         <h2 className="font-semibold">新增手動加扣項</h2>
         <div className="mt-4 grid gap-3">
           <label className="text-sm">
@@ -466,22 +498,23 @@ function AdjustmentModal({ form, busy, onChange, onSave, onCancel }: {
             />
           </label>
         </div>
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 grid grid-cols-2 gap-2">
           <button
             disabled={busy || !form.amount || !form.description}
             onClick={onSave}
-            className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-fg disabled:opacity-50"
+            className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm text-primary-fg disabled:opacity-50"
           >
             新增
           </button>
-          <button onClick={onCancel} className="rounded-lg border border-border-strong px-4 py-2 text-sm">取消</button>
+          <button onClick={onCancel} className="min-h-11 rounded-lg border border-border-strong px-4 py-2 text-sm">取消</button>
         </div>
       </div>
     </div>
   )
 }
 
-function correctionPath(anomaly: SalaryAnomaly): string {
+function correctionPath(anomaly: SalaryAnomaly): string | null {
+  if (anomaly.correction.action === 'money_entry_source_review') return null
   if (anomaly.correction.action === 'commission_attribution') return '/vehicles/commission-attribution'
   if (anomaly.correction.action === 'salary_period') {
     const periodIds = anomaly.context.salary_period_ids as number[] | undefined
@@ -490,7 +523,14 @@ function correctionPath(anomaly: SalaryAnomaly): string {
   return `/vehicles/${anomaly.vehicle_id}`
 }
 
-function nextTierText(settlement: SalarySettlement, tiers: CommissionPlanTier[]): string {
+function nextTierText(
+  settlement: SalarySettlement,
+  tiers: CommissionPlanTier[],
+  commissionEnabled: boolean,
+  draft: boolean,
+): string {
+  if (!commissionEnabled) return '目前未啟用獎金'
+  if (!draft) return '級距已隨本月結算鎖定'
   const next = tiers.find((tier) => tier.min_sales_count > settlement.eligible_sales_count)
   return next
     ? `再 ${next.min_sales_count - settlement.eligible_sales_count} 台升至 ${formatPercent(next.sales_bonus_bps)}`

@@ -72,6 +72,44 @@ body {
   color: var(--color-fg);
 }
 
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  min-height: 44px;
+  background-color: var(--color-surface);
+  color: var(--color-fg);
+}
+
+button {
+  min-height: 44px;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-fg-subtle);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):disabled,
+select:disabled,
+textarea:disabled {
+  background-color: var(--color-surface-2);
+  color: var(--color-fg-subtle);
+  cursor: not-allowed;
+}
+
+select option {
+  background-color: var(--color-surface);
+  color: var(--color-fg);
+}
+
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }

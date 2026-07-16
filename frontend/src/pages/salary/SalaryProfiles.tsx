@@ -72,12 +72,12 @@ export function SalaryProfiles() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex justify-between">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-xl font-semibold text-fg">員工薪資設定</h1>
           <p className="mt-1 text-sm text-fg-muted">變更只影響未確認月份，不會回改歷史薪資快照。</p>
         </div>
-        <Link to="/salary" className="text-sm text-primary">返回薪資月份</Link>
+        <Link to="/salary" className="flex min-h-11 items-center text-sm font-medium text-primary">返回薪資月份</Link>
       </div>
 
       {error && <p className="text-sm text-error">{error}</p>}
@@ -126,15 +126,15 @@ function SalaryProfileCard({
 }) {
   return (
     <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-      <div className="flex justify-between">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <h2 className="font-semibold text-fg">{profile.user.name}</h2>
           <p className="text-xs text-fg-muted">
             {profile.user.email}{profile.id < 0 ? '・尚未設定薪資' : ''}
           </p>
         </div>
         {!editing && (
-          <button onClick={onEdit} className="rounded-lg border border-border-strong px-3 py-1.5 text-sm">
+          <button onClick={onEdit} className="min-h-11 rounded-lg border border-border-strong px-3 py-2 text-sm sm:self-start">
             {profile.id < 0 ? '建立設定' : '編輯'}
           </button>
         )}
@@ -187,7 +187,7 @@ function SalaryProfileForm({
           {fieldErrors[field] && <span className="mt-1 block text-xs text-error">{fieldErrors[field]}</span>}
         </label>
       ))}
-      <label className="flex items-center gap-2 text-sm">
+      <label className="flex min-h-11 items-center gap-2 text-sm">
         <input
           type="checkbox"
           checked={form.commission_enabled}
@@ -195,7 +195,7 @@ function SalaryProfileForm({
         />
         啟用獎金
       </label>
-      <label className="flex items-center gap-2 text-sm">
+      <label className="flex min-h-11 items-center gap-2 text-sm">
         <input
           type="checkbox"
           checked={form.is_active}
@@ -203,11 +203,11 @@ function SalaryProfileForm({
         />
         納入薪資結算
       </label>
-      <div className="flex gap-2 sm:col-span-2 lg:col-span-4">
-        <button disabled={saving} onClick={onSave} className="rounded-lg bg-primary px-4 py-2 text-sm text-primary-fg">
+      <div className="grid grid-cols-2 gap-2 sm:col-span-2 sm:flex lg:col-span-4">
+        <button disabled={saving} onClick={onSave} className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm text-primary-fg disabled:opacity-50">
           {saving ? '儲存中...' : '儲存'}
         </button>
-        <button onClick={onCancel} className="rounded-lg border border-border-strong px-4 py-2 text-sm">取消</button>
+        <button onClick={onCancel} className="min-h-11 rounded-lg border border-border-strong px-4 py-2 text-sm">取消</button>
       </div>
     </div>
   )
