@@ -182,7 +182,7 @@ function SalaryProfileForm({
             required
             value={form[field]}
             onChange={(event) => onChange({ ...form, [field]: Number(event.target.value) })}
-            className="mt-1 w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-fg"
+            className="form-control-touch mt-1 w-full rounded-lg border border-border-strong px-3 py-2"
           />
           {fieldErrors[field] && <span className="mt-1 block text-xs text-error">{fieldErrors[field]}</span>}
         </label>

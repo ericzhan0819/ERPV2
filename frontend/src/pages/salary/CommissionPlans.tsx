@@ -138,7 +138,7 @@ function CommissionPlanForm({
                 min="1"
                 value={tier.min_sales_count}
                 onChange={(event) => updateTier(index, 'min_sales_count', Number(event.target.value))}
-                className="mt-1 w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-fg"
+                className="form-control-touch mt-1 w-full rounded-lg border border-border-strong px-3 py-2"
               />
             </label>
             <label className="text-sm text-fg-muted">
@@ -147,7 +147,7 @@ function CommissionPlanForm({
                 type="number"
                 value={tier.sales_bonus_bps}
                 onChange={(event) => updateTier(index, 'sales_bonus_bps', Number(event.target.value))}
-                className="mt-1 w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-fg"
+                className="form-control-touch mt-1 w-full rounded-lg border border-border-strong px-3 py-2"
               />
             </label>
           </div>
@@ -206,7 +206,7 @@ function TextField({ label, value, type = 'text', onChange }: {
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 w-full rounded-lg border border-border-strong bg-surface px-3 py-2"
+        className="form-control-touch mt-1 w-full rounded-lg border border-border-strong px-3 py-2"
       />
     </label>
   )
@@ -224,7 +224,7 @@ function NumberField({ label, value, onChange }: {
         type="number"
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
-        className="mt-1 w-full rounded-lg border border-border-strong bg-surface px-3 py-2"
+        className="form-control-touch mt-1 w-full rounded-lg border border-border-strong px-3 py-2"
       />
     </label>
   )

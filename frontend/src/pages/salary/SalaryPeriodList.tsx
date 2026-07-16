@@ -53,7 +53,7 @@ export function SalaryPeriodList() {
               max={currentMonth}
               value={month}
               onChange={(event) => setMonth(event.target.value)}
-              className="mt-1 block w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-fg"
+              className="form-control-touch mt-1 block w-full rounded-lg border border-border-strong px-3 py-2"
             />
           </label>
           <button

@@ -413,7 +413,7 @@ v1.3 第 1～10 部分已補齊：
 - 新增公司 totals migration 對升級前草稿保留 nullable，重算後寫入；若部署前已有 confirmed／paid 月份則在任何 DDL 前停止，要求人工評估，避免缺乏 durable provenance 的歷史數字被靜默回填為 0。此 migration 實質 forward-only：`down()` 只移除欄位；若 rollback 後又產生 confirmed／paid 月份，不能直接重新 `up()`，必須先人工處理歷史資料。
 - 公司 totals 已納入 confirm 的草稿 snapshot signature；即使車輛歸屬人都沒有 active salary profile、完全不產生 bonus item，草稿後 approved 收支造成的公司分配漂移仍會以 422 要求先重算，不會確認 admin 尚未看過的數字。
 - Dashboard 薪資卡依月份狀態顯示預估／已確認／實發，並區分尚未建立與載入失敗；薪資前端已拆分為可獨立審查的卡片、表單、明細、異常、發薪及 modal 元件。
-- v1.3 第 13.1 節已完成：手機採 drawer Sidebar，薪資月份與待補歸屬在小螢幕改為卡片，薪資詳情、設定、級距與 modal 可堆疊操作；原生表單控制項使用既有 light／dark 語意 token，並修正獎金級距計入台數、未啟用獎金及來源未確認異常的操作文案。Firefox 152 + WebDriver BiDi 已實測 320／375／390／768／1440px light／dark，沒有整頁水平 overflow，控制項觸控高度至少 44px。
+- v1.3 第 13.1 節已完成：手機採 drawer Sidebar，薪資月份與待補歸屬在小螢幕改為卡片，薪資詳情、設定、級距與 modal 可堆疊操作；相關表單以 `.form-control-touch` opt-in 既有 light／dark 語意 token 與 44px 高度，不改變其他模組 compact controls。獎金級距計入台數、來源未確認異常及未啟用獎金文案已修正，其中草稿啟用狀態讀取既有 Salary Profiles API，涵蓋停用且 0 台員工。Firefox 152 + WebDriver BiDi 已實測 320／375／390／768／1440px light／dark，沒有整頁水平 overflow。
 - draft 薪資詳情新增非阻擋性獎金設定提示：正毛利合格車的收／賣車人若沒有 active salary profile、帳號停用或未啟用獎金，會明確提示該角色獎金歸公司剩餘並連到薪資設定；不改變既有 eligibility 或確認規則。
 
 後續只待使用者驗收：

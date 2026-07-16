@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { listCashAccounts } from '../../api/cashAccounts'
+import { listSalaryProfiles } from '../../api/salaryProfiles'
 import {
   addSalaryAdjustment,
   confirmSalaryPeriod,
@@ -34,6 +35,8 @@ type PaymentForm = {
   idempotency_key: string
 }
 
+type CommissionState = 'enabled' | 'disabled' | 'loading' | 'unavailable'
+
 const itemLabels: Record<string, string> = {
   base_salary: '底薪',
   fixed_allowance: '固定津貼',
@@ -54,6 +57,8 @@ export function SalaryPeriodDetail() {
   const [expanded, setExpanded] = useState<number | null>(null)
   const [adjustment, setAdjustment] = useState<AdjustmentForm | null>(null)
   const [accounts, setAccounts] = useState<CashAccountOption[]>([])
+  const [commissionEnabledByUser, setCommissionEnabledByUser] = useState<Record<number, boolean> | null>(null)
+  const [commissionProfilesFailed, setCommissionProfilesFailed] = useState(false)
   const [payment, setPayment] = useState<PaymentForm>({
     cash_account_id: '',
     payment_date: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' }),
@@ -72,6 +77,12 @@ export function SalaryPeriodDetail() {
     listCashAccounts()
       .then((loaded) => setAccounts(loaded.filter((account) => account.is_active)))
       .catch(() => setError('資金帳戶載入失敗'))
+    setCommissionProfilesFailed(false)
+    listSalaryProfiles()
+      .then((profiles) => setCommissionEnabledByUser(Object.fromEntries(
+        profiles.map((profile) => [profile.user_id, profile.commission_enabled]),
+      )))
+      .catch(() => setCommissionProfilesFailed(true))
   }, [])
 
   async function runAction(action: () => Promise<unknown>) {
@@ -160,7 +171,12 @@ export function SalaryPeriodDetail() {
             settlement={settlement}
             tiers={tiers}
             draft={period.status === 'draft'}
-            commissionEnabled={!commissionDisabledAgentIds.has(settlement.user_id)}
+            commissionState={commissionStateFor(
+              settlement.user_id,
+              commissionEnabledByUser,
+              commissionDisabledAgentIds,
+              commissionProfilesFailed,
+            )}
             expanded={expanded === settlement.id}
             onToggle={() => setExpanded(expanded === settlement.id ? null : settlement.id)}
             onAddAdjustment={() => setAdjustment({
@@ -262,7 +278,7 @@ function PaymentPanel({ period, accounts, form, busy, onChange, onPay }: {
           <select
             value={form.cash_account_id}
             onChange={(event) => update('cash_account_id', event.target.value)}
-            className="mt-1 block w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-fg"
+            className="form-control-touch mt-1 block w-full rounded-lg border border-border-strong px-3 py-2"
           >
             <option value="">請選擇</option>
             {accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
@@ -274,7 +290,7 @@ function PaymentPanel({ period, accounts, form, busy, onChange, onPay }: {
             type="date"
             value={form.payment_date}
             onChange={(event) => update('payment_date', event.target.value)}
-            className="mt-1 block w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-fg"
+            className="form-control-touch mt-1 block w-full rounded-lg border border-border-strong px-3 py-2"
           />
         </label>
         <button
@@ -345,7 +361,7 @@ function SettlementCard({
   settlement,
   tiers,
   draft,
-  commissionEnabled,
+  commissionState,
   expanded,
   onToggle,
   onAddAdjustment,
@@ -354,7 +370,7 @@ function SettlementCard({
   settlement: SalarySettlement
   tiers: CommissionPlanTier[]
   draft: boolean
-  commissionEnabled: boolean
+  commissionState: CommissionState
   expanded: boolean
   onToggle: () => void
   onAddAdjustment: () => void
@@ -367,7 +383,7 @@ function SettlementCard({
           <h2 className="font-semibold text-fg">{settlement.user.name}</h2>
           <p className="mt-1 text-xs leading-5 text-fg-muted">
             獎金級距計入台數 {settlement.eligible_sales_count} 台・適用 {formatPercent(settlement.sales_bonus_bps)}・
-            {nextTierText(settlement, tiers, commissionEnabled, draft)}
+            {nextTierText(settlement, tiers, commissionState, draft)}
           </p>
         </div>
         <div className="text-right">
@@ -472,7 +488,7 @@ function AdjustmentModal({ form, busy, onChange, onSave, onCancel }: {
             <select
               value={form.type}
               onChange={(event) => onChange({ ...form, type: event.target.value as AdjustmentForm['type'] })}
-              className="mt-1 w-full rounded-lg border border-border-strong bg-surface px-3 py-2"
+              className="form-control-touch mt-1 w-full rounded-lg border border-border-strong px-3 py-2"
             >
               <option value="manual_addition">其他加給</option>
               <option value="manual_deduction">其他扣款</option>
@@ -485,7 +501,7 @@ function AdjustmentModal({ form, busy, onChange, onSave, onCancel }: {
               min="1"
               value={form.amount}
               onChange={(event) => onChange({ ...form, amount: event.target.value })}
-              className="mt-1 w-full rounded-lg border border-border-strong bg-surface px-3 py-2"
+              className="form-control-touch mt-1 w-full rounded-lg border border-border-strong px-3 py-2"
             />
           </label>
           <label className="text-sm">
@@ -494,7 +510,7 @@ function AdjustmentModal({ form, busy, onChange, onSave, onCancel }: {
               maxLength={255}
               value={form.description}
               onChange={(event) => onChange({ ...form, description: event.target.value })}
-              className="mt-1 w-full rounded-lg border border-border-strong bg-surface px-3 py-2"
+              className="form-control-touch mt-1 w-full rounded-lg border border-border-strong px-3 py-2"
             />
           </label>
         </div>
@@ -526,15 +542,30 @@ function correctionPath(anomaly: SalaryAnomaly): string | null {
 function nextTierText(
   settlement: SalarySettlement,
   tiers: CommissionPlanTier[],
-  commissionEnabled: boolean,
+  commissionState: CommissionState,
   draft: boolean,
 ): string {
-  if (!commissionEnabled) return '目前未啟用獎金'
   if (!draft) return '級距已隨本月結算鎖定'
+  if (commissionState === 'disabled') return '目前未啟用獎金'
+  if (commissionState === 'loading') return '獎金啟用狀態載入中...'
+  if (commissionState === 'unavailable') return '無法確認獎金啟用狀態'
   const next = tiers.find((tier) => tier.min_sales_count > settlement.eligible_sales_count)
   return next
     ? `再 ${next.min_sales_count - settlement.eligible_sales_count} 台升至 ${formatPercent(next.sales_bonus_bps)}`
     : '已達最高級距'
+}
+
+function commissionStateFor(
+  userId: number,
+  commissionEnabledByUser: Record<number, boolean> | null,
+  commissionDisabledAgentIds: Set<number>,
+  commissionProfilesFailed: boolean,
+): CommissionState {
+  if (commissionDisabledAgentIds.has(userId)) return 'disabled'
+  if (commissionEnabledByUser === null) return commissionProfilesFailed ? 'unavailable' : 'loading'
+  if (commissionEnabledByUser[userId] === true) return 'enabled'
+  if (commissionEnabledByUser[userId] === false) return 'disabled'
+  return 'unavailable'
 }
 
 function Summary({ label, value }: { label: string; value: string }) {

@@ -104,7 +104,7 @@ export function CommissionAttributionPending() {
                         ...current,
                         [vehicle.id]: { ...values, [field]: event.target.value },
                       }))}
-                      className="mt-1 w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-fg"
+                      className="form-control-touch mt-1 w-full rounded-lg border border-border-strong px-3 py-2"
                     >
                       <option value="">請選擇</option>
                       {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
@@ -161,7 +161,7 @@ export function CommissionAttributionPending() {
                           ...current,
                           [vehicle.id]: { ...values, [field]: event.target.value },
                         }))}
-                        className="min-w-36 rounded-lg border border-border-strong bg-surface px-3 py-2 text-sm text-fg"
+                        className="form-control-touch min-w-36 rounded-lg border border-border-strong px-3 py-2 text-sm"
                       >
                         <option value="">請選擇</option>
                         {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
