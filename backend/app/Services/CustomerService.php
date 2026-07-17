@@ -43,7 +43,12 @@ class CustomerService
         $customer = new Customer($data);
         $customer->created_by = $userId;
         $customer->updated_by = $userId;
-        $customer->save();
+
+        try {
+            $customer->save();
+        } catch (QueryException $exception) {
+            $this->throwCustomerIdentityConflictOrRethrow($exception);
+        }
 
         return $customer;
     }
@@ -55,7 +60,12 @@ class CustomerService
     {
         $customer->fill($data);
         $customer->updated_by = $userId;
-        $customer->save();
+
+        try {
+            $customer->save();
+        } catch (QueryException $exception) {
+            $this->throwCustomerIdentityConflictOrRethrow($exception);
+        }
 
         return $customer;
     }
@@ -97,6 +107,17 @@ class CustomerService
                 'customer' => ['此客戶已有關聯車輛，不得刪除'],
             ]);
         }
+    }
+
+    private function throwCustomerIdentityConflictOrRethrow(QueryException $exception): never
+    {
+        if (Customer::isIdentityUniqueViolation($exception)) {
+            throw ValidationException::withMessages([
+                'phone' => ['已有相同姓名與電話的客戶，請直接使用既有客戶'],
+            ]);
+        }
+
+        throw $exception;
     }
 
     private function isForeignKeyConstraintViolation(QueryException $e): bool

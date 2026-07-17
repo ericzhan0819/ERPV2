@@ -340,12 +340,79 @@ class VehicleWorkflowTest extends TestCase
         $this->assertNotNull($response->json('warning'));
     }
 
+    public function test_free_text_buyer_is_automatically_created_linked_and_not_duplicated_on_replay(): void
+    {
+        $user = User::factory()->admin()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'listed']);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $idempotencyKey = (string) Str::uuid();
+        $payload = [
+            'buyer_name' => '自動建立買方',
+            'buyer_phone' => '0922-333-444',
+            'sold_price' => 480000,
+            'deposit_amount' => 100000,
+            'cash_account_id' => $cashAccount->id,
+            'idempotency_key' => $idempotencyKey,
+        ];
+
+        $created = $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/reserve", $payload)
+            ->assertSuccessful();
+        $customer = Customer::query()->sole();
+
+        $created
+            ->assertJsonPath('data.buyer_customer_id', $customer->id)
+            ->assertJsonPath('data.buyer_name', '自動建立買方')
+            ->assertJsonPath('data.buyer_phone', '0922-333-444');
+        $this->assertSame(Customer::TYPE_BUYER, $customer->customer_type);
+        $this->assertSame($user->id, $customer->created_by);
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/reserve", $payload)
+            ->assertSuccessful()
+            ->assertJsonPath('data.buyer_customer_id', $customer->id);
+
+        $this->assertSame(1, Customer::query()->count());
+        $this->assertSame(1, MoneyEntry::query()->where('idempotency_key', $idempotencyKey)->count());
+    }
+
+    public function test_free_text_buyer_reuses_exact_name_and_normalized_phone_and_upgrades_customer_type(): void
+    {
+        $user = User::factory()->admin()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create(['status' => 'listed']);
+        $cashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $customer = Customer::factory()->create([
+            'name' => '同一位往來客戶',
+            'phone' => '0933-555-666',
+            'customer_type' => Customer::TYPE_SELLER,
+        ]);
+
+        $this->actingAs($user, 'web')
+            ->postJson("/api/vehicles/{$vehicle->id}/reserve", [
+                'buyer_name' => '同一位往來客戶',
+                'buyer_phone' => '0933555666',
+                'sold_price' => 480000,
+                'deposit_amount' => 100000,
+                'cash_account_id' => $cashAccount->id,
+                'idempotency_key' => (string) Str::uuid(),
+            ])
+            ->assertSuccessful()
+            ->assertJsonPath('data.buyer_customer_id', $customer->id);
+
+        $this->assertSame(1, Customer::query()->count());
+        $this->assertSame(Customer::TYPE_BOTH, $customer->fresh()->customer_type);
+    }
+
     public function test_buyer_customer_id_overrides_buyer_name_and_phone_with_the_customers_own_data(): void
     {
         $user = User::factory()->admin()->create(['is_active' => true]);
         $vehicle = Vehicle::factory()->create(['status' => 'listed']);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
-        $customer = Customer::factory()->create(['name' => '客戶端真實買家', 'phone' => '0900000002']);
+        $customer = Customer::factory()->create([
+            'name' => '客戶端真實買家',
+            'phone' => '0900000002',
+            'customer_type' => Customer::TYPE_SELLER,
+        ]);
 
         $response = $this->actingAs($user, 'web')
             ->postJson("/api/vehicles/{$vehicle->id}/reserve", [
@@ -369,6 +436,7 @@ class VehicleWorkflowTest extends TestCase
             'buyer_name' => '客戶端真實買家',
             'buyer_phone' => '0900000002',
         ]);
+        $this->assertSame(Customer::TYPE_BOTH, $customer->fresh()->customer_type);
     }
 
     public function test_reservation_replay_is_not_invalidated_by_later_buyer_customer_changes(): void

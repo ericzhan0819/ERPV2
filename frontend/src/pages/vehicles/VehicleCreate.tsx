@@ -162,7 +162,6 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 export function VehicleCreate() {
   const navigate = useNavigate()
   const [form, setForm] = useState<FormState>(initialState)
-  const [sellerCustomerLabel, setSellerCustomerLabel] = useState('')
   const [cashAccounts, setCashAccounts] = useState<CashAccountOption[]>([])
   const [commissionAgents, setCommissionAgents] = useState<CommissionAgent[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -239,31 +238,19 @@ export function VehicleCreate() {
           <Field label="買入日期" value={form.purchase_date} onChange={(v) => set('purchase_date', v)} type="date" />
           <Field label="買入來源" value={form.purchase_source_type} onChange={(v) => set('purchase_source_type', v)} />
           <CustomerSelect
-            label="關聯客戶（賣方）"
-            value={form.seller_customer_id}
-            selectedLabel={sellerCustomerLabel}
-            onChange={(customerId, customer) => {
-              set('seller_customer_id', customerId)
-              if (customer) {
-                set('seller_name', customer.name)
-                set('seller_phone', customer.phone ?? '')
-                setSellerCustomerLabel(customer.name)
-              } else {
-                setSellerCustomerLabel('')
-              }
+            nameLabel="原車主 / 供應商"
+            customerId={form.seller_customer_id}
+            name={form.seller_name}
+            phone={form.seller_phone}
+            required
+            onChange={({ customerId, name, phone }) => {
+              setForm((prev) => ({
+                ...prev,
+                seller_customer_id: customerId,
+                seller_name: name,
+                seller_phone: phone,
+              }))
             }}
-          />
-          <Field
-            label="原車主 / 供應商"
-            value={form.seller_name}
-            onChange={(v) => set('seller_name', v)}
-            readOnly={!!form.seller_customer_id}
-          />
-          <Field
-            label="聯絡電話"
-            value={form.seller_phone}
-            onChange={(v) => set('seller_phone', v)}
-            readOnly={!!form.seller_customer_id}
           />
           <Field label="收購價" value={form.purchase_price} onChange={(v) => set('purchase_price', v)} type="number" />
           <div>

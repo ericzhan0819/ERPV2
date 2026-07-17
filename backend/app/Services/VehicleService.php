@@ -43,6 +43,8 @@ class VehicleService
 
     private const MYSQL_ERROR_FOREIGN_KEY_CONSTRAINT_FAILS = 1451;
 
+    private const CUSTOMER_IDENTITY_RACE_ATTEMPTS = 3;
+
     private const BOOLEAN_VEHICLE_FIELDS = [
         'has_registration_document',
         'has_spare_key',
@@ -89,19 +91,35 @@ class VehicleService
         $idempotencyKey = (string) $data['idempotency_key'];
         $effectiveData = $this->normalizeCreateVehicleData($data);
 
-        try {
-            return DB::transaction(fn () => $this->createVehicleInsideTransaction(
-                $idempotencyKey,
-                $effectiveData,
-                $userId
-            ));
-        } catch (QueryException $e) {
-            if (! $this->isIdempotencyKeyUniqueViolation($e)) {
-                throw $e;
-            }
+        for ($attempt = 1; $attempt <= self::CUSTOMER_IDENTITY_RACE_ATTEMPTS; $attempt++) {
+            try {
+                return DB::transaction(fn () => $this->createVehicleInsideTransaction(
+                    $idempotencyKey,
+                    $effectiveData,
+                    $userId
+                ));
+            } catch (QueryException $exception) {
+                // 兩個不同建車請求可能同時查不到同一位新賣方，接著一起 INSERT。
+                // normalized identity unique 會讓其中一個交易成為 loser；完整 rollback 後
+                // 重新開 transaction，下一次就會讀到 winner 客戶並繼續建車。
+                if (Customer::isIdentityUniqueViolation($exception)
+                    && $attempt < self::CUSTOMER_IDENTITY_RACE_ATTEMPTS) {
+                    continue;
+                }
 
-            return $this->replayRacedVehicleCreationAfterRollback($e, $idempotencyKey, $effectiveData);
+                if (! $this->isIdempotencyKeyUniqueViolation($exception)) {
+                    throw $exception;
+                }
+
+                return $this->replayRacedVehicleCreationAfterRollback(
+                    $exception,
+                    $idempotencyKey,
+                    $effectiveData,
+                );
+            }
         }
+
+        throw new \LogicException('建車客戶競態重試流程未回傳結果');
     }
 
     /**
@@ -236,11 +254,13 @@ class VehicleService
             return $this->replayOrRejectVehicleCreation($existingVehicle, $effectiveData);
         }
 
+        $vehicleData = $this->attachAutomaticSellerCustomer($effectiveData['vehicle'], $userId);
+
         $this->assertCommissionAgentsActive([
-            'purchase_agent_id' => (int) $effectiveData['vehicle']['purchase_agent_id'],
+            'purchase_agent_id' => (int) $vehicleData['purchase_agent_id'],
         ]);
 
-        $vehicle = new Vehicle($effectiveData['vehicle']);
+        $vehicle = new Vehicle($vehicleData);
         $vehicle->stock_no = $this->generateStockNo();
         $vehicle->status = 'preparing';
         $vehicle->idempotency_key = $idempotencyKey;
@@ -488,6 +508,151 @@ class VehicleService
         return ['seller_name' => $customer->name, 'seller_phone' => $customer->phone];
     }
 
+    /**
+     * 建車時若只輸入賣方姓名、沒有先選既有客戶，就在同一筆交易中建立或安全重用客戶，
+     * 並回填 seller_customer_id。車輛姓名與電話仍保留本次輸入的歷史快照。
+     *
+     * @param  array<string, mixed>  $vehicleData
+     * @return array<string, mixed>
+     */
+    private function attachAutomaticSellerCustomer(array $vehicleData, int $userId): array
+    {
+        if (! empty($vehicleData['seller_customer_id'])) {
+            $this->ensureCustomerRole(
+                (int) $vehicleData['seller_customer_id'],
+                Customer::TYPE_SELLER,
+                $userId,
+                'seller_customer_id',
+            );
+
+            return $vehicleData;
+        }
+
+        if (trim((string) ($vehicleData['seller_name'] ?? '')) === '') {
+            return $vehicleData;
+        }
+
+        $customer = $this->findOrCreateCustomerForVehicleRole(
+            (string) $vehicleData['seller_name'],
+            $vehicleData['seller_phone'] ?? null,
+            Customer::TYPE_SELLER,
+            $userId,
+            'seller_customer_id',
+        );
+        $vehicleData['seller_customer_id'] = $customer->id;
+
+        return $vehicleData;
+    }
+
+    /**
+     * @param  array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, sales_agent_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
+     * @return array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, sales_agent_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}
+     */
+    private function attachAutomaticBuyerCustomer(array $effectiveData, int $userId): array
+    {
+        if ($effectiveData['buyer_customer_id'] !== null) {
+            $this->ensureCustomerRole(
+                $effectiveData['buyer_customer_id'],
+                Customer::TYPE_BUYER,
+                $userId,
+                'buyer_customer_id',
+            );
+
+            return $effectiveData;
+        }
+
+        if (trim($effectiveData['buyer_name']) === '') {
+            return $effectiveData;
+        }
+
+        $customer = $this->findOrCreateCustomerForVehicleRole(
+            $effectiveData['buyer_name'],
+            $effectiveData['buyer_phone'],
+            Customer::TYPE_BUYER,
+            $userId,
+            'buyer_customer_id',
+        );
+        $effectiveData['buyer_customer_id'] = $customer->id;
+
+        return $effectiveData;
+    }
+
+    /**
+     * 只有姓名與正規化後電話都相同時才重用既有客戶。沒有電話時一律建立新客戶，避免
+     * 把同名不同人錯誤合併。這個方法只管理客戶及外鍵，不改寫車輛歷史快照。
+     */
+    private function findOrCreateCustomerForVehicleRole(
+        string $name,
+        ?string $phone,
+        string $role,
+        int $userId,
+        string $field,
+    ): Customer {
+        $normalizedName = Customer::normalizeIdentityName($name);
+        $normalizedPhone = Customer::normalizeIdentityPhone($phone);
+
+        if ($normalizedPhone !== null) {
+            // 先做不加鎖的 identity lookup。若查無資料，不能依賴不存在資料列的 gap lock
+            // 來保證唯一性；真正的競態兜底是資料庫複合 unique。找到既有 row 後再依主鍵
+            // lockForUpdate，確保 buyer/seller/both 類型升級不會互相覆寫。
+            $customerId = Customer::query()
+                ->where('normalized_name', $normalizedName)
+                ->where('normalized_phone', $normalizedPhone)
+                ->value('id');
+
+            if ($customerId !== null) {
+                return $this->ensureCustomerRole((int) $customerId, $role, $userId, $field);
+            }
+        }
+
+        $customer = new Customer([
+            'name' => $name,
+            'phone' => $phone,
+            'customer_type' => $role,
+        ]);
+        $customer->created_by = $userId;
+        $customer->updated_by = $userId;
+        $customer->save();
+
+        return $customer;
+    }
+
+    private function ensureCustomerRole(int $customerId, string $role, int $userId, string $field): Customer
+    {
+        $customer = Customer::query()
+            ->whereKey($customerId)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $customer) {
+            throw ValidationException::withMessages([
+                $field => ['指定的客戶不存在'],
+            ]);
+        }
+
+        $nextType = $this->mergeCustomerTypeForVehicleRole($customer->customer_type, $role);
+        if ($nextType !== $customer->customer_type) {
+            $customer->customer_type = $nextType;
+            $customer->updated_by = $userId;
+            $customer->save();
+        }
+
+        return $customer;
+    }
+
+    private function mergeCustomerTypeForVehicleRole(string $currentType, string $role): string
+    {
+        if ($currentType === Customer::TYPE_BOTH || $currentType === $role) {
+            return $currentType;
+        }
+
+        if (in_array($currentType, [Customer::TYPE_BUYER, Customer::TYPE_SELLER], true)) {
+            return Customer::TYPE_BOTH;
+        }
+
+        return $role;
+    }
+
     public function deleteVehicle(Vehicle $vehicle): void
     {
         DB::transaction(function () use ($vehicle) {
@@ -613,20 +778,34 @@ class VehicleService
         $data['sales_agent_id'] = $this->resolveReservationSalesAgentId($data, $userId);
         $effectiveData = $this->normalizeReserveData($data);
 
-        try {
-            return DB::transaction(fn () => $this->createReservationInsideTransaction(
-                $vehicle,
-                $idempotencyKey,
-                $effectiveData,
-                $userId
-            ));
-        } catch (QueryException $e) {
-            if (! $this->isIdempotencyKeyUniqueViolation($e)) {
-                throw $e;
-            }
+        for ($attempt = 1; $attempt <= self::CUSTOMER_IDENTITY_RACE_ATTEMPTS; $attempt++) {
+            try {
+                return DB::transaction(fn () => $this->createReservationInsideTransaction(
+                    $vehicle,
+                    $idempotencyKey,
+                    $effectiveData,
+                    $userId
+                ));
+            } catch (QueryException $exception) {
+                if (Customer::isIdentityUniqueViolation($exception)
+                    && $attempt < self::CUSTOMER_IDENTITY_RACE_ATTEMPTS) {
+                    continue;
+                }
 
-            return $this->replayRacedReservationAfterRollback($e, $vehicle->id, $idempotencyKey, $effectiveData);
+                if (! $this->isIdempotencyKeyUniqueViolation($exception)) {
+                    throw $exception;
+                }
+
+                return $this->replayRacedReservationAfterRollback(
+                    $exception,
+                    $vehicle->id,
+                    $idempotencyKey,
+                    $effectiveData,
+                );
+            }
         }
+
+        throw new \LogicException('保留車輛客戶競態重試流程未回傳結果');
     }
 
     /**
@@ -651,6 +830,7 @@ class VehicleService
         $this->assertCommissionAgentsActive(['sales_agent_id' => $effectiveData['sales_agent_id']]);
         $this->assertCashAccountActive($effectiveData['cash_account_id']);
         $effectiveData = $this->applyBuyerCustomerSnapshot($effectiveData);
+        $effectiveData = $this->attachAutomaticBuyerCustomer($effectiveData, $userId);
 
         $lockedVehicle->fill([
             'buyer_name' => $effectiveData['buyer_name'],
@@ -778,7 +958,8 @@ class VehicleService
             }
         }
 
-        if ((int) $vehicle->buyer_customer_id !== (int) $effectiveData['buyer_customer_id']) {
+        if ($effectiveData['buyer_customer_id'] !== null
+            && (int) $vehicle->buyer_customer_id !== $effectiveData['buyer_customer_id']) {
             return false;
         }
 

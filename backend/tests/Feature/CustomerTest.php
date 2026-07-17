@@ -33,6 +33,62 @@ class CustomerTest extends TestCase
         }
     }
 
+    public function test_duplicate_normalized_name_and_phone_is_rejected_but_same_name_without_phone_is_allowed(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+
+        $created = $this->actingAs($admin, 'web')->postJson('/api/customers', [
+            'name' => '  王   小明  ',
+            'phone' => '0912-345-678',
+            'customer_type' => 'buyer',
+        ])->assertCreated()
+            ->assertJsonMissingPath('data.normalized_name')
+            ->assertJsonMissingPath('data.normalized_phone');
+
+        $this->assertDatabaseHas('customers', [
+            'id' => $created->json('data.id'),
+            'normalized_name' => '王 小明',
+            'normalized_phone' => '0912345678',
+        ]);
+
+        $this->actingAs($admin, 'web')->postJson('/api/customers', [
+            'name' => '王 小明',
+            'phone' => '0912345678',
+            'customer_type' => 'seller',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('phone');
+
+        foreach (range(1, 2) as $index) {
+            $this->actingAs($admin, 'web')->postJson('/api/customers', [
+                'name' => '無電話同名客戶',
+                'customer_type' => 'other',
+                'notes' => "第 {$index} 位不同本人",
+            ])->assertCreated();
+        }
+
+        $this->assertSame(2, Customer::query()->where('normalized_name', '無電話同名客戶')->count());
+    }
+
+    public function test_customer_update_rejects_identity_that_conflicts_with_another_customer(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        Customer::factory()->create(['name' => '既有客戶', 'phone' => '0922-333-444']);
+        $customer = Customer::factory()->create(['name' => '待修改客戶', 'phone' => '0911111111']);
+
+        $this->actingAs($admin, 'web')->putJson("/api/customers/{$customer->id}", [
+            'name' => '既有客戶',
+            'phone' => '0922333444',
+            'customer_type' => $customer->customer_type,
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('phone');
+
+        $this->assertDatabaseHas('customers', [
+            'id' => $customer->id,
+            'name' => '待修改客戶',
+            'phone' => '0911111111',
+        ]);
+    }
+
     public function test_admin_manager_and_sales_can_update_customer(): void
     {
         foreach (['admin', 'manager', 'sales'] as $role) {

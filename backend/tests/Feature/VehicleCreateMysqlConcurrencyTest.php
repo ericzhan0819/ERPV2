@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\CashAccount;
+use App\Models\Customer;
 use App\Models\MoneyEntry;
 use App\Models\User;
 use App\Models\Vehicle;
@@ -114,6 +115,207 @@ class VehicleCreateMysqlConcurrencyTest extends TestCase
                 $this->waitForChildOrStop($pid);
             }
 
+            @unlink($resultPath);
+        }
+    }
+
+    public function test_concurrent_vehicle_creations_reuse_one_new_seller_customer(): void
+    {
+        $this->skipUnlessRealMysqlConcurrencyTestCanRun();
+        $this->assertSafeToFreshMigrateMysqlConcurrencyDatabase();
+        $this->artisan('migrate:fresh')->run();
+
+        $user = User::factory()->admin()->create(['is_active' => true]);
+        $firstPayload = [
+            'brand' => 'Toyota',
+            'model' => 'Camry',
+            'license_plate' => 'CUSTOMER-RACE-1',
+            'seller_name' => '同一位並發賣方',
+            'seller_phone' => '0912-345-678',
+            'purchase_agent_id' => $user->id,
+            'idempotency_key' => (string) Str::uuid(),
+        ];
+        $secondPayload = [
+            ...$firstPayload,
+            'brand' => 'Honda',
+            'model' => 'Civic',
+            'license_plate' => 'CUSTOMER-RACE-2',
+            'seller_phone' => '0912345678',
+            'idempotency_key' => (string) Str::uuid(),
+        ];
+
+        $sockets = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+        if ($sockets === false) {
+            $this->markTestSkipped('此環境不支援 stream_socket_pair，無法建立父子行程同步屏障。');
+        }
+
+        $resultPath = tempnam(sys_get_temp_dir(), 'erpv2-customer-seller-race-');
+        if ($resultPath === false) {
+            $this->fail('無法建立客戶並行測試暫存結果檔。');
+        }
+
+        $pid = pcntl_fork();
+        if ($pid === -1) {
+            @unlink($resultPath);
+            $this->fail('pcntl_fork 失敗，無法建立第二個建車請求。');
+        }
+
+        if ($pid === 0) {
+            fclose($sockets[0]);
+            $this->runCustomerIdentityLosingCreateInChild(
+                $sockets[1],
+                $resultPath,
+                $firstPayload,
+                $user->id,
+            );
+        }
+
+        fclose($sockets[1]);
+        stream_set_timeout($sockets[0], self::CHILD_HANDSHAKE_TIMEOUT_SECONDS);
+
+        try {
+            $signal = fread($sockets[0], 1);
+            $metadata = stream_get_meta_data($sockets[0]);
+            if ($signal !== 'M' || ($metadata['timed_out'] ?? false)) {
+                fclose($sockets[0]);
+                $this->waitForChildOrStop($pid);
+                $pid = 0;
+                $this->fail('輸家建車請求未在時限內完成新賣方 identity miss。');
+            }
+
+            $winnerVehicle = app(VehicleService::class)->createVehicle($secondPayload, $user->id);
+            fwrite($sockets[0], 'C');
+            fclose($sockets[0]);
+
+            $status = $this->waitForChildOrStop($pid);
+            $pid = 0;
+            $childResult = $this->readChildResult($resultPath);
+
+            $this->assertTrue(
+                pcntl_wifexited($status) && pcntl_wexitstatus($status) === 0,
+                '客戶 unique loser 應 rollback 後重讀 winner 並完成建車。Child result: '.json_encode($childResult, JSON_UNESCAPED_UNICODE),
+            );
+            $this->assertSame(true, $childResult['ok'] ?? false);
+
+            DB::purge();
+            $customer = Customer::query()->sole();
+            $this->assertSame('同一位並發賣方', $customer->name);
+            $this->assertSame('0912345678', $customer->normalized_phone);
+            $this->assertSame($customer->id, $winnerVehicle->seller_customer_id);
+            $this->assertSame($customer->id, $childResult['seller_customer_id'] ?? null);
+            $this->assertSame(2, Vehicle::query()
+                ->whereIn('idempotency_key', [$firstPayload['idempotency_key'], $secondPayload['idempotency_key']])
+                ->count());
+        } finally {
+            if (is_resource($sockets[0])) {
+                fclose($sockets[0]);
+            }
+            if ($pid > 0) {
+                $this->waitForChildOrStop($pid);
+            }
+            @unlink($resultPath);
+        }
+    }
+
+    public function test_concurrent_reservations_reuse_one_new_buyer_customer(): void
+    {
+        $this->skipUnlessRealMysqlConcurrencyTestCanRun();
+        $this->assertSafeToFreshMigrateMysqlConcurrencyDatabase();
+        $this->artisan('migrate:fresh')->run();
+
+        $user = User::factory()->admin()->create(['is_active' => true]);
+        $firstAgent = User::factory()->sales()->create(['is_active' => true]);
+        $secondAgent = User::factory()->sales()->create(['is_active' => true]);
+        $firstCashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $secondCashAccount = CashAccount::factory()->create(['is_active' => true]);
+        $firstVehicle = Vehicle::factory()->create(['status' => 'listed']);
+        $secondVehicle = Vehicle::factory()->create(['status' => 'listed']);
+        $firstPayload = [
+            'buyer_name' => '同一位並發買方',
+            'buyer_phone' => '0922-333-444',
+            'sold_price' => 480000,
+            'deposit_amount' => 100000,
+            'cash_account_id' => $firstCashAccount->id,
+            'sales_agent_id' => $firstAgent->id,
+            'idempotency_key' => (string) Str::uuid(),
+        ];
+        $secondPayload = [
+            ...$firstPayload,
+            'buyer_phone' => '0922333444',
+            'cash_account_id' => $secondCashAccount->id,
+            'sales_agent_id' => $secondAgent->id,
+            'idempotency_key' => (string) Str::uuid(),
+        ];
+
+        $sockets = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+        if ($sockets === false) {
+            $this->markTestSkipped('此環境不支援 stream_socket_pair，無法建立父子行程同步屏障。');
+        }
+
+        $resultPath = tempnam(sys_get_temp_dir(), 'erpv2-customer-buyer-race-');
+        if ($resultPath === false) {
+            $this->fail('無法建立客戶並行測試暫存結果檔。');
+        }
+
+        $pid = pcntl_fork();
+        if ($pid === -1) {
+            @unlink($resultPath);
+            $this->fail('pcntl_fork 失敗，無法建立第二個保留請求。');
+        }
+
+        if ($pid === 0) {
+            fclose($sockets[0]);
+            $this->runCustomerIdentityLosingReservationInChild(
+                $sockets[1],
+                $resultPath,
+                $firstVehicle->id,
+                $firstPayload,
+                $user->id,
+            );
+        }
+
+        fclose($sockets[1]);
+        stream_set_timeout($sockets[0], self::CHILD_HANDSHAKE_TIMEOUT_SECONDS);
+
+        try {
+            $signal = fread($sockets[0], 1);
+            $metadata = stream_get_meta_data($sockets[0]);
+            if ($signal !== 'M' || ($metadata['timed_out'] ?? false)) {
+                fclose($sockets[0]);
+                $this->waitForChildOrStop($pid);
+                $pid = 0;
+                $this->fail('輸家保留請求未在時限內完成新買方 identity miss。');
+            }
+
+            $winnerVehicle = app(VehicleService::class)->reserveVehicle($secondVehicle, $secondPayload, $user->id);
+            fwrite($sockets[0], 'C');
+            fclose($sockets[0]);
+
+            $status = $this->waitForChildOrStop($pid);
+            $pid = 0;
+            $childResult = $this->readChildResult($resultPath);
+
+            $this->assertTrue(
+                pcntl_wifexited($status) && pcntl_wexitstatus($status) === 0,
+                '客戶 unique loser 應 rollback 後重讀 winner 並完成保留。Child result: '.json_encode($childResult, JSON_UNESCAPED_UNICODE),
+            );
+            $this->assertSame(true, $childResult['ok'] ?? false);
+
+            DB::purge();
+            $customer = Customer::query()->sole();
+            $this->assertSame(Customer::TYPE_BUYER, $customer->customer_type);
+            $this->assertSame($customer->id, $winnerVehicle->buyer_customer_id);
+            $this->assertSame($customer->id, $childResult['buyer_customer_id'] ?? null);
+            $this->assertSame(2, MoneyEntry::query()
+                ->whereIn('idempotency_key', [$firstPayload['idempotency_key'], $secondPayload['idempotency_key']])
+                ->count());
+        } finally {
+            if (is_resource($sockets[0])) {
+                fclose($sockets[0]);
+            }
+            if ($pid > 0) {
+                $this->waitForChildOrStop($pid);
+            }
             @unlink($resultPath);
         }
     }
@@ -231,6 +433,110 @@ class VehicleCreateMysqlConcurrencyTest extends TestCase
             @unlink($firstResultPath);
             @unlink($secondResultPath);
         }
+    }
+
+    /**
+     * @param  resource  $socket
+     * @param  array<string, mixed>  $payload
+     */
+    private function runCustomerIdentityLosingCreateInChild(
+        $socket,
+        string $resultPath,
+        array $payload,
+        int $userId,
+    ): never {
+        DB::disconnect();
+        DB::purge();
+
+        $missSignalSent = false;
+        DB::listen(function (QueryExecuted $query) use (&$missSignalSent, $socket): void {
+            if ($missSignalSent || ! self::isCustomerIdentityLookup($query)) {
+                return;
+            }
+
+            $missSignalSent = true;
+            fwrite($socket, 'M');
+            if (fread($socket, 1) !== 'C') {
+                throw new RuntimeException('父行程未確認賣方客戶 winner 已提交。');
+            }
+        });
+
+        try {
+            $vehicle = app(VehicleService::class)->createVehicle($payload, $userId);
+            file_put_contents($resultPath, json_encode([
+                'ok' => true,
+                'vehicle_id' => $vehicle->id,
+                'seller_customer_id' => $vehicle->seller_customer_id,
+            ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+            fclose($socket);
+            exit(0);
+        } catch (Throwable $exception) {
+            file_put_contents($resultPath, json_encode([
+                'ok' => false,
+                'class' => $exception::class,
+                'message' => $exception->getMessage(),
+            ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+            fclose($socket);
+            exit(1);
+        }
+    }
+
+    /**
+     * @param  resource  $socket
+     * @param  array<string, mixed>  $payload
+     */
+    private function runCustomerIdentityLosingReservationInChild(
+        $socket,
+        string $resultPath,
+        int $vehicleId,
+        array $payload,
+        int $userId,
+    ): never {
+        DB::disconnect();
+        DB::purge();
+
+        $missSignalSent = false;
+        DB::listen(function (QueryExecuted $query) use (&$missSignalSent, $socket): void {
+            if ($missSignalSent || ! self::isCustomerIdentityLookup($query)) {
+                return;
+            }
+
+            $missSignalSent = true;
+            fwrite($socket, 'M');
+            if (fread($socket, 1) !== 'C') {
+                throw new RuntimeException('父行程未確認買方客戶 winner 已提交。');
+            }
+        });
+
+        try {
+            $vehicle = Vehicle::query()->findOrFail($vehicleId);
+            $reserved = app(VehicleService::class)->reserveVehicle($vehicle, $payload, $userId);
+            file_put_contents($resultPath, json_encode([
+                'ok' => true,
+                'vehicle_id' => $reserved->id,
+                'buyer_customer_id' => $reserved->buyer_customer_id,
+            ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+            fclose($socket);
+            exit(0);
+        } catch (Throwable $exception) {
+            file_put_contents($resultPath, json_encode([
+                'ok' => false,
+                'class' => $exception::class,
+                'message' => $exception->getMessage(),
+            ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+            fclose($socket);
+            exit(1);
+        }
+    }
+
+    private static function isCustomerIdentityLookup(QueryExecuted $query): bool
+    {
+        $sql = strtolower(str_replace(['`', '"'], '', $query->sql));
+
+        return str_starts_with($sql, 'select')
+            && str_contains($sql, 'from customers')
+            && str_contains($sql, 'normalized_name')
+            && str_contains($sql, 'normalized_phone');
     }
 
     /**

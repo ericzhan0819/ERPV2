@@ -64,10 +64,88 @@ class VehicleTest extends TestCase
         $response->assertStatus(422);
     }
 
+    public function test_free_text_seller_is_automatically_created_linked_and_not_duplicated_on_replay(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $idempotencyKey = (string) Str::uuid();
+        $payload = [
+            'brand' => 'Toyota',
+            'model' => 'Camry',
+            'license_plate' => 'AUTO-SELLER-1',
+            'seller_name' => '自動建立賣方',
+            'seller_phone' => '0912-345-678',
+            'idempotency_key' => $idempotencyKey,
+        ];
+
+        $created = $this->actingAs($user, 'web')->postJson('/api/vehicles', $payload)->assertCreated();
+        $customer = Customer::query()->sole();
+
+        $created
+            ->assertJsonPath('data.seller_customer_id', $customer->id)
+            ->assertJsonPath('data.seller_name', '自動建立賣方')
+            ->assertJsonPath('data.seller_phone', '0912-345-678');
+        $this->assertSame(Customer::TYPE_SELLER, $customer->customer_type);
+        $this->assertSame($user->id, $customer->created_by);
+
+        $this->actingAs($user, 'web')->postJson('/api/vehicles', $payload)
+            ->assertOk()
+            ->assertJsonPath('data.seller_customer_id', $customer->id);
+
+        $this->assertSame(1, Customer::query()->count());
+    }
+
+    public function test_free_text_seller_reuses_exact_name_and_normalized_phone_and_upgrades_customer_type(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $customer = Customer::factory()->create([
+            'name' => '同一位客戶',
+            'phone' => '0912-345-678',
+            'customer_type' => Customer::TYPE_BUYER,
+        ]);
+
+        $this->actingAs($user, 'web')->postJson('/api/vehicles', [
+            'brand' => 'Toyota',
+            'model' => 'Camry',
+            'license_plate' => 'AUTO-SELLER-2',
+            'seller_name' => '同一位客戶',
+            'seller_phone' => '0912345678',
+            'idempotency_key' => (string) Str::uuid(),
+        ])->assertCreated()
+            ->assertJsonPath('data.seller_customer_id', $customer->id);
+
+        $this->assertSame(1, Customer::query()->count());
+        $this->assertSame(Customer::TYPE_BOTH, $customer->fresh()->customer_type);
+    }
+
+    public function test_free_text_seller_without_phone_does_not_merge_same_name_customer(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        Customer::factory()->create([
+            'name' => '同名客戶',
+            'phone' => null,
+            'customer_type' => Customer::TYPE_SELLER,
+        ]);
+
+        $response = $this->actingAs($user, 'web')->postJson('/api/vehicles', [
+            'brand' => 'Toyota',
+            'model' => 'Camry',
+            'license_plate' => 'AUTO-SELLER-3',
+            'seller_name' => '同名客戶',
+            'idempotency_key' => (string) Str::uuid(),
+        ])->assertCreated();
+
+        $this->assertSame(2, Customer::query()->count());
+        $this->assertNotNull($response->json('data.seller_customer_id'));
+    }
+
     public function test_seller_customer_id_overrides_seller_name_and_phone_with_the_customers_own_data(): void
     {
         $user = User::factory()->create(['is_active' => true]);
-        $customer = Customer::factory()->create(['name' => '客戶端真實姓名', 'phone' => '0900000001']);
+        $customer = Customer::factory()->create([
+            'name' => '客戶端真實姓名',
+            'phone' => '0900000001',
+            'customer_type' => Customer::TYPE_BUYER,
+        ]);
 
         $response = $this->actingAs($user, 'web')->postJson('/api/vehicles', [
             'brand' => 'Toyota',
@@ -89,6 +167,7 @@ class VehicleTest extends TestCase
             'seller_name' => '客戶端真實姓名',
             'seller_phone' => '0900000001',
         ]);
+        $this->assertSame(Customer::TYPE_BOTH, $customer->fresh()->customer_type);
     }
 
     public function test_updating_seller_customer_id_resyncs_seller_snapshot(): void

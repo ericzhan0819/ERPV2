@@ -776,7 +776,6 @@ function ReserveModal({
   const [buyer_name, setBuyerName] = useState('')
   const [buyer_phone, setBuyerPhone] = useState('')
   const [buyer_customer_id, setBuyerCustomerId] = useState('')
-  const [buyerCustomerLabel, setBuyerCustomerLabel] = useState('')
   const [sold_price, setSoldPrice] = useState('')
   const [deposit_amount, setDepositAmount] = useState('')
   const [cash_account_id, setCashAccountId] = useState('')
@@ -808,22 +807,18 @@ function ReserveModal({
     <Modal title="收訂金並保留" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <CustomerSelect
-          label="關聯客戶（買方）"
-          value={buyer_customer_id}
-          selectedLabel={buyerCustomerLabel}
-          onChange={(customerId, customer) => {
+          nameLabel="買方姓名"
+          phoneLabel="買方電話"
+          customerId={buyer_customer_id}
+          name={buyer_name}
+          phone={buyer_phone}
+          required
+          onChange={({ customerId, name, phone }) => {
             setBuyerCustomerId(customerId)
-            if (customer) {
-              setBuyerName(customer.name)
-              setBuyerPhone(customer.phone ?? '')
-              setBuyerCustomerLabel(customer.name)
-            } else {
-              setBuyerCustomerLabel('')
-            }
+            setBuyerName(name)
+            setBuyerPhone(phone)
           }}
         />
-        <Field label="買方姓名" value={buyer_name} onChange={setBuyerName} required readOnly={!!buyer_customer_id} />
-        <Field label="買方電話" value={buyer_phone} onChange={setBuyerPhone} readOnly={!!buyer_customer_id} />
         <Field label="成交價" value={sold_price} onChange={setSoldPrice} type="number" required />
         <Field label="訂金金額" value={deposit_amount} onChange={setDepositAmount} type="number" required />
         {!isSales && (
@@ -1040,6 +1035,9 @@ function CloseSaleModal({
     <Modal title="成交結案" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field label="成交日期（預設今天）" value={sold_at} onChange={setSoldAt} type="date" />
+        <p className="text-xs text-fg-muted">
+          成交日期會決定薪資獎金月份；已確認或已發薪的月份不能再新增成交。訂金與尾款可先收取，因為收款日期不等於成交月份。
+        </p>
         {error && <p className="text-sm text-error">{error}</p>}
         <button
           type="submit"
