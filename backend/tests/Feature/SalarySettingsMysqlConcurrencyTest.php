@@ -17,6 +17,7 @@ use App\Services\SalaryPeriodService;
 use App\Services\SalaryProfileService;
 use App\Services\VehicleService;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
@@ -32,6 +33,12 @@ class SalarySettingsMysqlConcurrencyTest extends TestCase
     private const CHILD_STOP_TIMEOUT_SECONDS = 3;
 
     private const CHILD_WAIT_POLL_MICROSECONDS = 100000;
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+        parent::tearDown();
+    }
 
     public function test_salary_profile_duplicate_key_loser_replays_committed_mysql_winner(): void
     {
@@ -680,6 +687,7 @@ class SalarySettingsMysqlConcurrencyTest extends TestCase
     {
         $this->skipUnlessRealMysqlConcurrencyTestCanRun();
         $this->assertSafeToFreshMigrateMysqlConcurrencyDatabase();
+        Carbon::setTestNow(Carbon::parse('2026-08-01 10:00:00', 'Asia/Taipei'));
         $this->artisan('migrate:fresh', ['--seed' => true])->run();
     }
 

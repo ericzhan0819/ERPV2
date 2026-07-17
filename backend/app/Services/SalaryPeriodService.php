@@ -183,6 +183,15 @@ final class SalaryPeriodService
         return DB::transaction(function () use ($actor, $period) {
             $lockedPeriod = $this->lockDraft($period);
             $periodMonth = $lockedPeriod->period_month->format('Y-m');
+
+            // 當月仍可能持續新增成交，若提前確認會讓後續實際成交無法歸入正確月份。
+            // 草稿可在當月持續預覽與重算，但必須等月份結束後才能鎖定。
+            if ($lockedPeriod->period_month->copy()->startOfMonth()->greaterThanOrEqualTo(now()->startOfMonth())) {
+                throw ValidationException::withMessages([
+                    'salary_period' => ["{$periodMonth} 尚未結束，只能預覽與重算，請於下個月再確認結算"],
+                ]);
+            }
+
             $eligibility = $this->eligibilityService->assertPeriodEligible($periodMonth, $lockedPeriod->id);
             $before = $this->snapshotSignature($lockedPeriod);
             $plan = CommissionPlan::query()->with('tiers')->findOrFail($lockedPeriod->commission_plan_id);

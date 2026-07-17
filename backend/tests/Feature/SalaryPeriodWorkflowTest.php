@@ -15,6 +15,7 @@ use App\Services\VehicleService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
@@ -32,10 +33,17 @@ class SalaryPeriodWorkflowTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        Carbon::setTestNow(Carbon::parse('2026-07-18 12:00:00', 'Asia/Taipei'));
         $this->service = app(SalaryPeriodService::class);
         $this->admin = User::factory()->admin()->create(['is_active' => true]);
         $this->agent = User::factory()->sales()->create(['is_active' => true]);
         $this->profile($this->agent);
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+        parent::tearDown();
     }
 
     public function test_create_draft_uses_effective_plan_snapshots_profile_and_builds_deterministic_totals(): void
@@ -234,6 +242,27 @@ class SalaryPeriodWorkflowTest extends TestCase
         } catch (AuthorizationException) {
             $this->assertTrue(true);
         }
+    }
+
+    public function test_current_month_draft_can_recalculate_but_cannot_be_confirmed_before_month_end(): void
+    {
+        $this->plan('七月方案', '2026-01-01', 2000);
+        $vehicle = Vehicle::factory()->create([
+            'status' => 'sold',
+            'sold_at' => '2026-07-15 12:00:00',
+            'purchase_price' => 60000,
+            'sold_price' => 100000,
+            'purchase_agent_id' => $this->agent->id,
+            'sales_agent_id' => $this->agent->id,
+        ]);
+        $this->entry($vehicle, 'expense', '購車付款', 60000);
+        $this->entry($vehicle, 'income', '尾款收入', 100000);
+
+        $period = $this->service->createDraft($this->admin, '2026-07');
+        $period = $this->service->recalculateDraft($this->admin, $period);
+
+        $this->expectValidation(fn () => $this->service->confirm($this->admin, $period), 'salary_period');
+        $this->assertSame(SalaryPeriod::STATUS_DRAFT, $period->fresh()->status);
     }
 
     public function test_confirm_revalidates_rejects_stale_preview_then_locks_snapshot(): void

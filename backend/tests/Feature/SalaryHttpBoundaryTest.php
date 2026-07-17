@@ -38,6 +38,7 @@ class SalaryHttpBoundaryTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        Carbon::setTestNow(Carbon::create(2026, 7, 15, 10, 0, 0, 'Asia/Taipei'));
 
         Route::post('/api/_test/salary-period', fn (StoreSalaryPeriodRequest $request) => $request->validated());
         Route::post('/api/_test/salary-adjustment', fn (StoreSalaryAdjustmentRequest $request) => $request->validated());

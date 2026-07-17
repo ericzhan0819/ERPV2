@@ -35,6 +35,7 @@ class SalaryPaymentTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        Carbon::setTestNow('2026-07-01 10:00:00');
         $this->service = app(SalaryPeriodService::class);
         $this->admin = User::factory()->admin()->create(['is_active' => true]);
     }
@@ -47,7 +48,6 @@ class SalaryPaymentTest extends TestCase
 
     public function test_pay_creates_one_approved_salary_entry_per_positive_settlement_and_updates_formal_totals(): void
     {
-        Carbon::setTestNow('2026-06-30 10:00:00');
         $employee = $this->employeeWithProfile('王小明', 30000, 2000, 900, 600);
         $zeroPayEmployee = $this->employeeWithProfile('零元員工', 1500, 0, 900, 600);
         $period = $this->confirmedPeriod('2026-06');
@@ -56,12 +56,14 @@ class SalaryPaymentTest extends TestCase
             'opening_balance' => 100000,
             'is_active' => true,
         ]);
+        $payload = $this->payload($account, 'salary-pay-june');
+        $payload['payment_date'] = '2026-07-01';
 
-        $paid = $this->service->pay($this->admin, $period, $this->payload($account, 'salary-pay-june'));
+        $paid = $this->service->pay($this->admin, $period, $payload);
 
         $this->assertSame(SalaryPeriod::STATUS_PAID, $paid->status);
         $this->assertSame($account->id, $paid->cash_account_id);
-        $this->assertSame('2026-06-30', $paid->payment_date->toDateString());
+        $this->assertSame('2026-07-01', $paid->payment_date->toDateString());
         $this->assertSame($this->admin->id, $paid->paid_by);
         $this->assertNotNull($paid->paid_at);
 

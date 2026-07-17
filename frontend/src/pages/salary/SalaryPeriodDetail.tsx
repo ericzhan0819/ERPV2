@@ -48,6 +48,18 @@ const itemLabels: Record<string, string> = {
   manual_deduction: '其他扣款',
 }
 
+function currentTaipeiMonth(): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Taipei',
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(new Date())
+  const year = parts.find((part) => part.type === 'year')?.value ?? ''
+  const month = parts.find((part) => part.type === 'month')?.value ?? ''
+
+  return `${year}-${month}`
+}
+
 export function SalaryPeriodDetail() {
   const id = Number(useParams().id)
   const [period, setPeriod] = useState<SalaryPeriod | null>(null)
@@ -128,6 +140,7 @@ export function SalaryPeriodDetail() {
 
       {period.status === 'draft' && (
         <DraftActions
+          periodMonth={period.period_month}
           busy={busy}
           blocked={Boolean(period.has_blocking_issues)}
           onRecalculate={() => runAction(() => recalculateSalaryPeriod(id))}
@@ -230,27 +243,37 @@ function CompanySummary({ period }: { period: SalaryPeriod }) {
   )
 }
 
-function DraftActions({ busy, blocked, onRecalculate, onConfirm }: {
+function DraftActions({ periodMonth, busy, blocked, onRecalculate, onConfirm }: {
+  periodMonth: string
   busy: boolean
   blocked: boolean
   onRecalculate: () => void
   onConfirm: () => void
 }) {
+  const monthStillOpen = periodMonth >= currentTaipeiMonth()
+
   function confirm() {
     if (window.confirm('確認後薪資快照與車輛歸屬將鎖定，確定要確認結算？')) onConfirm()
   }
   return (
-    <div className="grid gap-2 sm:flex sm:flex-wrap">
-      <button disabled={busy} onClick={onRecalculate} className="min-h-11 rounded-lg border border-border-strong px-4 py-2 text-sm disabled:opacity-50">
-        {busy ? '處理中...' : '重算草稿'}
-      </button>
-      <button
-        disabled={busy || blocked}
-        onClick={confirm}
-        className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm text-primary-fg disabled:opacity-50"
-      >
-        {busy ? '處理中...' : '確認結算'}
-      </button>
+    <div className="flex flex-col gap-2">
+      <div className="grid gap-2 sm:flex sm:flex-wrap">
+        <button disabled={busy} onClick={onRecalculate} className="min-h-11 rounded-lg border border-border-strong px-4 py-2 text-sm disabled:opacity-50">
+          {busy ? '處理中...' : '重算草稿'}
+        </button>
+        <button
+          disabled={busy || blocked || monthStillOpen}
+          onClick={confirm}
+          className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm text-primary-fg disabled:opacity-50"
+        >
+          {busy ? '處理中...' : '確認結算'}
+        </button>
+      </div>
+      {monthStillOpen && (
+        <p className="text-sm text-warning">
+          {periodMonth} 尚未結束，目前只能預覽與重算；請於下個月再確認，避免鎖定後漏掉本月後續成交。
+        </p>
+      )}
     </div>
   )
 }
