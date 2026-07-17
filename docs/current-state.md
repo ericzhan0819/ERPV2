@@ -1,10 +1,10 @@
-# ERPV2 current-state — v1.2 已封版，v1.3 待人工 Smoke
+# ERPV2 current-state — v1.3 Smoke 已通過
 
-日期：2026-07-16
+日期：2026-07-18
 專案：ERPV2 / 中古車行內部營運系統
-目前穩定點：`b1edffa docs: 完成 v1.2 smoke 封版與交接文件`
+目前穩定點：`d9c98b0 fix:補上以售車收購價修正入口與薪資鎖定保護`
 目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`
-狀態：v1.2 已完成並封版。v1.3「薪資結算」工程實作、自動回歸、真實 MariaDB 並發／時區測試、前端 lint／typecheck／production build、13.1 響應式與 dark mode 收尾及文件皆已完成；`PLAN_v1.3.md` 目前只剩第 14 部分完整 browser manual smoke，尚未封版。
+狀態：v1.3「薪資結算」工程實作、自動回歸、真實 MariaDB 並發／時區測試、前端 lint／typecheck／production build、13.1 響應式與 dark mode 收尾，以及使用者 browser manual smoke 均已完成。功能與驗收已通過；尚未取得 commit／push／tag 授權，因此 Git 封板 commit／tag 尚未建立。
 
 ---
 
@@ -55,7 +55,7 @@ cd frontend && npx tsc -b
 cd frontend && ./node_modules/.bin/vite build
 ```
 
-v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped。v1.3 自動收尾最新完整回歸為 482 tests、470 passed、12 environment-gated skipped、2217 assertions；另於全新可拋棄 MariaDB 10.11 schema 啟用全部受保護測試，12 tests／147 assertions 全數通過，驗證後已刪除 schema。frontend lint（2 個既有 Fast Refresh warnings）／typecheck／production build 均重新執行通過。完整紀錄見 `docs/v1.3-smoke-report.md`。
+v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped。v1.3 與獨立 Customer hotfix 納入後的完整回歸為 499 tests、485 passed、14 environment-gated skipped、2293 assertions；所有受保護的 MariaDB 10.11.18 並發／時區測試分別在專用可拋棄 schema 執行，共 14 tests／176 assertions 全數通過，驗證後均刪除 schema。frontend lint（2 個既有 Fast Refresh warnings）／typecheck／production build 均重新執行通過。使用者於 2026-07-18 完成完整 browser manual smoke。完整紀錄見 `docs/v1.3-smoke-report.md` 與 `docs/customer-workflow-hotfix.md`。
 
 ---
 
@@ -116,9 +116,14 @@ v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend 
 
 - 客戶新增 / 編輯 / 查詢
 - 關聯車輛買方 / 賣方
-- 車輛保留時可選擇關聯客戶並同步快照
+- 買入建車與收訂金採單一姓名搜尋欄位；選取既有客戶會帶入電話，未選取時以自由輸入姓名／電話自動建立並關聯新客戶；兩條流程已由使用者 Browser Smoke 驗證通過
+- 自動重用只在正規化姓名與電話皆相同時成立；無電話同名不合併
+- 資料庫以 `customers_normalized_identity_unique` 防止並發重複，unique loser rollback 後於新 transaction 重讀 winner；建車與保留雙連線 MariaDB 競態均已實跑
+- 客戶正規化欄位屬內部 identity key，不回傳 API
 - 客戶資料更新不會回改既有車輛快照
+- 一般車輛 PATCH 不會因修正自由文字賣方而暗中建立客戶；需要更換關聯時必須明確選取客戶
 - 有關聯車輛的客戶不可刪除
+- 完整 hotfix 邊界見 `PLAN_customer_workflow_hotfix.md` 與 `docs/customer-workflow-hotfix.md`
 
 ### 3.6 Cash Accounts
 
@@ -295,7 +300,7 @@ sales 不可以看到：
 
 ---
 
-## 7. v1.2 封版與 v1.3 規劃狀態
+## 7. v1.2 封版與 v1.3 完成狀態
 
 v1.2 已完成：
 
@@ -386,7 +391,7 @@ v1.3 第 1～10 部分已補齊：
 - 薪資資格服務的任意集合檢查已改為 private；一般預覽使用 `inspectPeriod()`，第 7 部分的草稿建立／重算使用 transaction-only `inspectPeriodForUpdate()` 鎖定完整月份，確認則使用 `assertPeriodEligible()` 重新鎖定並阻擋異常。
 - 零毛利／虧損車只要其他資格完整仍列為 eligible，並回傳 approved-only 毛利；後續交給計算器保留明細與公司淨損益，但不推升賣車跨級台數。
 - `SalaryPeriodService` 已完成月份草稿、重算、手動加扣與確認鎖定。建立草稿才選取最新有效方案，後續重算固定沿用 `commission_plan_id`，不受新建回溯方案影響。
-- 薪資草稿月份不得晚於 `Asia/Taipei` 目前月份；當月可用於即時預估，未來月份由 Request 與 Service 雙層拒絕，避免誤確認後提前鎖住該月份成交回填。
+- 薪資草稿月份不得晚於 `Asia/Taipei` 目前月份；當月可用於即時預估與重算，但 `confirm()` 在月份結束前由 Service 拒絕，前端同步停用確認並顯示原因。未來月份則由 Request 與 Service 雙層拒絕，避免中途鎖定後漏掉該月後續成交。
 - 只有 active user + active salary profile 建立 settlement；沒有啟用薪資設定的使用者採明確排除。草稿重算會更新薪資 snapshot 與所有自動項目，但保留既有手動加扣；設定後來停用的既有 settlement 自動項目歸零，不會暗刪手動資料。
 - `salary_settlements.net_pay` 為 signed bigint。草稿允許負薪並保持可建立、可重算、可手動補平；確認點才列出負薪員工並以 422 阻擋。新增手動扣款若立即造成負薪仍會 rollback。
 - 草稿建立／重算會先鎖定整月 sold 候選車，再讀 MoneyEntry、settlement snapshot 與方案，避免 MySQL REPEATABLE READ 在車輛鎖前建立舊 read view；與獎金歸屬修改及綁車 MoneyEntry 核准共用車輛列鎖。確認時同一 transaction 重新選取、鎖定、驗資格、重算並比對 snapshot；stale preview 會回 422 要求先重算。
@@ -416,11 +421,11 @@ v1.3 第 1～10 部分已補齊：
 - v1.3 第 13.1 節已完成：手機採 drawer Sidebar，薪資月份與待補歸屬在小螢幕改為卡片，薪資詳情、設定、級距與 modal 可堆疊操作；相關表單以 `.form-control-touch` opt-in 既有 light／dark 語意 token 與 44px 高度，不改變其他模組 compact controls。獎金級距計入台數、來源未確認異常及未啟用獎金文案已修正，其中草稿啟用狀態讀取既有 Salary Profiles API，涵蓋停用且 0 台員工。Firefox 152 + WebDriver BiDi 已實測 320／375／390／768／1440px light／dark，沒有整頁水平 overflow。
 - draft 薪資詳情新增非阻擋性獎金設定提示：正毛利合格車的收／賣車人若沒有 active salary profile、帳號停用或未啟用獎金，會明確提示該角色獎金歸公司剩餘並連到薪資設定；不改變既有 eligibility 或確認規則。
 
-後續只待使用者驗收：
+v1.3 使用者驗收已完成。Smoke 過程修正稽核類型映射、薪資勞健保項目中文標籤、已售車補登／修正收購價入口，以及 confirmed／paid 月份收購價鎖定；完整結果見 `docs/v1.3-smoke-report.md`。驗收所用的 2026-07 paid 月份與薪資支出已依使用者授權受控清除並恢復保護 triggers，目前開發資料庫沒有薪資月份；這是測試資料清理，不改變已通過的功能驗收。
 
-- `docs/v1.3-smoke-report.md` 第 3 節 browser manual smoke。
+後續只剩建立封板 commit／tag；在取得使用者明確授權前不自動 commit、push 或建立 tag。
 
-Website MVP 延後到 v1.3 完成或進入正式部署準備時再獨立規劃，不得混入薪資結算。
+Website MVP 可在 v1.3 Git 封板或正式部署準備時另立企劃與 PLAN，不得混入薪資結算。
 
 ---
 
