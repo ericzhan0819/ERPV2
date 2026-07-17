@@ -42,8 +42,8 @@ const itemLabels: Record<string, string> = {
   fixed_allowance: '固定津貼',
   purchase_bonus: '收車獎金',
   sales_bonus: '賣車獎金',
-  labor_insurance_deduction: '勞保扣款',
-  health_insurance_deduction: '健保扣款',
+  labor_insurance: '勞保扣款',
+  health_insurance: '健保扣款',
   manual_addition: '其他加給',
   manual_deduction: '其他扣款',
 }

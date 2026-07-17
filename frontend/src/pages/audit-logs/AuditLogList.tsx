@@ -25,6 +25,10 @@ const subjectLabels: Record<AuditSubjectType, string> = {
   cash_account: '資金帳戶',
   customer: '客戶',
   authentication: '認證',
+  salary_profile: '薪資設定',
+  commission_plan: '獎金方案',
+  salary_period: '薪資月份',
+  salary_settlement_item: '薪資加扣項',
 }
 
 const roleLabels: Record<string, string> = {

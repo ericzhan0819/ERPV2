@@ -8,6 +8,10 @@ export type AuditSubjectType =
   | 'cash_account'
   | 'customer'
   | 'authentication'
+  | 'salary_profile'
+  | 'commission_plan'
+  | 'salary_period'
+  | 'salary_settlement_item'
 
 export interface AuditLog {
   id: number

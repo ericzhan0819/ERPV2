@@ -242,6 +242,66 @@ class VehicleCommissionAttributionTest extends TestCase
             ->exists());
     }
 
+    public function test_admin_can_fill_missing_purchase_price_for_sold_vehicle_before_salary_confirmation(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $vehicle = Vehicle::factory()->create([
+            'status' => 'sold',
+            'sold_at' => '2026-07-03 10:00:00',
+            'purchase_price' => null,
+            'license_plate' => 'SMOKE-PRICE-01',
+        ]);
+
+        $this->actingAs($admin, 'web')->patchJson("/api/vehicles/{$vehicle->id}", [
+            'brand' => $vehicle->brand,
+            'model' => $vehicle->model,
+            'license_plate' => $vehicle->license_plate,
+            'purchase_price' => 500000,
+        ])->assertOk()->assertJsonPath('data.purchase_price', 500000);
+
+        $this->assertDatabaseHas('vehicles', [
+            'id' => $vehicle->id,
+            'purchase_price' => 500000,
+        ]);
+    }
+
+    public function test_confirmed_salary_month_blocks_purchase_price_correction_even_without_settlement_item_reference(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $vehicle = Vehicle::factory()->create([
+            'status' => 'sold',
+            'sold_at' => '2026-07-03 10:00:00',
+            'purchase_price' => null,
+            'license_plate' => 'SMOKE-PRICE-02',
+        ]);
+        $plan = CommissionPlan::query()->create([
+            'name' => '收購價鎖定測試方案',
+            'effective_from' => '2026-01-01',
+            'company_reserve_bps' => 4000,
+            'purchase_bonus_bps' => 2000,
+            'is_active' => true,
+            'created_by' => $admin->id,
+        ]);
+        SalaryPeriod::query()->create([
+            'period_month' => '2026-07-01',
+            'commission_plan_id' => $plan->id,
+            'status' => SalaryPeriod::STATUS_CONFIRMED,
+            'created_by' => $admin->id,
+        ]);
+
+        $this->actingAs($admin, 'web')->patchJson("/api/vehicles/{$vehicle->id}", [
+            'brand' => $vehicle->brand,
+            'model' => $vehicle->model,
+            'license_plate' => $vehicle->license_plate,
+            'purchase_price' => 500000,
+        ])->assertUnprocessable()->assertJsonValidationErrors('purchase_price');
+
+        $this->assertDatabaseHas('vehicles', [
+            'id' => $vehicle->id,
+            'purchase_price' => null,
+        ]);
+    }
+
     public function test_confirmed_or_paid_salary_period_reference_locks_vehicle_attribution(): void
     {
         $admin = User::factory()->admin()->create();

@@ -51,6 +51,18 @@ export async function createVehicle(payload: CreateVehiclePayload): Promise<Vehi
   return data.data
 }
 
+export async function updateVehiclePurchasePrice(vehicle: Vehicle, purchasePrice: number): Promise<Vehicle> {
+  const payload = {
+    brand: vehicle.brand,
+    model: vehicle.model,
+    ...(vehicle.license_plate ? { license_plate: vehicle.license_plate } : {}),
+    ...(vehicle.vin ? { vin: vehicle.vin } : {}),
+    purchase_price: purchasePrice,
+  }
+  const { data } = await apiClient.patch<{ data: Vehicle }>(`/api/vehicles/${vehicle.id}`, payload)
+  return data.data
+}
+
 export async function listVehicleForSale(id: number, payload: ListVehiclePayload): Promise<Vehicle> {
   const { data } = await apiClient.post<{ data: Vehicle }>(`/api/vehicles/${id}/list`, payload)
   return data.data

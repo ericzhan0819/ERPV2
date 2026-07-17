@@ -112,6 +112,20 @@ class SalaryEligibilityTest extends TestCase
         $this->assertTrue($passing['vehicle_results'][$vehicle->id]['eligible']);
     }
 
+    public function test_missing_purchase_price_points_to_purchase_price_correction(): void
+    {
+        $vehicle = $this->validVehicle(['purchase_price' => null], createPurchasePayment: false);
+        $this->entry($vehicle, 'expense', '購車付款', 500000);
+
+        $result = $this->service->inspectPeriod('2026-06');
+        $issue = collect($result['vehicle_results'][$vehicle->id]['issues'])
+            ->firstWhere('code', SalaryEligibilityService::ISSUE_PURCHASE_PAYMENT_MISMATCH);
+
+        $this->assertNotNull($issue);
+        $this->assertSame('補登收購價', $issue['correction']['label']);
+        $this->assertSame('vehicle_purchase_price', $issue['correction']['action']);
+    }
+
     public function test_legacy_unknown_entry_blocks_vehicle_even_when_rejected(): void
     {
         $vehicle = $this->validVehicle();

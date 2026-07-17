@@ -245,8 +245,8 @@ final class SalaryEligibilityService
                 self::ISSUE_PURCHASE_PAYMENT_MISMATCH,
                 'purchase_price',
                 "已核准購車付款為 {$facts['approved_purchase_payment_total']}，收購價為 {$expected}",
-                '查看購車付款',
-                'vehicle_money_entries',
+                $vehicle->purchase_price === null ? '補登收購價' : '查看購車付款',
+                $vehicle->purchase_price === null ? 'vehicle_purchase_price' : 'vehicle_money_entries',
             );
         }
 

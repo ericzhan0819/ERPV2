@@ -408,6 +408,19 @@ class VehicleService
                 ]);
             }
 
+            $currentPurchasePrice = $lockedVehicle->purchase_price === null ? null : (int) $lockedVehicle->purchase_price;
+            $nextPurchasePrice = array_key_exists('purchase_price', $data)
+                ? ($data['purchase_price'] === null ? null : (int) $data['purchase_price'])
+                : $currentPurchasePrice;
+
+            if ($lockedVehicle->status === 'sold'
+                && $nextPurchasePrice !== $currentPurchasePrice
+                && $this->isVehicleLockedByConfirmedSalaryPeriod($lockedVehicle)) {
+                throw ValidationException::withMessages([
+                    'purchase_price' => ['此車輛已納入已確認或已發薪的薪資月份，不得更改收購價'],
+                ]);
+            }
+
             $lockedVehicle->fill($data);
             $lockedVehicle->updated_by = $userId;
             $lockedVehicle->save();
@@ -1093,24 +1106,7 @@ class VehicleService
         return DB::transaction(function () use ($vehicle, $data, $userId) {
             $lockedVehicle = Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
 
-            $isLockedBySalaryPeriod = SalarySettlementItem::query()
-                ->where('vehicle_id', $lockedVehicle->id)
-                ->whereHas('settlement.period', fn ($query) => $query->whereIn('status', [
-                    SalaryPeriod::STATUS_CONFIRMED,
-                    SalaryPeriod::STATUS_PAID,
-                ]))
-                ->exists();
-
-            // 防禦早期資料或零獎金車輛沒有 settlement item reference 的歷史缺口。
-            // 此處已持有車輛列鎖；薪資確認也必須取得同一列，因此不會在檢查後才競態確認。
-            if (! $isLockedBySalaryPeriod && $lockedVehicle->sold_at !== null) {
-                $isLockedBySalaryPeriod = SalaryPeriod::query()
-                    ->where('period_month', $lockedVehicle->sold_at->format('Y-m-01'))
-                    ->whereIn('status', [SalaryPeriod::STATUS_CONFIRMED, SalaryPeriod::STATUS_PAID])
-                    ->exists();
-            }
-
-            if ($isLockedBySalaryPeriod) {
+            if ($this->isVehicleLockedByConfirmedSalaryPeriod($lockedVehicle)) {
                 throw ValidationException::withMessages([
                     'commission_attribution' => ['此車輛已被確認或已發薪的薪資月份引用，不得更改獎金歸屬'],
                 ]);
@@ -1123,6 +1119,29 @@ class VehicleService
 
             return $lockedVehicle->load(['purchaseAgent:id,name', 'salesAgent:id,name']);
         });
+    }
+
+    private function isVehicleLockedByConfirmedSalaryPeriod(Vehicle $lockedVehicle): bool
+    {
+        $isLocked = SalarySettlementItem::query()
+            ->where('vehicle_id', $lockedVehicle->id)
+            ->whereHas('settlement.period', fn ($query) => $query->whereIn('status', [
+                SalaryPeriod::STATUS_CONFIRMED,
+                SalaryPeriod::STATUS_PAID,
+            ]))
+            ->exists();
+
+        // 防禦早期資料、零獎金車輛或歸屬人沒有 active salary profile 時，沒有
+        // settlement item reference 的歷史缺口。成交月份一旦確認或發薪，任何會
+        // 改變薪資基礎的收購價與獎金歸屬都必須維持鎖定。
+        if (! $isLocked && $lockedVehicle->sold_at !== null) {
+            $isLocked = SalaryPeriod::query()
+                ->where('period_month', $lockedVehicle->sold_at->format('Y-m-01'))
+                ->whereIn('status', [SalaryPeriod::STATUS_CONFIRMED, SalaryPeriod::STATUS_PAID])
+                ->exists();
+        }
+
+        return $isLocked;
     }
 
     /** @param array<string, mixed> $data */

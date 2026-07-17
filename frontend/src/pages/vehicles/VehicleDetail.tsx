@@ -10,6 +10,7 @@ import {
   recordFinalPayment,
   recordVehicleExpense,
   reserveVehicle,
+  updateVehiclePurchasePrice,
 } from '../../api/vehicles'
 import { listCashAccountOptions } from '../../api/cashAccounts'
 import {
@@ -161,7 +162,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
   return fallback
 }
 
-type ActiveModal = 'list' | 'reserve' | 'final-payment' | 'close-sale' | 'expense' | null
+type ActiveModal = 'list' | 'reserve' | 'final-payment' | 'close-sale' | 'expense' | 'purchase-price' | null
 
 export function VehicleDetail() {
   const { user } = useAuth()
@@ -334,6 +335,20 @@ export function VehicleDetail() {
     }
   }
 
+  async function handlePurchasePrice(form: { purchase_price: string }) {
+    setSubmitting(true)
+    setFormError(null)
+    try {
+      await updateVehiclePurchasePrice(vehicle, Number(form.purchase_price))
+      closeModal()
+      loadDetail()
+    } catch (err) {
+      setFormError(extractErrorMessage(err, '收購價更新失敗，請稍後再試'))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
@@ -456,6 +471,15 @@ export function VehicleDetail() {
           <InfoRow label="買入來源" value={vehicle.purchase_source_type ?? '-'} />
           <InfoRow label="原車主 / 供應商" value={vehicle.seller_name ?? '-'} />
           {canViewFinance && <InfoRow label="收購價" value={formatCurrency(vehicle.purchase_price)} />}
+          {user?.role === 'admin' && !detail.commission_attribution_lock && (
+            <button
+              type="button"
+              onClick={() => setActiveModal('purchase-price')}
+              className="mt-3 min-h-11 rounded-lg border border-border-strong px-3 py-2 text-sm font-medium text-primary hover:bg-surface-2"
+            >
+              {vehicle.purchase_price === null || vehicle.purchase_price === undefined ? '補登收購價' : '修正收購價'}
+            </button>
+          )}
           <InfoRow label="收車人" value={vehicle.purchase_agent?.name ?? '-'} />
         </Panel>
 
@@ -620,7 +644,56 @@ export function VehicleDetail() {
           isAdmin={user?.role === 'admin'}
         />
       )}
+      {activeModal === 'purchase-price' && (
+        <PurchasePriceModal
+          currentPrice={vehicle.purchase_price}
+          onClose={closeModal}
+          onSubmit={handlePurchasePrice}
+          error={formError}
+          submitting={submitting}
+        />
+      )}
     </div>
+  )
+}
+
+function PurchasePriceModal({
+  currentPrice,
+  onClose,
+  onSubmit,
+  error,
+  submitting,
+}: {
+  currentPrice: number | null | undefined
+  onClose: () => void
+  onSubmit: (form: { purchase_price: string }) => void
+  error: string | null
+  submitting: boolean
+}) {
+  const [purchasePrice, setPurchasePrice] = useState(currentPrice?.toString() ?? '')
+
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    onSubmit({ purchase_price: purchasePrice })
+  }
+
+  return (
+    <Modal title={currentPrice === null || currentPrice === undefined ? '補登收購價' : '修正收購價'} onClose={onClose}>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <p className="text-sm leading-6 text-fg-muted">
+          收購價會影響單車毛利與薪資獎金。薪資月份確認或發薪後，系統將禁止修改。
+        </p>
+        <Field label="收購價" value={purchasePrice} onChange={setPurchasePrice} type="number" required />
+        {error && <p className="text-sm text-error">{error}</p>}
+        <button
+          type="submit"
+          disabled={submitting || purchasePrice === '' || Number(purchasePrice) < 0}
+          className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
+        >
+          {submitting ? '儲存中...' : '儲存收購價'}
+        </button>
+      </form>
+    </Modal>
   )
 }
 
