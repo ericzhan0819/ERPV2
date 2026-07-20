@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Car, Wallet, Banknote, Users, Contact, ScrollText, HandCoins, Menu, X } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
@@ -20,7 +20,7 @@ export function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [isMobileViewport, setIsMobileViewport] = useState(() => window.matchMedia('(max-width: 1023px)').matches)
+  const [isMobileViewport, setIsMobileViewport] = useState(true)
   const sidebarRef = useRef<HTMLElement>(null)
   const sidebarCloseButtonRef = useRef<HTMLButtonElement>(null)
   const visibleNavItems = navItems.filter((item) => !!user?.role && item.roles.includes(user.role))
@@ -29,16 +29,18 @@ export function AppLayout() {
     setSidebarOpen(false)
   }, [location.pathname])
 
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(max-width: 1023px)')
+  useLayoutEffect(() => {
+    function syncViewportFromSidebar() {
+      if (!sidebarRef.current) return
 
-    function handleViewportChange(event: MediaQueryListEvent) {
-      setIsMobileViewport(event.matches)
-      if (!event.matches) setSidebarOpen(false)
+      const isMobile = window.getComputedStyle(sidebarRef.current).position === 'fixed'
+      setIsMobileViewport(isMobile)
+      if (!isMobile) setSidebarOpen(false)
     }
 
-    mediaQuery.addEventListener('change', handleViewportChange)
-    return () => mediaQuery.removeEventListener('change', handleViewportChange)
+    syncViewportFromSidebar()
+    window.addEventListener('resize', syncViewportFromSidebar)
+    return () => window.removeEventListener('resize', syncViewportFromSidebar)
   }, [])
 
   useEffect(() => {
@@ -65,6 +67,12 @@ export function AppLayout() {
       const lastElement = focusableElements.at(-1)
 
       if (!firstElement || !lastElement) return
+
+      if (!sidebarRef.current.contains(document.activeElement)) {
+        event.preventDefault()
+        firstElement.focus()
+        return
+      }
 
       if (event.shiftKey && document.activeElement === firstElement) {
         event.preventDefault()

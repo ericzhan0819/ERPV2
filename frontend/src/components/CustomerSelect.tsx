@@ -51,6 +51,8 @@ export function CustomerSelect({
       return
     }
 
+    setResults([])
+    setActiveIndex(-1)
     setLoading(true)
     const handle = window.setTimeout(() => {
       listCustomers({ search: trimmedQuery, per_page: 20 })
@@ -73,6 +75,12 @@ export function CustomerSelect({
   }, [open, trimmedQuery])
 
   useEffect(() => {
+    if (!showListbox || loading || !activeCustomer) return
+
+    document.getElementById(`${listboxId}-option-${activeCustomer.id}`)?.scrollIntoView({ block: 'nearest' })
+  }, [activeCustomer, listboxId, loading, showListbox])
+
+  useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setOpen(false)
@@ -88,6 +96,8 @@ export function CustomerSelect({
     // 修改已選客戶的姓名代表改回自由輸入；保留電話，避免使用者需要重新輸入。
     onChange({ customerId: '', name: nextName, phone })
     setOpen(true)
+    setResults([])
+    setLoading(nextName.trim() !== '')
     setActiveIndex(-1)
   }
 
@@ -108,6 +118,11 @@ export function CustomerSelect({
   }
 
   function handleNameKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (loading && ['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) {
+      event.preventDefault()
+      return
+    }
+
     if (event.key === 'ArrowDown') {
       event.preventDefault()
       setOpen(true)
@@ -181,9 +196,9 @@ export function CustomerSelect({
             aria-busy={loading}
             className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border-strong bg-surface shadow-lg"
           >
-            {loading && <div role="option" aria-disabled="true" aria-selected="false" className="px-3 py-2 text-sm text-fg-muted">搜尋中...</div>}
+            {loading && <div className="px-3 py-2 text-sm text-fg-muted">搜尋中...</div>}
             {!loading && results.length === 0 && (
-              <div role="option" aria-disabled="true" aria-selected="false" className="px-3 py-2 text-sm text-fg-muted">
+              <div role="status" className="px-3 py-2 text-sm text-fg-muted">
                 查無相符客戶，繼續填寫電話後會自動建立
               </div>
             )}
