@@ -30,17 +30,33 @@ export function AppLayout() {
   }, [location.pathname])
 
   useLayoutEffect(() => {
+    let resizeFrame: number | null = null
+
     function syncViewportFromSidebar() {
       if (!sidebarRef.current) return
 
+      // 刻意讀取 Tailwind lg:static 已套用的結果，避免 JS breakpoint 在非預設字級下失步；
+      // 若變更 aside 的 lg:static 或 mobile position，必須同步調整此判斷。
       const isMobile = window.getComputedStyle(sidebarRef.current).position === 'fixed'
       setIsMobileViewport(isMobile)
       if (!isMobile) setSidebarOpen(false)
     }
 
+    function scheduleViewportSync() {
+      if (resizeFrame !== null) return
+
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null
+        syncViewportFromSidebar()
+      })
+    }
+
     syncViewportFromSidebar()
-    window.addEventListener('resize', syncViewportFromSidebar)
-    return () => window.removeEventListener('resize', syncViewportFromSidebar)
+    window.addEventListener('resize', scheduleViewportSync)
+    return () => {
+      window.removeEventListener('resize', scheduleViewportSync)
+      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame)
+    }
   }, [])
 
   useEffect(() => {

@@ -118,7 +118,7 @@ export function CustomerSelect({
   }
 
   function handleNameKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (loading && ['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) {
+    if (loading && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
       event.preventDefault()
       return
     }
@@ -196,9 +196,12 @@ export function CustomerSelect({
             aria-busy={loading}
             className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border-strong bg-surface shadow-lg"
           >
+            <div role="status" className="sr-only">
+              {!loading && results.length === 0 ? '查無相符客戶，繼續填寫電話後會自動建立' : ''}
+            </div>
             {loading && <div className="px-3 py-2 text-sm text-fg-muted">搜尋中...</div>}
             {!loading && results.length === 0 && (
-              <div role="status" className="px-3 py-2 text-sm text-fg-muted">
+              <div aria-hidden="true" className="px-3 py-2 text-sm text-fg-muted">
                 查無相符客戶，繼續填寫電話後會自動建立
               </div>
             )}
