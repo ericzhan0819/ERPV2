@@ -30,14 +30,17 @@ export function DashboardTrendChart({
   formatValue,
 }: DashboardTrendChartProps) {
   const values = points.map((point) => point.value)
-  const minimum = Math.min(...values)
-  const maximum = Math.max(...values)
-  const range = maximum - minimum || 1
+  const minimum = values.length > 0 ? Math.min(...values) : 0
+  const maximum = values.length > 0 ? Math.max(...values) : 0
+  const isConstantSeries = maximum === minimum
+  const range = maximum - minimum
   const chartWidth = WIDTH - PADDING_X * 2
   const chartHeight = HEIGHT - PADDING_TOP - PADDING_BOTTOM
   const coordinates = points.map((point, index) => {
     const x = PADDING_X + (index / Math.max(points.length - 1, 1)) * chartWidth
-    const y = PADDING_TOP + ((maximum - point.value) / range) * chartHeight
+    const y = isConstantSeries
+      ? PADDING_TOP + chartHeight / 2
+      : PADDING_TOP + ((maximum - point.value) / range) * chartHeight
     return { ...point, x, y }
   })
   const path = coordinates.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`).join(' ')
@@ -98,6 +101,16 @@ export function DashboardTrendChart({
             </text>
           )
         })}
+        {points.length === 0 && (
+          <text
+            x={WIDTH / 2}
+            y={PADDING_TOP + chartHeight / 2}
+            textAnchor="middle"
+            className="fill-fg-muted text-sm"
+          >
+            目前沒有趨勢資料
+          </text>
+        )}
       </svg>
 
       <div className="mt-2 flex flex-wrap justify-between gap-x-4 gap-y-1 text-xs text-fg-muted">

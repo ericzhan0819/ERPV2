@@ -17,7 +17,12 @@ import { getDashboardSummary } from '../api/dashboard'
 import { DashboardTrendChart } from '../components/DashboardTrendChart'
 import type { DashboardSummary } from '../types/dashboard'
 import { useAuth } from '../hooks/useAuth'
-import { canManageVehicles, canRunSalesFlow, canViewFinancials } from '../utils/permissions'
+import {
+  canApproveMoneyEntries,
+  canManageVehicles,
+  canRunSalesFlow,
+  canViewFinancials,
+} from '../utils/permissions'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', {
   style: 'currency',
@@ -35,7 +40,7 @@ function currentMonthRange(): { dateFrom: string; dateTo: string } {
 
 function moneyEntriesLink(direction: 'income' | 'expense'): string {
   const { dateFrom, dateTo } = currentMonthRange()
-  return `/money-entries?direction=${direction}&date_from=${dateFrom}&date_to=${dateTo}`
+  return `/money-entries?direction=${direction}&date_from=${dateFrom}&date_to=${dateTo}&approval=approved`
 }
 
 interface ActionLinkProps {
@@ -97,7 +102,7 @@ export function Dashboard() {
   const canViewFinance = canViewFinancials(user?.role)
   const canManage = canManageVehicles(user?.role)
   const canRunSales = canRunSalesFlow(user?.role)
-  const isAdmin = user?.role === 'admin'
+  const canApproveMoney = canApproveMoneyEntries(user?.role)
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
@@ -120,6 +125,13 @@ export function Dashboard() {
   const stateMessage = error ?? (!summary ? '正在載入資料…' : null)
   const work = summary?.work_overview
   const business = summary?.business_overview
+  const trendCount = 1 + (canViewFinance && summary?.trends.gross_profit ? 1 : 0) +
+    (canViewFinance && summary?.trends.cash_balance ? 1 : 0)
+  const trendGridClass = trendCount === 1
+    ? 'xl:grid-cols-1'
+    : trendCount === 2
+      ? 'xl:grid-cols-2'
+      : 'xl:grid-cols-3'
 
   return (
     <div className="flex flex-col gap-8">
@@ -166,7 +178,7 @@ export function Dashboard() {
             <KpiCard to="/vehicles?status=preparing&is_preparation_completed=false" label="待整備" value={`${numberFormatter.format(work.preparation_pending_count)} 台`} description="整備尚未完成" icon={Wrench} />
             <KpiCard to="/vehicles?status=preparing&is_preparation_completed=true" label="待上架" value={`${numberFormatter.format(work.listing_pending_count)} 台`} description="整備完成，等待上架" icon={ClipboardCheck} />
             <KpiCard to="/vehicles?status=reserved" label="待交車" value={`${numberFormatter.format(work.delivery_pending_count)} 台`} description="已保留，等待完成交車" icon={CarFront} />
-            {isAdmin && work.pending_money_entry_count !== undefined && (
+            {canApproveMoney && work.pending_money_entry_count !== undefined && (
               <KpiCard to="/money-entries?approval=pending" label="待審核收支" value={`${numberFormatter.format(work.pending_money_entry_count)} 筆`} description="等待核准或駁回" icon={ReceiptText} />
             )}
           </div>
@@ -210,7 +222,7 @@ export function Dashboard() {
         {stateMessage ? (
           <SectionState message={stateMessage} />
         ) : summary && (
-          <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className={`grid min-w-0 grid-cols-1 gap-4 ${trendGridClass}`}>
             <DashboardTrendChart
               title="近 30 天成交量"
               description="依車輛成交日期每日統計"
