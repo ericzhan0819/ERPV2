@@ -123,7 +123,7 @@ Query 參數（`IndexVehicleRequest`）：
 |---|---|---|
 | search | string | 車牌/車架號/廠牌/車型模糊搜尋 |
 | status | string 或 string[] | 單一值維持既有行為；多選可用逗號（例如 `preparing,listed,reserved`）或 `status[]`，值只允許五種既有狀態 |
-| is_preparation_completed | bool | 篩選整備是否完成；接受 API boolean 表示及 URL 的 `true`／`false` |
+| is_preparation_completed | bool | 篩選整備是否完成；接受 API boolean 表示及 URL 的 `true`／`false`；空值視為未指定，不套用篩選 |
 | per_page | int | 1~100，預設由 Service 決定 |
 | page | int | |
 

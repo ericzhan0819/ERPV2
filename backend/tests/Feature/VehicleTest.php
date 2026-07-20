@@ -571,6 +571,20 @@ class VehicleTest extends TestCase
         );
     }
 
+    public function test_index_ignores_empty_preparation_filter(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        Vehicle::factory()->create(['is_preparation_completed' => false]);
+        Vehicle::factory()->count(3)->create(['is_preparation_completed' => true]);
+
+        $response = $this->actingAs($user, 'web')->getJson('/api/vehicles?is_preparation_completed=');
+
+        $response
+            ->assertSuccessful()
+            ->assertJsonPath('meta.total', 4);
+        $this->assertCount(4, $response->json('data'));
+    }
+
     public function test_index_supports_status_array_and_keeps_filters_across_pages(): void
     {
         $user = User::factory()->create(['is_active' => true]);

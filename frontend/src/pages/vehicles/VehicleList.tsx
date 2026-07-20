@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { canManageVehicles, canViewSalesPricing } from '../../utils/permissions'
 import {
   defaultVehicleStatuses,
+  hasActiveVehicleListFilters,
   parseVehicleListFilters,
   serializeVehicleListFilters,
   vehicleStatuses,
@@ -101,10 +102,7 @@ export function VehicleList() {
     }
   }, [filters.search, statusKey, filters.isPreparationCompleted, filters.page])
 
-  const isDefaultStatusSet =
-    filters.statuses.length === defaultVehicleStatuses.length &&
-    defaultVehicleStatuses.every((status) => filters.statuses.includes(status))
-  const hasActiveFilters = Boolean(filters.search || filters.isPreparationCompleted !== undefined || !isDefaultStatusSet)
+  const hasActiveFilters = hasActiveVehicleListFilters(filters)
 
   return (
     <div className="flex flex-col gap-6">

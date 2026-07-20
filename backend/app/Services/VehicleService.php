@@ -82,7 +82,7 @@ class VehicleService
             }
         }
 
-        if (array_key_exists('is_preparation_completed', $filters)) {
+        if (isset($filters['is_preparation_completed'])) {
             $query->where(
                 'is_preparation_completed',
                 filter_var($filters['is_preparation_completed'], FILTER_VALIDATE_BOOLEAN),

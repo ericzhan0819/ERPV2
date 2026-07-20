@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { listCashAccountOptions } from '../../api/cashAccounts'
 import { approveMoneyEntry, listMoneyEntries, rejectMoneyEntry } from '../../api/moneyEntries'
@@ -11,7 +11,11 @@ import { categoriesForDirection, directionLabels } from '../../utils/moneyEntryC
 import { MoneyDirectionBadge } from '../../components/MoneyDirectionBadge'
 import { ApprovalStatusBadge } from '../../components/ApprovalStatusBadge'
 import { canApproveMoneyEntries, canViewFinancials } from '../../utils/permissions'
-import { parseMoneyEntryListFilters, serializeMoneyEntryListFilters } from '../../utils/listFilters'
+import {
+  hasActiveMoneyEntryListFilters,
+  parseMoneyEntryListFilters,
+  serializeMoneyEntryListFilters,
+} from '../../utils/listFilters'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
@@ -34,6 +38,8 @@ export function MoneyEntryList() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reviewingId, setReviewingId] = useState<number | null>(null)
+  const requestSequenceRef = useRef(0)
+  const hasActiveFilters = hasActiveMoneyEntryListFilters(filters)
 
   function updateFilters(
     updates: Partial<typeof filters>,
@@ -59,6 +65,7 @@ export function MoneyEntryList() {
   }, [])
 
   const reload = useCallback(() => {
+    const requestSequence = ++requestSequenceRef.current
     setLoading(true)
     setError(null)
     listMoneyEntries({
@@ -73,11 +80,16 @@ export function MoneyEntryList() {
       page: filters.page,
     })
       .then((response) => {
+        if (requestSequence !== requestSequenceRef.current) return
         setEntries(response.data)
         setMeta(response.meta)
       })
-      .catch(() => setError('收支列表載入失敗'))
-      .finally(() => setLoading(false))
+      .catch(() => {
+        if (requestSequence === requestSequenceRef.current) setError('收支列表載入失敗')
+      })
+      .finally(() => {
+        if (requestSequence === requestSequenceRef.current) setLoading(false)
+      })
   }, [
     filters.search,
     filters.direction,
@@ -92,6 +104,9 @@ export function MoneyEntryList() {
 
   useEffect(() => {
     reload()
+    return () => {
+      requestSequenceRef.current += 1
+    }
   }, [reload])
 
   async function handleApprove(id: number) {
@@ -222,7 +237,7 @@ export function MoneyEntryList() {
           <option value="approved">已核准</option>
           <option value="rejected">已駁回</option>
         </select>
-        {searchParams.size > 0 && (
+        {hasActiveFilters && (
           <button type="button" onClick={clearFilters} className="min-h-11 text-sm font-medium text-primary hover:underline">
             清除篩選條件
           </button>
@@ -258,7 +273,7 @@ export function MoneyEntryList() {
             {!loading && entries.length === 0 && (
               <tr>
                 <td colSpan={columnCount} className="px-4 py-6 text-center text-fg-muted">
-                  {searchParams.size > 0 ? (
+                  {hasActiveFilters ? (
                     <div className="flex flex-col items-center gap-2">
                       <span>尚無符合條件的收支紀錄</span>
                       <button

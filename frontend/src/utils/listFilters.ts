@@ -1,5 +1,6 @@
 import type { MoneyDirection, MoneyEntryApprovalStatus } from '../types/moneyEntry'
 import type { VehicleStatus } from '../types/vehicle'
+import { categoriesForDirection } from './moneyEntryCategory'
 
 export const vehicleStatuses: VehicleStatus[] = ['preparing', 'listed', 'reserved', 'sold', 'cancelled']
 export const defaultVehicleStatuses: VehicleStatus[] = ['preparing', 'listed', 'reserved']
@@ -40,10 +41,29 @@ function isBusinessDate(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
 
-function hasDefaultVehicleStatuses(statuses: VehicleStatus[]): boolean {
+export function hasDefaultVehicleStatuses(statuses: VehicleStatus[]): boolean {
   return (
     statuses.length === defaultVehicleStatuses.length &&
     defaultVehicleStatuses.every((status) => statuses.includes(status))
+  )
+}
+
+export function hasActiveVehicleListFilters(filters: VehicleListFilters): boolean {
+  return Boolean(
+    filters.search || filters.isPreparationCompleted !== undefined || !hasDefaultVehicleStatuses(filters.statuses),
+  )
+}
+
+export function hasActiveMoneyEntryListFilters(filters: MoneyEntryListFilters): boolean {
+  return Boolean(
+    filters.search ||
+      filters.direction ||
+      filters.category ||
+      filters.cashAccountId ||
+      filters.vehicleId ||
+      filters.dateFrom ||
+      filters.dateTo ||
+      filters.approvalStatus,
   )
 }
 
@@ -84,14 +104,16 @@ export function serializeVehicleListFilters(filters: VehicleListFilters): URLSea
 
 export function parseMoneyEntryListFilters(params: URLSearchParams): MoneyEntryListFilters {
   const direction = params.get('direction')
+  const parsedDirection = moneyDirections.has(direction as MoneyDirection) ? (direction as MoneyDirection) : ''
+  const category = params.get('category') ?? ''
   const approval = params.get('approval') ?? params.get('approval_status')
   const dateFrom = params.get('date_from') ?? ''
   const dateTo = params.get('date_to') ?? ''
 
   return {
     search: params.get('search') ?? '',
-    direction: moneyDirections.has(direction as MoneyDirection) ? (direction as MoneyDirection) : '',
-    category: params.get('category') ?? '',
+    direction: parsedDirection,
+    category: categoriesForDirection(parsedDirection).includes(category) ? category : '',
     cashAccountId: parsePositiveInteger(params.get('cash_account_id')),
     vehicleId: parsePositiveInteger(params.get('vehicle_id')),
     dateFrom: isBusinessDate(dateFrom) ? dateFrom : '',
