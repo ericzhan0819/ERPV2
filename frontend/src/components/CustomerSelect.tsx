@@ -119,7 +119,11 @@ export function CustomerSelect({
         {customerId && (
           <div className="mt-1 flex items-center justify-between gap-2 text-xs">
             <span className="text-success">已選擇既有客戶，電話已自動帶入</span>
-            <button type="button" onClick={handleUseAsNewCustomer} className="shrink-0 text-primary hover:underline">
+            <button
+              type="button"
+              onClick={handleUseAsNewCustomer}
+              className="shrink-0 rounded-sm text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+            >
               改為新客戶
             </button>
           </div>
@@ -138,7 +142,7 @@ export function CustomerSelect({
                 type="button"
                 key={customer.id}
                 onClick={() => handleSelect(customer)}
-                className="block w-full px-3 py-2 text-left text-sm hover:bg-surface-2"
+                className="block min-h-11 w-full px-3 py-2 text-left text-sm hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               >
                 <span className="block font-medium text-fg">{customer.name}</span>
                 <span className="block text-xs text-fg-muted">{customer.phone || '尚未填寫電話'}</span>

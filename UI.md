@@ -1,248 +1,298 @@
-# 中古車行營運系統 — 統一設計語言 v1.0
+# ERPV2 UX Design System
 
-**風格定位：** Exaggerated-but-controlled Minimalism（韓系選品店感）· 中性 slate 灰階打底 · 單一品牌色 · 大量留白 · 低噪音。同一套 token 同時服務**後台 ERP**（資訊密度稍高）與**官網**（留白更大、標題更大）。
+本文件是 ERPV2 後台的正式 UI／UX 規範。v1.4 沿用既有 Midnight 品牌方向、slate 中性色與語意色彩 token，不新增第二套品牌、平行元件庫或一次性頁面風格。
 
----
+ERPV2 的資訊架構固定為：
 
-## 0. 架構原則：一套中性骨架 + 可抽換品牌色
-
-神經中樞是 **slate 灰階**（Tailwind 原生 slate，已通過 WCAG 檢核）。品牌色只是插進去的一個變數 → 兩套提案共用所有 neutral / status / badge token，**只換 `--brand-*`**，日後想改色改一處即可。
-
----
-
-## 1. 品牌主色 — 兩套提案
-
-### 提案 A：Midnight（午夜藍）— ⭐ 建議
-
-信賴感 + 專業度最平衡，官網對潛在客戶最有說服力。藍色天然帶「安全 / 可靠」語意，很適合成交金額高的中古車。
-
-| 階 | Hex | 用途 |
-|----|-----|------|
-| brand-50 | `#EEF2FB` | 淡底、hover 背景 |
-| brand-100 | `#D9E2F5` | 選中列底 |
-| brand-200 | `#B3C4EA` | 邊框強調 |
-| brand-500 | `#2E4EA3` | 次要互動 |
-| **brand-600** | **`#1E3A8A`** | **Primary（按鈕/連結）** 白字對比 8.6:1 ✓ |
-| brand-700 | `#172E6E` | hover / active |
-| brand-800 | `#14213D` | 深色側欄、深色模式表面 |
-| brand-900 | `#0B1526` | 深色模式底 |
-
-### 提案 B：Graphite（石墨黑）— 編輯感替代方案
-
-更冷、更「選品店」、更中性。缺點：純黑階缺少互動語意，**連結/焦點需借一個藍色 accent**（`#2563EB`）避免「只靠顏色」的無障礙問題。
-
-| 階 | Hex | 用途 |
-|----|-----|------|
-| brand-50 | `#F5F5F6` | 淡底 |
-| brand-100 | `#E7E8EA` | 選中列底 |
-| brand-600 | `#334155` | 次要按鈕 |
-| **brand-900** | **`#0F172A`** | **Primary** 白字對比 17:1 ✓ |
-| brand-950 | `#020617` | 深色模式底 |
-| accent（借用）| `#2563EB` | 連結 / focus ring / active |
-
-> **建議：** 出 **A（Midnight）** 為預設品牌，B 當作可切換的 theme（同一份 token 架構，換 `--brand-*` 即可）。下面所有規範以 A 為示例值，並在深色欄標註。
-
----
-
-## 2. 語意色彩 Tokens（Light + Dark 全套）
-
-以語意命名，元件內**禁止**寫死 hex（對應 CLAUDE.md 的 `color-semantic`）。
-
-| Token | Light | Dark | 說明 |
-|-------|-------|------|------|
-| `bg` | `#F8FAFC` | `#0B1120` | App 背景 |
-| `surface` | `#FFFFFF` | `#131A2A` | 卡片 / 面板 |
-| `surface-2` | `#F1F5F9` | `#1A2336` | 表頭 / 次面板 / hover |
-| `fg` | `#0F172A` | `#E8EDF5` | 主文字（暗色不用純白，減眩光）|
-| `fg-muted` | `#475569` | `#94A3B8` | 次要文字 對比 7:1 / 6:1 ✓ |
-| `fg-subtle` | `#94A3B8` | `#64748B` | placeholder / 禁用文字 |
-| `border` | `#E2E8F0` | `#25314A` | 分隔線 / 卡片邊 |
-| `border-strong` | `#CBD5E1` | `#33415C` | input 邊框 |
-| `primary` | `#1E3A8A` | `#3B60C4` | 主按鈕（暗色調亮才會跳）|
-| `primary-hover` | `#172E6E` | `#4B72D6` | |
-| `primary-fg` | `#FFFFFF` | `#FFFFFF` | |
-| `ring` | `#1E3A8A` | `#3B82F6` | focus 2px |
-
-> **深色模式關鍵：** 用「表面提亮 + 邊框」建立層級，**不要靠陰影**（暗色陰影看不見）。`bg → surface → surface-2` 亮度遞增即是 elevation。
-
----
-
-## 3. 狀態色（Success / Warning / Error / Info）
-
-Badge 採「柔和填色」：`底 + 文字 + 邊框` 三件組。文字色刻意壓深以達 4.5:1。
-
-| 狀態 | Light 底 / 文字 / 邊 | Dark 底 / 文字 / 邊 | 主色 |
-|------|--------------------|--------------------|------|
-| Success 成功 | `#ECFDF5` / `#15803D` / `#A7F3D0` | `rgba(16,185,129,.15)` / `#6EE7B7` / `rgba(16,185,129,.3)` | `#16A34A` |
-| Warning 警告 | `#FFFBEB` / `#B45309` / `#FDE68A` | `rgba(245,158,11,.15)` / `#FCD34D` / `rgba(245,158,11,.3)` | `#F59E0B` |
-| Error 錯誤 | `#FEF2F2` / `#B91C1C` / `#FECACA` | `rgba(239,68,68,.15)` / `#FCA5A5` / `rgba(239,68,68,.3)` | `#DC2626` |
-| Info 資訊 | `#EFF6FF` / `#1D4ED8` / `#BFDBFE` | `rgba(59,130,246,.15)` / `#93C5FD` / `rgba(59,130,246,.3)` | `#2563EB` |
-
-`destructive` 按鈕實心用 `#DC2626`（白字），永遠搭 icon + 文字（不可只靠紅色傳達）。
-
----
-
-## 4. 車輛狀態 Badge（5 種，刻意選 5 個可區分色相）
-
-流程語意：**整備→上架→保留→售出**，取消為中性。每個都必須 icon + 文字，色盲也可辨。
-
-| 狀態 | 語意色 | Light 底/文/邊 | Dark 底/文/邊 | icon 建議(Lucide) |
-|------|--------|---------------|---------------|------|
-| `preparing` 整備中 | Amber 進行中 | `#FFFBEB` / `#B45309` / `#FDE68A` | `rgba(245,158,11,.15)` / `#FCD34D` / `.3` | `wrench` |
-| `listed` 上架中 | Blue 上市 | `#EFF6FF` / `#1D4ED8` / `#BFDBFE` | `rgba(59,130,246,.15)` / `#93C5FD` / `.3` | `tag` |
-| `reserved` 保留中 | Violet 保留 | `#F5F3FF` / `#6D28D9` / `#DDD6FE` | `rgba(139,92,246,.15)` / `#C4B5FD` / `.3` | `bookmark` |
-| `sold` 已售出 | Emerald 成交 | `#ECFDF5` / `#047857` / `#A7F3D0` | `rgba(16,185,129,.15)` / `#6EE7B7` / `.3` | `circle-check` |
-| `cancelled` 取消/退車 | Slate 停用 | `#F1F5F9` / `#475569` / `#E2E8F0` | `rgba(148,163,184,.15)` / `#94A3B8` / `.25` | `x-circle` |
-
-色相環間距足夠（黃→藍→紫→綠→灰），並列於表格中一眼可分。
-
----
-
-## 5. 字體與字級
-
-**字型堆疊**（拉丁字 + 數字用 Inter，中文用 Noto Sans TC，兩者字重對齊）：
-
-```
-font-sans:  Inter, "Noto Sans TC", system-ui, -apple-system, sans-serif
-font-mono:  "JetBrains Mono", ui-monospace, Menlo, monospace   /* stock_no / ID */
+```text
+Dashboard = 總覽、KPI、趨勢、快速導流
+功能模組 = 搜尋、篩選、分頁、查看與實際操作
 ```
 
-金額欄位一律加 `font-variant-numeric: tabular-nums`（Inter 內建），數字對齊不跳動。載入用 `font-display: swap`。
-
-**字級 / 行高（16px base）**
-
-| Token | px / rem | line-height | 用途 |
-|-------|----------|------|------|
-| xs | 12 / .75 | 1.33 | 標籤、badge、表註 |
-| sm | 14 / .875 | 1.43 | 表格內容、次要文字 |
-| base | 16 / 1 | 1.5 | 內文（手機最小體，防 iOS 縮放）|
-| lg | 18 / 1.125 | 1.5 | 卡片標題 |
-| xl | 20 / 1.25 | 1.4 | 區塊標題 |
-| 2xl | 24 / 1.5 | 1.3 | 頁面標題 |
-| 3xl | 30 / 1.875 | 1.25 | Dashboard 大數字 |
-| 4xl | 36 / 2.25 | 1.2 | 官網小標 |
-| 5xl | 48 / 3 | 1.1 | 官網 Hero（`clamp(2.5rem,6vw,4rem)`）|
-
-**字重：** 400 內文 · 500 標籤/導航/表頭 · 600 標題/按鈕 · 700 大標與 Hero。
-**字距：** 標題 `-0.02em`；全大寫微標籤 `+0.04em`；內文預設。
+Dashboard 不承載 Table、車輛列表、明細展開或業務 Workflow；卡片與快捷操作只導向既有模組。前端不得使用假資料或自行拼湊正式金額。
 
 ---
 
-## 6. 圓角 / 間距 / 陰影
+## 1. 設計方向
 
-**圓角**（韓系＝柔但不圓潤）
-
-| Token | 值 | 用途 |
-|-------|----|------|
-| radius-sm | 6px | input · badge |
-| radius-md | 8px | 按鈕 · 下拉 |
-| radius-lg | 12px | 卡片 · 面板 |
-| radius-xl | 16px | Modal · 大區塊 |
-| radius-full | 9999px | pill · 頭像 |
-
-**間距**：4px 基準（Tailwind 原生）。ERP 密度＝標準：卡片 padding `20–24px`、表單欄距 `16px`、區塊間距 `24–32px`；官網區塊間距放大到 `64–96px`。
-
-**陰影**（極淡，靠邊框分層；深色模式改用邊框+提亮，不用陰影）
-
-```
-shadow-xs: 0 1px 2px rgba(15,23,42,.06)
-shadow-sm: 0 1px 3px rgba(15,23,42,.08), 0 1px 2px rgba(15,23,42,.04)
-shadow-md: 0 4px 12px rgba(15,23,42,.08)
-shadow-lg: 0 12px 28px rgba(15,23,42,.12)   /* modal / dropdown */
-```
+- 現代後台、低噪音、高可讀性，桌機資訊密度適中。
+- 使用留白、表面層級與細邊框建立結構，不依賴裝飾性陰影。
+- Midnight 藍是唯一品牌互動色；狀態色只表達狀態，不作品牌裝飾。
+- light／dark mode 使用同一組語意，不在元件內硬編碼 light-only 顏色。
+- Desktop 優先；Mobile 仍須能完成既有流程，不可只縮小桌機版。
 
 ---
 
-## 7. 元件風格建議
+## 2. Color
 
-- **Button**：primary 實心 `radius-md`、`h-10 (40px)` / 觸控區 ≥44px、`font-medium`、hover 150ms 過渡、loading 時 disable + spinner。層級：一頁一個 primary，其餘 outline（`border-strong` + `surface`）或 ghost。destructive 用紅，且與 primary 空間隔開。
-- **Card**：`surface` + `border` + `radius-lg` + `shadow-sm`；標題 `lg/600`，內容 `sm`。Dashboard 數字卡用 `3xl/700` + tabular-nums + 小趨勢 badge。
-- **Table**：表頭 `surface-2` + `sm/500` + `fg-muted`；列高 48px；hover 整列 `surface-2`；金額右對齊 + tabular-nums；可排序欄標 `aria-sort`；空狀態給「尚無資料 + 動作」而非空白。
-- **Form**：label 永遠可見（不用 placeholder 當 label）、必填標 `*`、錯誤訊息在欄位下方且說明「原因+修正」、on-blur 驗證、input `h-10` `border-strong` focus 換 `ring`。
-- **Badge**：pill `radius-full` `xs/500`，用上面三件組色，一律含 icon。
-- **Sidebar**：深色 `brand-800`（Midnight）或 `brand-950`（Graphite）；active 項目 `primary` 底 + 左側 3px 指示條 + `500` 字重（狀態不只靠顏色）。
-- **Toast**：`aria-live="polite"`、3–5 秒自動消失、成功綠/錯誤紅配 icon、不搶焦點。
+### 2.1 品牌與中性色
+
+既有 Midnight 品牌方向維持不變：
+
+| 用途 | Light | Dark |
+|---|---|---|
+| App 背景 `bg` | `#F8FAFC` | `#0B1120` |
+| 主要表面 `surface` | `#FFFFFF` | `#131A2A` |
+| 次要表面 `surface-2` | `#F1F5F9` | `#1A2336` |
+| 主文字 `fg` | `#0F172A` | `#E8EDF5` |
+| 次文字 `fg-muted` | `#475569` | `#94A3B8` |
+| 弱化文字 `fg-subtle` | `#94A3B8` | `#64748B` |
+| 邊框 `border` | `#E2E8F0` | `#25314A` |
+| 強邊框 `border-strong` | `#CBD5E1` | `#33415C` |
+| 主要互動 `primary` | `#1E3A8A` | `#3B60C4` |
+| 主要互動 hover | `#172E6E` | `#4B72D6` |
+| Focus ring `ring` | `#1E3A8A` | `#3B82F6` |
+
+元件使用 `bg-bg`、`bg-surface`、`bg-surface-2`、`text-fg`、`text-fg-muted`、`border-border`、`border-border-strong`、`bg-primary`、`text-primary-fg` 與 `ring-ring` 等語意 class。禁止直接使用 hex 或以 `slate-*`、`blue-*` 取代已有語意 token。
+
+Dark mode 以 `bg → surface → surface-2` 的亮度差與邊框建立 elevation；不得只靠陰影分層。
+
+### 2.2 狀態色
+
+通用狀態固定為 `success`、`warning`、`error`、`info`。狀態 Badge 必須同時使用底色、文字、邊框、icon 與文字，不得只靠色相傳達。
+
+車輛狀態固定映射：
+
+| 狀態 | 顏色語意 | 顯示文字 | Icon |
+|---|---|---|---|
+| `preparing` | Amber／進行中 | 整備中 | Wrench |
+| `listed` | Blue／上架 | 上架中 | Tag |
+| `reserved` | Violet／保留 | 保留中 | Bookmark |
+| `sold` | Emerald／完成 | 已售出 | CircleCheck |
+| `cancelled` | Slate／停用 | 取消／退車 | XCircle |
+
+Destructive 操作使用 `error` 語意，必須有明確文字；不可只顯示紅色 icon。
 
 ---
 
-## 8. Tailwind v4 設定（CSS-first `@theme`）
+## 3. Typography 與數字
 
-Tailwind v4 用 CSS 變數驅動。放 `src/index.css`：
+字型沿用：
 
-```css
-@import "tailwindcss";
-
-@theme {
-  /* ---- 字型 ---- */
-  --font-sans: "Inter", "Noto Sans TC", system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
-
-  /* ---- 圓角 ---- */
-  --radius-sm: 6px;  --radius-md: 8px;
-  --radius-lg: 12px; --radius-xl: 16px;
-
-  /* ---- 陰影 ---- */
-  --shadow-xs: 0 1px 2px rgb(15 23 42 / .06);
-  --shadow-sm: 0 1px 3px rgb(15 23 42 / .08), 0 1px 2px rgb(15 23 42 / .04);
-  --shadow-md: 0 4px 12px rgb(15 23 42 / .08);
-  --shadow-lg: 0 12px 28px rgb(15 23 42 / .12);
-
-  /* ---- 語意色（預設 = Light / Midnight）---- */
-  --color-bg: #F8FAFC;         --color-surface: #FFFFFF;
-  --color-surface-2: #F1F5F9;
-  --color-fg: #0F172A;         --color-fg-muted: #475569;
-  --color-fg-subtle: #94A3B8;
-  --color-border: #E2E8F0;     --color-border-strong: #CBD5E1;
-  --color-primary: #1E3A8A;    --color-primary-hover: #172E6E;
-  --color-primary-fg: #FFFFFF; --color-ring: #1E3A8A;
-
-  /* ---- 狀態 ---- */
-  --color-success: #16A34A; --color-warning: #F59E0B;
-  --color-error:   #DC2626; --color-info:    #2563EB;
-
-  /* ---- 車輛狀態（主色，badge 底/文另用 utility）---- */
-  --color-status-preparing: #F59E0B;
-  --color-status-listed:    #2563EB;
-  --color-status-reserved:  #7C3AED;
-  --color-status-sold:      #10B981;
-  --color-status-cancelled: #64748B;
-}
-
-/* ---- Dark 覆寫（切 .dark class 或 data-theme）---- */
-.dark {
-  --color-bg: #0B1120;         --color-surface: #131A2A;
-  --color-surface-2: #1A2336;
-  --color-fg: #E8EDF5;         --color-fg-muted: #94A3B8;
-  --color-fg-subtle: #64748B;
-  --color-border: #25314A;     --color-border-strong: #33415C;
-  --color-primary: #3B60C4;    --color-primary-hover: #4B72D6;
-  --color-ring: #3B82F6;
-}
-
-/* ---- 切 Graphite 品牌：只覆寫 brand ---- */
-.theme-graphite {
-  --color-primary: #0F172A; --color-primary-hover: #1E293B; --color-ring: #2563EB;
-}
-.theme-graphite.dark { --color-bg:#0B0B0C; --color-surface:#141416; --color-primary:#E2E8F0; }
+```text
+font-sans = Inter, "Noto Sans TC", system-ui, -apple-system, sans-serif
+font-mono = "JetBrains Mono", ui-monospace, Menlo, monospace
 ```
 
-之後元件直接用語意 class：`bg-surface text-fg border-border`、`bg-primary text-primary-fg`、`text-fg-muted`、`shadow-sm rounded-lg`，切換深色只要在 `<html>` 加 `.dark`。
+| 層級 | 建議 class | 用途 |
+|---|---|---|
+| 頁面標題 | `text-2xl font-semibold tracking-tight` | 每頁唯一 `h1` |
+| 區塊標題 | `text-lg font-semibold` | Dashboard／模組主要區塊 `h2` |
+| Card 標題 | `text-sm font-medium` 或 `text-base font-semibold` | 依卡片資訊密度 |
+| 內文 | `text-base` | 說明與 Mobile 表單主要文字 |
+| 密集資料 | `text-sm` | Table、Filter、次要資訊 |
+| 輔助文字 | `text-xs text-fg-muted` | 單位、提示、時間 |
+| KPI 數字 | `text-3xl font-bold tabular-nums` | Dashboard 主要數值 |
 
-**Token 名稱對應表（給後端/Blade 列印頁共用）**
-
-| 語意 | Tailwind class | CSS var |
-|------|----------------|---------|
-| 背景 | `bg-bg` | `--color-bg` |
-| 卡片 | `bg-surface` | `--color-surface` |
-| 主文字 | `text-fg` | `--color-fg` |
-| 次文字 | `text-fg-muted` | `--color-fg-muted` |
-| 主按鈕 | `bg-primary text-primary-fg` | `--color-primary` |
-| 邊框 | `border-border` | `--color-border` |
-| 車輛狀態 | `text-status-sold` 等 | `--color-status-*` |
+- 中文內文避免小於 14px；Mobile 表單輸入維持至少 16px，避免 iOS 自動縮放。
+- 金額、數量、里程與會變動的統計使用 `tabular-nums`。
+- 金額由後端回傳整數，前端只做千分位與幣別格式化。
+- 庫存編號或技術識別碼可使用 `font-mono`，一般車牌不強制使用等寬字。
+- 不以字重或全大寫製造多餘層級；同頁層級保持一致。
 
 ---
 
-## 9. 決策摘要
+## 4. Spacing、圓角與陰影
 
-- **建議採用提案 A（Midnight）為預設**，把 Graphite 保留為 `.theme-graphite` 可切換皮膚——架構已支援，零額外成本。
-- 官網與 ERP 共用此 `@theme`，官網只是加大字級（用到 4xl/5xl）與留白（64–96px），品牌一致。
+以 4px 為基本間距單位：
+
+| 情境 | 間距 |
+|---|---|
+| 同一控制項內 icon 與文字 | 8px |
+| 同一表單欄位 label／control／error | 4–8px |
+| 表單欄位間 | 16px |
+| Card 內距 | 20–24px；Mobile 可降為 16px |
+| 同區塊 Card／Grid 間 | 16px |
+| 主要頁面區塊間 | 24–32px |
+| 頁面水平內距 | Mobile 16px；Tablet／Desktop 24px |
+
+圓角沿用 `sm=6px`、`md=8px`、`lg=12px`、`xl=16px`。Badge 才使用 full radius。一般 Card 使用 `rounded-xl`；大型面板或 Modal 可使用 `rounded-2xl`。
+
+Light mode 只使用低噪音 `shadow-xs`／`shadow-sm`；浮層與 Modal 可用 `shadow-lg`。Dark mode 主要依靠表面與邊框，不增加重陰影。
+
+---
+
+## 5. Card
+
+### 5.1 一般 Card
+
+- 適用於一組有明確邊界的摘要或工作內容，不拿 Card 包住每一段文字。
+- 基本外觀為 `surface + border + rounded-xl`，陰影可省略或只用 `shadow-sm`。
+- 一般 Card 預設不可點擊；不可用 hover 假裝可互動。
+- 可互動 Card 必須使用語意正確的 `<a>`／`Link` 或 `<button>`，整張卡片為單一點擊目標。
+- hover、active、focus-visible 與 disabled 狀態都必須明確；鍵盤 focus 不可被移除。
+- Card 內不得巢狀放置彼此競爭的主要點擊區。若有多個動作，改用一般 Card 加明確按鈕。
+
+### 5.2 Dashboard KPI Card
+
+- KPI Card 只顯示標題、正式數值、單位與必要的簡短說明，不展開明細。
+- 整張 Card 導向對應模組並帶入正式 URL Filter；不得以 `div onClick` 實作。
+- hover：使用 `surface-2` 或邊框強化；active：輕微表面變化；focus-visible：2px `ring-ring` 且有 offset。
+- 數值使用 `text-3xl font-bold tabular-nums`，標題使用 `text-sm text-fg-muted`。
+- 未授權 KPI 不渲染；不能以 0、空字串或 disabled Card 代替後端欄位遮蔽。
+- loading 使用保持卡片尺寸的狀態；API error 需有可讀訊息，不以假數字填充。
+
+### 5.3 Vehicle Card
+
+Vehicle Card 是車輛工作區列表的正式呈現，欄位固定為：
+
+- 封面縮圖或一致的空圖狀態
+- 品牌、車型、年份、顏色、車牌
+- 車輛狀態 Badge
+- 開價
+- admin／manager 額外顯示底價
+
+所有角色的列表 Card 都不顯示收購價、成交毛利或資金帳戶；sales 不顯示底價。後端 Resource 仍是敏感資料的正式邊界。
+
+呈現規則：
+
+- 圖片是辨識主體，固定使用 `aspect-[4/3]`、`object-cover`，避免不同原圖使 Grid 跳動。
+- 無封面時回傳 `null`，顯示語意一致的車輛 icon、淺表面與「尚無照片」文字；禁止假車照片。
+- 標題以「品牌 車型」為主，年份、顏色、車牌為次要資訊；缺值用 `—`，不偽造內容。
+- 整張 Card 使用 `Link` 進入既有車輛詳細頁，具完整可點擊區與可見 focus。
+- Desktop 依容器寬度使用 Grid；Tablet 固定 2 欄；Mobile 固定 1 欄。
+- loading、API error、無資料與無搜尋結果必須占用 Grid 的正常內容寬度，不回退成 Table。
+
+---
+
+## 6. Button 與 Link
+
+層級固定為：
+
+| 層級 | 用途 |
+|---|---|
+| Primary | 頁面最主要的正向動作；同一視覺區域通常只保留一個 |
+| Secondary／Outline | 次要但明確的操作 |
+| Ghost | 低優先、局部或工具型操作 |
+| Destructive | 刪除、駁回等高風險操作 |
+| Text Link | 導覽、查看詳情或低強度輔助動作 |
+
+- Button 使用 `rounded-lg`、`font-medium`，Desktop 視覺高度可為 40px，但觸控目標至少 44×44px。
+- icon-only Button 必須有 `aria-label` 與至少 44×44px 點擊區；一般業務動作優先使用 icon + 文字。
+- hover 與 active 可使用 150–200ms transition；不得使用會造成版面位移的縮放。
+- `focus-visible` 使用 2px `ring-ring` 與適當 offset；不得用 `outline-none` 後不補 focus。
+- loading 時保留原按鈕寬度、顯示進度語意並 disabled，避免重複送出。
+- disabled 必須同時阻止互動、降低視覺強度並保留可讀文字；不可只改游標。
+- Destructive 不得與 Primary 緊貼；需留出空間並在必要時要求確認。
+- 導覽使用 `Link`／`<a>`，送出或切換狀態使用 `<button>`，不可混用。
+
+---
+
+## 7. Form
+
+- 每個欄位都要有永遠可見且可程式關聯的 label；placeholder 只提供範例，不能取代 label。
+- 必填欄位在 label 顯示 `*`，並保留原生 `required` 或等價的 `aria-required`。
+- 錯誤訊息顯示在欄位下方，使用 `text-error`，說明原因與修正方式；以 `aria-describedby` 關聯。
+- API 422 per-field errors 必須回到對應欄位；非欄位錯誤顯示在表單頂部。
+- 控制項使用 `surface + fg + border-strong`；focus 使用 `border-primary + ring-ring`。
+- disabled 與 read-only 必須可區分，且不能透過顏色暗示仍可編輯。
+- Checkbox／radio 的文字標籤也是可點擊區，觸控目標至少 44px 高。
+- Mobile 單欄優先，輸入框寬度填滿容器；並排欄位只有在 320px 仍不擁擠時才保留。
+- 表單送出期間避免重複提交；失敗後保留使用者已輸入內容。
+
+---
+
+## 8. Modal 與 Drawer
+
+### 8.1 Modal
+
+- Modal 只處理短而聚焦的現有操作；不得為快捷操作複製一套既有 Workflow。
+- 開啟後 focus 移到標題、第一個可操作控制項或錯誤摘要；focus 必須限制在 Modal 內。
+- `Escape` 可關閉非破壞性 Modal；明確的關閉按鈕永遠可見且有 accessible name。
+- 關閉後 focus 回到觸發元素。送出中或可能遺失輸入時，不可因誤點 backdrop 無提示關閉。
+- Overlay 覆蓋 viewport 並鎖住背景捲動；內容區使用 `max-height` 與自身 vertical overflow。
+- Desktop 可置中並限制寬度；Mobile 使用接近全寬的底部或置中面板，保留 safe area 與 16px 外距。
+- 標題、內容、錯誤與 action 區層級固定；Mobile action 可垂直堆疊，主要按鈕仍清楚。
+
+### 8.2 Mobile Filter Drawer
+
+- Drawer 只是 Desktop Filter 的呈現變體，兩者共用同一份 draft state、URL parse／serialize 與 API 契約。
+- 開啟按鈕顯示目前已套用條件數；Drawer 提供「套用」、「清除」與「關閉」。
+- 開啟後處理 focus trap、`Escape`、背景捲動與關閉後 focus 歸還。
+- 「套用」才把 draft filter 寫入 URL；「清除」回到該模組的正式預設值。
+- Drawer 內控制項垂直排列且至少 44px 高；底部 action 區考慮 `env(safe-area-inset-bottom)`。
+
+---
+
+## 9. Table
+
+- Table 只用於需要逐欄比較的結構化資料，例如收支、資金帳戶、使用者與稽核紀錄。
+- Dashboard 不使用 Table；v1.4 車輛工作區列表不得再使用 Table，固定改用 Vehicle Card Grid。
+- 表頭使用 `surface-2 + text-fg-muted + font-medium`；列高至少 48px。
+- 金額右對齊並使用 `tabular-nums`；可排序欄位提供可操作表頭與 `aria-sort`。
+- 空狀態顯示原因與適當下一步，不留下空白表身。
+- Desktop 可以容器內水平捲動；Mobile 優先改成語意清楚的 Card／stacked layout，不能讓整頁水平 overflow。
+- 不能為了避免 overflow 移除關鍵欄位或破壞後端權限語意。
+
+---
+
+## 10. Filter 與 URL 狀態
+
+URL query string 是列表 Filter、分享、reload 與瀏覽器上一頁／下一頁還原的正式來源。
+
+- 搜尋、狀態、日期、方向、分類、帳戶、車輛、審核狀態、整備完成與頁碼等既有條件依模組同步至 URL。
+- 頁面初始化先 parse URL；URL 有明確條件時優先於模組預設值。
+- Filter 變更後頁碼重設為 1；只有分頁操作可保留其他 Filter 並改變 page。
+- 清除 Filter 回到該模組正式預設值，不一定代表完全沒有 query。
+- 車輛工作區的清除結果固定為 `preparing`、`listed`、`reserved`；Dashboard 帶入的單一／組合狀態與 `is_preparation_completed` 可覆蓋預設。
+- `/money-entries?approval=pending` 必須能還原待審核條件；前端顯示名稱可與 API key 不同，但 parse／serialize 必須集中轉換。
+- Desktop／Tablet 顯示 inline Filter 區；Mobile 使用 Drawer，兩者不得有不同的資料規則。
+- 已套用條件使用文字或 removable chip 顯示，不能只靠控制項內目前值讓使用者猜測。
+- Filter 結果由分頁 API 取得，不得為篩選而在前端載入全部資料。
+
+---
+
+## 11. Responsive Breakpoint 與驗收寬度
+
+沿用 Tailwind mobile-first breakpoint，並以元件行為而非裝置名稱判斷：
+
+| 範圍 | 主要行為 |
+|---|---|
+| `< 640px` Mobile | 單欄、Filter Drawer、可堆疊 action、44px 觸控目標 |
+| `640–1023px` Tablet | Vehicle Card 固定 2 欄；Filter 保持快速操作但可換行 |
+| `>= 1024px` Desktop | Sidebar 常駐、Dashboard／Vehicle 使用較寬 Grid |
+
+正式驗收至少涵蓋：
+
+- 320px
+- 375px
+- 390px
+- 768px（Vehicle Card 必須 2 欄）
+- 1440px 或實際桌機寬度
+
+每個寬度都要檢查 light／dark mode、整頁無水平 overflow、觸控目標、鍵盤 focus、Modal／Drawer、長文字與 API error。iOS 須檢查 `safe-area-inset-top`／`safe-area-inset-bottom`，App 背景、Header、Sidebar overlay 與底部不得露出灰邊。
+
+---
+
+## 12. 可用性與無障礙基線
+
+- 所有互動可由鍵盤操作，Tab 順序符合畫面順序。
+- 使用 `:focus-visible` 提供清楚 focus；不可只靠 hover 表達互動。
+- Icon 裝飾設為 `aria-hidden`；icon-only 控制需有 accessible name。
+- Loading、成功與錯誤依情境使用 `aria-live`，但不搶走使用者 focus。
+- 狀態不得只靠顏色；搭配 icon、文字、形狀或位置。
+- 圖片有符合用途的替代文字；純裝飾圖片使用空 alt。
+- 動畫尊重 `prefers-reduced-motion`；不使用閃爍或不必要的大幅位移。
+- 頁面只保留一個主要 `h1`，標題層級不可跳號。
+
+---
+
+## 13. 共用元件策略
+
+- 先確認至少兩個實際使用處具有相同語意、狀態與行為，再抽成共用元件。
+- 目前跨頁共用的 Badge、ThemeToggle、CustomerSelect 應維持單一責任與語意 token。
+- Dashboard KPI Card、Vehicle Card 與 Filter 可在 v1.4 實際實作時抽取它們真正共用的 focus、surface 或 URL 行為；不得先建立巨大 `Card`、`Form` 或 `Filter` 萬用元件。
+- 頁面特有的版面組合留在頁面內；共用元件不接收大量布林 props 來模擬所有變體。
+- API URL 集中於 `frontend/src/api`；共用呈現元件不自行發送業務 API 或重算正式統計。
+- 權限與敏感欄位仍由後端 Policy／Resource 正式保護；共用元件只負責呈現已授權資料。
+
+---
+
+## 14. v1.4 明確不做
+
+- 不新增品牌提案或可切換品牌皮膚。
+- 不建立完整通用元件平台、Storybook 或平行 Design System。
+- 不新增通知、通知預留位、網站 Footer 或 Footer 導覽。
+- 不以 Modal 複製車輛、收支、客戶或整備既有流程。
+- 不增加 Dashboard Table、車輛列表、展開明細、薪資 KPI 或未指定圖表。
+- 不因 UI 改版修改 Database Schema、Business Logic、Workflow、角色或權限。

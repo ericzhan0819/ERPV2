@@ -42,7 +42,7 @@ export function AppLayout() {
         <button
           type="button"
           aria-label="關閉導覽選單"
-          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -57,7 +57,7 @@ export function AppLayout() {
           <button
             type="button"
             aria-label="關閉導覽選單"
-            className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-sidebar-fg-muted hover:bg-white/5 hover:text-sidebar-fg lg:hidden"
+            className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-sidebar-fg-muted hover:bg-white/5 hover:text-sidebar-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring lg:hidden"
             onClick={() => setSidebarOpen(false)}
           >
             <X size={20} />
@@ -71,7 +71,7 @@ export function AppLayout() {
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
-                  `flex min-h-11 items-center gap-2 rounded-lg border-l-3 px-3 py-2 text-sm font-medium transition-colors ${
+                  `flex min-h-11 items-center gap-2 rounded-lg border-l-3 px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
                     isActive
                       ? 'border-primary bg-primary/20 text-sidebar-fg'
                       : 'border-transparent text-sidebar-fg-muted hover:bg-white/5 hover:text-sidebar-fg'
@@ -91,7 +91,7 @@ export function AppLayout() {
             type="button"
             aria-label="開啟導覽選單"
             aria-expanded={sidebarOpen}
-            className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border-strong text-fg hover:bg-surface-2 lg:hidden"
+            className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border-strong text-fg hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface lg:hidden"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu size={20} />
@@ -101,7 +101,7 @@ export function AppLayout() {
             <ThemeToggle />
             <button
               onClick={handleLogout}
-              className="min-h-11 rounded-lg border border-border-strong px-3 py-2 text-sm font-medium text-fg hover:bg-surface-2"
+              className="min-h-11 rounded-lg border border-border-strong px-3 py-2 text-sm font-medium text-fg hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
             >
               登出
             </button>
