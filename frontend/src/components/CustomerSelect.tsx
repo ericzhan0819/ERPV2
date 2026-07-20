@@ -189,13 +189,7 @@ export function CustomerSelect({
         )}
 
         {showListbox && (
-          <div
-            id={listboxId}
-            role="listbox"
-            aria-label={`${nameLabel}搜尋結果`}
-            aria-busy={loading}
-            className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border-strong bg-surface shadow-lg"
-          >
+          <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border-strong bg-surface shadow-lg">
             <div role="status" className="sr-only">
               {!loading && results.length === 0 ? '查無相符客戶，繼續填寫電話後會自動建立' : ''}
             </div>
@@ -205,23 +199,25 @@ export function CustomerSelect({
                 查無相符客戶，繼續填寫電話後會自動建立
               </div>
             )}
-            {!loading && results.map((customer, index) => (
-              <button
-                id={`${listboxId}-option-${customer.id}`}
-                type="button"
-                role="option"
-                aria-selected={index === activeIndex}
-                tabIndex={-1}
-                key={customer.id}
-                onMouseDown={(event) => event.preventDefault()}
-                onMouseEnter={() => setActiveIndex(index)}
-                onClick={() => handleSelect(customer)}
-                className={`block min-h-11 w-full px-3 py-2 text-left text-sm hover:bg-surface-2 ${index === activeIndex ? 'bg-surface-2' : ''}`}
-              >
-                <span className="block font-medium text-fg">{customer.name}</span>
-                <span className="block text-xs text-fg-muted">{customer.phone || '尚未填寫電話'}</span>
-              </button>
-            ))}
+            <div id={listboxId} role="listbox" aria-label={`${nameLabel}搜尋結果`} aria-busy={loading}>
+              {!loading && results.map((customer, index) => (
+                <button
+                  id={`${listboxId}-option-${customer.id}`}
+                  type="button"
+                  role="option"
+                  aria-selected={index === activeIndex}
+                  tabIndex={-1}
+                  key={customer.id}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onClick={() => handleSelect(customer)}
+                  className={`block min-h-11 w-full px-3 py-2 text-left text-sm hover:bg-surface-2 ${index === activeIndex ? 'bg-surface-2' : ''}`}
+                >
+                  <span className="block font-medium text-fg">{customer.name}</span>
+                  <span className="block text-xs text-fg-muted">{customer.phone || '尚未填寫電話'}</span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
