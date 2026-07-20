@@ -115,7 +115,9 @@ export function Dashboard() {
                   : formatCurrency(currentSalaryPeriod.net_pay_total)}
           />
         )}
-        <Card label="本月成交台數" value={`${summary.monthly_sold_count} 台`} />
+        {summary.monthly_sold_count !== undefined && (
+          <Card label="本月成交台數" value={`${summary.monthly_sold_count} 台`} />
+        )}
         <Card label="整備中車輛" value={`${summary.vehicle_counts.preparing} 台`} />
         <Card label="上架中車輛" value={`${summary.vehicle_counts.listed} 台`} />
         <Card label="保留中車輛" value={`${summary.vehicle_counts.reserved} 台`} />

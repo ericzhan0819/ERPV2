@@ -2,7 +2,6 @@
 
 namespace App\Http\Resources;
 
-use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -13,8 +12,8 @@ class DashboardSummaryResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $role = $request->user()?->role;
-        $canViewFinancials = in_array($role, [User::ROLE_ADMIN, User::ROLE_MANAGER], true);
+        $user = $request->user();
+        $canViewFinancials = $user?->canViewFinancials() ?? false;
 
         $workOverview = [
             'preparation_pending_count' => $this->resource['work_overview']['preparation_pending_count'],
@@ -22,7 +21,7 @@ class DashboardSummaryResource extends JsonResource
             'delivery_pending_count' => $this->resource['work_overview']['delivery_pending_count'],
         ];
 
-        if ($role === User::ROLE_ADMIN) {
+        if ($user?->isAdmin() ?? false) {
             $workOverview['pending_money_entry_count'] = $this->resource['work_overview']['pending_money_entry_count'];
         }
 
@@ -52,9 +51,8 @@ class DashboardSummaryResource extends JsonResource
             'trends' => $trends,
         ];
 
-        // 第 4 部分完成前，保留舊 Dashboard 所需欄位；財務欄位仍只對白名單角色輸出。
+        // 第 4 部分完成前保留舊 Dashboard 欄位；除 vehicle_counts 外只對完整營運概況角色輸出。
         $result['vehicle_counts'] = $this->resource['vehicle_counts'];
-        $result['monthly_sold_count'] = $this->resource['monthly_sold_count'];
 
         if ($canViewFinancials) {
             $result = array_merge($result, [
@@ -65,6 +63,7 @@ class DashboardSummaryResource extends JsonResource
                 'monthly_income' => $this->resource['monthly_income'],
                 'monthly_expense' => $this->resource['monthly_expense'],
                 'monthly_net_flow' => $this->resource['monthly_net_flow'],
+                'monthly_sold_count' => $this->resource['monthly_sold_count'],
             ]);
         }
 

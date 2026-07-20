@@ -33,7 +33,7 @@ export interface DashboardSummary {
     sold: number
     cancelled: number
   }
-  monthly_sold_count: number
+  monthly_sold_count?: number
 }
 
 export interface DashboardCountPoint {

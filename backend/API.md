@@ -136,6 +136,8 @@ Request body：
 
 `trends` 的每個序列都固定包含今天在內的 30 個 `Asia/Taipei` 連續日期點；上例只節錄第一點。成交量依 `sold_at` 歸日，毛利依成交車輛歸日並只計 approved MoneyEntry，現金變化只計 cash 類型帳戶與 approved MoneyEntry，回傳每日期末餘額。
 
+`business_overview.cash_balance` 必須沿用 Cash Account 正式帳面餘額口徑，因此會計入所有 approved 收支，包括 `entry_date` 晚於今天的資料。`trends.cash_balance` 是歷史日趨勢，末點固定為今天，只累計到今天結束；若存在未來日期的 approved 收支，兩者刻意可能不同。本月收入／支出則依整個當月日期區間統計，所以同月內晚於今天的 approved 收支也會納入。本 API 不在 v1.4 改變既有收支日期驗證或正式餘額規則。
+
 角色輸出：
 
 - `admin`：取得三個工作 KPI、待審核收支、完整經營概況與三項趨勢。
@@ -143,7 +145,7 @@ Request body：
 - `sales`：取得三個工作 KPI、在庫數與成交量趨勢；財務欄位不會出現在 JSON。
 - 未知角色採 fail-safe，輸出同樣不含待審核收支與財務欄位。
 
-`cash_balance`、`bank_balance`、`other_balance`、`total_funds`、`monthly_income`、`monthly_expense`、`monthly_net_flow`、`vehicle_counts`、`monthly_sold_count` 為第 4 部分前端切換完成前保留的相容欄位；其財務欄位套用相同後端遮蔽規則。v1.4 新 Dashboard 應只讀取 `work_overview`、`business_overview` 與 `trends`。
+`cash_balance`、`bank_balance`、`other_balance`、`total_funds`、`monthly_income`、`monthly_expense`、`monthly_net_flow`、`vehicle_counts`、`monthly_sold_count` 為第 4 部分前端切換完成前保留的相容欄位。除非另有說明，只有 `vehicle_counts` 對所有角色保留；其餘相容欄位只對 admin／manager 輸出。v1.4 新 Dashboard 應只讀取 `work_overview`、`business_overview` 與 `trends`。
 
 ---
 

@@ -130,6 +130,24 @@ class DashboardTest extends TestCase
         $this->assertSame(1400, $trend[29]['balance']);
     }
 
+    public function test_cash_kpi_preserves_ledger_scope_while_trend_and_monthly_totals_use_their_date_windows(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $cash = CashAccount::factory()->create(['type' => 'cash', 'opening_balance' => 1000]);
+
+        $this->moneyEntry($cash, null, 'income', 200, '2026-07-25');
+        $this->moneyEntry($cash, null, 'income', 999999, '2026-08-05');
+
+        $response = $this->actingAs($admin, 'web')->getJson('/api/dashboard/summary');
+
+        $response->assertOk();
+        // 正式餘額沿用 Cash Account 既有帳面口徑，包含所有已核准收支；趨勢只到今天。
+        $response->assertJsonPath('business_overview.cash_balance', 1001199);
+        $response->assertJsonPath('business_overview.monthly_income', 200);
+        $response->assertJsonPath('trends.cash_balance.29.date', '2026-07-21');
+        $response->assertJsonPath('trends.cash_balance.29.balance', 1000);
+    }
+
     public function test_role_resource_masks_pending_and_financial_fields_from_raw_json(): void
     {
         $admin = User::factory()->admin()->create(['is_active' => true]);
@@ -180,6 +198,7 @@ class DashboardTest extends TestCase
             $this->assertArrayNotHasKey('cash_balance', $json['trends']);
             $this->assertArrayNotHasKey('cash_balance', $json);
             $this->assertArrayNotHasKey('monthly_income', $json);
+            $this->assertArrayNotHasKey('monthly_sold_count', $json);
         }
     }
 

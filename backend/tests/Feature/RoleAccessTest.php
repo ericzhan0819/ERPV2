@@ -182,7 +182,8 @@ class RoleAccessTest extends TestCase
         $response->assertOk();
         $response->assertJsonMissingPath('cash_balance');
         $response->assertJsonMissingPath('monthly_income');
-        $response->assertJsonStructure(['vehicle_counts', 'monthly_sold_count']);
+        $response->assertJsonMissingPath('monthly_sold_count');
+        $response->assertJsonStructure(['vehicle_counts']);
     }
 
     public function test_admin_and_manager_get_full_dashboard_summary(): void
