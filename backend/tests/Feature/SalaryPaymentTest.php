@@ -81,7 +81,7 @@ class SalaryPaymentTest extends TestCase
         $this->assertSame($entry->id, SalarySettlement::query()->where('user_id', $employee->id)->value('money_entry_id'));
         $this->assertNull(SalarySettlement::query()->where('user_id', $zeroPayEmployee->id)->value('money_entry_id'));
         $this->assertSame(69500, app(MoneyEntryService::class)->balanceForAccount($account));
-        $this->assertSame(30500, app(DashboardService::class)->summary()['monthly_expense']);
+        $this->assertSame(30500, app(DashboardService::class)->summary()['business_overview']['monthly_expense']);
 
         $audit = AuditLog::query()->where('subject_type', 'salary_period')->whereJsonContains('after_values->operation', 'pay')->sole();
         $this->assertSame(SalaryPeriod::STATUS_PAID, $audit->after_values['status']);

@@ -236,8 +236,8 @@ class MoneyEntryApprovalTest extends TestCase
 
         $response = $this->actingAs($admin, 'web')->getJson('/api/dashboard/summary');
         $response->assertOk();
-        $response->assertJsonPath('monthly_income', 0);
-        $response->assertJsonPath('cash_balance', 0);
+        $response->assertJsonPath('business_overview.monthly_income', 0);
+        $response->assertJsonPath('business_overview.cash_balance', 0);
 
         $summary = app(VehicleService::class)->financialSummary($vehicle->fresh());
         $this->assertSame(0, $summary['income_total']);

@@ -11,8 +11,6 @@ use Illuminate\Support\Facades\DB;
 
 class DashboardService
 {
-    private const VEHICLE_STATUSES = ['preparing', 'listed', 'reserved', 'sold', 'cancelled'];
-
     private const INVENTORY_STATUSES = ['preparing', 'listed', 'reserved'];
 
     public function __construct(private readonly MoneyEntryService $moneyEntryService) {}
@@ -45,8 +43,6 @@ class DashboardService
         $trendStart = $today->copy()->subDays(29);
 
         $cashBalance = $this->accountBalance('cash');
-        $bankBalance = $this->accountBalance('bank');
-        $otherBalance = $this->accountBalance('other');
 
         $monthlyIncome = $this->approvedAmountForPeriod('income', $monthStart, $nextMonthStart);
         $monthlyExpense = $this->approvedAmountForPeriod('expense', $monthStart, $nextMonthStart);
@@ -80,21 +76,7 @@ class DashboardService
         $inventoryCount = collect(self::INVENTORY_STATUSES)
             ->sum(fn (string $status): int => (int) ($vehicleCounts[$status] ?? 0));
 
-        $legacy = [
-            'cash_balance' => $cashBalance,
-            'bank_balance' => $bankBalance,
-            'other_balance' => $otherBalance,
-            'total_funds' => $cashBalance + $bankBalance + $otherBalance,
-            'monthly_income' => $monthlyIncome,
-            'monthly_expense' => $monthlyExpense,
-            'monthly_net_flow' => $monthlyIncome - $monthlyExpense,
-            'vehicle_counts' => collect(self::VEHICLE_STATUSES)
-                ->mapWithKeys(fn (string $status) => [$status => (int) ($vehicleCounts[$status] ?? 0)])
-                ->all(),
-            'monthly_sold_count' => $monthlySoldVehicles->count(),
-        ];
-
-        return array_merge($legacy, [
+        return [
             'work_overview' => $workOverview,
             'business_overview' => [
                 'inventory_count' => $inventoryCount,
@@ -109,7 +91,7 @@ class DashboardService
                 'gross_profit' => $this->grossProfitTrend($trendStart, $trendSoldVehicles, $trendGrossProfits),
                 'cash_balance' => $this->cashBalanceTrend($trendStart, $today),
             ],
-        ]);
+        ];
     }
 
     private function approvedAmountForPeriod(string $direction, Carbon $start, Carbon $end): int

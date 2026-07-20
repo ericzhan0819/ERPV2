@@ -179,6 +179,7 @@ class DashboardTest extends TestCase
             $response = $this->actingAs($user, 'web')->getJson('/api/dashboard/summary');
 
             $response->assertOk();
+            $this->assertSame(['work_overview', 'business_overview', 'trends'], array_keys($response->json()));
             $response->assertJsonStructure([
                 'work_overview' => ['preparation_pending_count', 'listing_pending_count', 'delivery_pending_count'],
                 'business_overview' => [
@@ -215,9 +216,7 @@ class DashboardTest extends TestCase
             $this->assertArrayNotHasKey('monthly_sold_count', $json['business_overview']);
             $this->assertArrayNotHasKey('gross_profit', $json['trends']);
             $this->assertArrayNotHasKey('cash_balance', $json['trends']);
-            $this->assertArrayNotHasKey('cash_balance', $json);
-            $this->assertArrayNotHasKey('monthly_income', $json);
-            $this->assertArrayNotHasKey('monthly_sold_count', $json);
+            $this->assertSame(['work_overview', 'business_overview', 'trends'], array_keys($json));
         }
     }
 

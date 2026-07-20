@@ -115,22 +115,7 @@ Request body：
     "cash_balance": [
       { "date": "2026-06-22", "balance": 100000 }
     ]
-  },
-  "cash_balance": 100000,
-  "bank_balance": 500000,
-  "other_balance": 0,
-  "total_funds": 600000,
-  "monthly_income": 300000,
-  "monthly_expense": 120000,
-  "monthly_net_flow": 180000,
-  "vehicle_counts": {
-    "preparing": 3,
-    "listed": 5,
-    "reserved": 1,
-    "sold": 8,
-    "cancelled": 0
-  },
-  "monthly_sold_count": 2
+  }
 }
 ```
 
@@ -147,7 +132,7 @@ Request body：
 - `sales`：取得三個工作 KPI、在庫數與成交量趨勢；財務欄位不會出現在 JSON。
 - 未知角色採 fail-safe，輸出同樣不含待審核收支與財務欄位。
 
-`cash_balance`、`bank_balance`、`other_balance`、`total_funds`、`monthly_income`、`monthly_expense`、`monthly_net_flow`、`vehicle_counts`、`monthly_sold_count` 為第 4 部分前端切換完成前保留的相容欄位。除非另有說明，只有 `vehicle_counts` 對所有角色保留；其餘相容欄位只對 admin／manager 輸出。v1.4 新 Dashboard 應只讀取 `work_overview`、`business_overview` 與 `trends`。
+第 4 部分完成後，Dashboard API 只保留 `work_overview`、`business_overview` 與 `trends` 三個正式區塊；舊版頂層資金、月份與車輛狀態相容欄位已移除。
 
 ---
 

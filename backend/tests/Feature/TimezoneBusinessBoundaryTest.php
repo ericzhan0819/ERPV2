@@ -42,7 +42,7 @@ class TimezoneBusinessBoundaryTest extends TestCase
         $this->actingAs($admin, 'web')
             ->getJson('/api/dashboard/summary')
             ->assertOk()
-            ->assertJsonPath('monthly_sold_count', 1);
+            ->assertJsonPath('business_overview.monthly_sold_count', 1);
 
         $this->actingAs($admin, 'web')
             ->getJson("/api/vehicles/{$julyVehicle->id}")

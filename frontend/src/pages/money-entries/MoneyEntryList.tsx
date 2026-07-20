@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { listCashAccountOptions } from '../../api/cashAccounts'
 import { approveMoneyEntry, listMoneyEntries, rejectMoneyEntry } from '../../api/moneyEntries'
@@ -38,8 +38,10 @@ export function MoneyEntryList() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reviewingId, setReviewingId] = useState<number | null>(null)
+  const [refreshToken, setRefreshToken] = useState(0)
   const requestSequenceRef = useRef(0)
   const hasActiveFilters = hasActiveMoneyEntryListFilters(filters)
+  const isPageOutOfRange = Boolean(meta && filters.page > meta.last_page)
 
   function updateFilters(
     updates: Partial<typeof filters>,
@@ -64,7 +66,7 @@ export function MoneyEntryList() {
     listVehicleOptions().then(setVehicles).catch(() => setVehicles([]))
   }, [])
 
-  const reload = useCallback(() => {
+  useEffect(() => {
     const requestSequence = ++requestSequenceRef.current
     setLoading(true)
     setError(null)
@@ -90,6 +92,10 @@ export function MoneyEntryList() {
       .finally(() => {
         if (requestSequence === requestSequenceRef.current) setLoading(false)
       })
+
+    return () => {
+      requestSequenceRef.current += 1
+    }
   }, [
     filters.search,
     filters.direction,
@@ -100,20 +106,14 @@ export function MoneyEntryList() {
     filters.dateTo,
     filters.approvalStatus,
     filters.page,
+    refreshToken,
   ])
-
-  useEffect(() => {
-    reload()
-    return () => {
-      requestSequenceRef.current += 1
-    }
-  }, [reload])
 
   async function handleApprove(id: number) {
     setReviewingId(id)
     try {
       await approveMoneyEntry(id)
-      reload()
+      setRefreshToken((token) => token + 1)
     } catch {
       setError('核准失敗，請稍後再試')
     } finally {
@@ -125,7 +125,7 @@ export function MoneyEntryList() {
     setReviewingId(id)
     try {
       await rejectMoneyEntry(id)
-      reload()
+      setRefreshToken((token) => token + 1)
     } catch {
       setError('駁回失敗，請稍後再試')
     } finally {
@@ -273,7 +273,18 @@ export function MoneyEntryList() {
             {!loading && entries.length === 0 && (
               <tr>
                 <td colSpan={columnCount} className="px-4 py-6 text-center text-fg-muted">
-                  {hasActiveFilters ? (
+                  {isPageOutOfRange ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <span>此頁沒有資料</span>
+                      <button
+                        type="button"
+                        onClick={() => updateFilters({ page: 1 }, { resetPage: false })}
+                        className="text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        回到第 1 頁
+                      </button>
+                    </div>
+                  ) : hasActiveFilters ? (
                     <div className="flex flex-col items-center gap-2">
                       <span>尚無符合條件的收支紀錄</span>
                       <button

@@ -45,28 +45,10 @@ class DashboardSummaryResource extends JsonResource
             $trends['cash_balance'] = $this->resource['trends']['cash_balance'];
         }
 
-        $result = [
+        return [
             'work_overview' => $workOverview,
             'business_overview' => $businessOverview,
             'trends' => $trends,
         ];
-
-        // 第 4 部分完成前保留舊 Dashboard 欄位；除 vehicle_counts 外只對完整營運概況角色輸出。
-        $result['vehicle_counts'] = $this->resource['vehicle_counts'];
-
-        if ($canViewFinancials) {
-            $result = array_merge($result, [
-                'cash_balance' => $this->resource['cash_balance'],
-                'bank_balance' => $this->resource['bank_balance'],
-                'other_balance' => $this->resource['other_balance'],
-                'total_funds' => $this->resource['total_funds'],
-                'monthly_income' => $this->resource['monthly_income'],
-                'monthly_expense' => $this->resource['monthly_expense'],
-                'monthly_net_flow' => $this->resource['monthly_net_flow'],
-                'monthly_sold_count' => $this->resource['monthly_sold_count'],
-            ]);
-        }
-
-        return $result;
     }
 }

@@ -417,7 +417,7 @@ v1.3 第 1～10 部分已補齊：
 - 第 11 部分 review 修正公司摘要來源：`company_reserve_total`／`company_remaining_total` 由 calculator 的整月 eligible vehicle 批次 totals 保存到 salary period，不再從「有員工 settlement 才建立」的 item 反推，因此收／賣車人都沒有 active salary profile 時仍不會漏算公司分配。
 - 新增公司 totals migration 對升級前草稿保留 nullable，重算後寫入；若部署前已有 confirmed／paid 月份則在任何 DDL 前停止，要求人工評估，避免缺乏 durable provenance 的歷史數字被靜默回填為 0。此 migration 實質 forward-only：`down()` 只移除欄位；若 rollback 後又產生 confirmed／paid 月份，不能直接重新 `up()`，必須先人工處理歷史資料。
 - 公司 totals 已納入 confirm 的草稿 snapshot signature；即使車輛歸屬人都沒有 active salary profile、完全不產生 bonus item，草稿後 approved 收支造成的公司分配漂移仍會以 422 要求先重算，不會確認 admin 尚未看過的數字。
-- Dashboard 薪資卡依月份狀態顯示預估／已確認／實發，並區分尚未建立與載入失敗；薪資前端已拆分為可獨立審查的卡片、表單、明細、異常、發薪及 modal 元件。
+- v1.3 曾提供 Dashboard 薪資卡；v1.4 依新版資訊架構移除非指定 KPI，薪資狀態仍由 admin-only 薪資工作區查看。薪資前端已拆分為可獨立審查的卡片、表單、明細、異常、發薪及 modal 元件。
 - v1.3 第 13.1 節已完成：手機採 drawer Sidebar，薪資月份與待補歸屬在小螢幕改為卡片，薪資詳情、設定、級距與 modal 可堆疊操作；相關表單以 `.form-control-touch` opt-in 既有 light／dark 語意 token 與 44px 高度，不改變其他模組 compact controls。獎金級距計入台數、來源未確認異常及未啟用獎金文案已修正，其中草稿啟用狀態讀取既有 Salary Profiles API，涵蓋停用且 0 台員工。Firefox 152 + WebDriver BiDi 已實測 320／375／390／768／1440px light／dark，沒有整頁水平 overflow。
 - draft 薪資詳情新增非阻擋性獎金設定提示：正毛利合格車的收／賣車人若沒有 active salary profile、帳號停用或未啟用獎金，會明確提示該角色獎金歸公司剩餘並連到薪資設定；不改變既有 eligibility 或確認規則。
 
@@ -427,7 +427,7 @@ v1.3 使用者驗收已完成。Smoke 過程修正稽核類型映射、薪資勞
 
 Website MVP 可在 v1.3 Git 封板或正式部署準備時另立企劃與 PLAN，不得混入薪資結算。
 
-v1.4 目前已完成第 0～3 部分：UX Design System／共用元件盤點、Vehicle／MoneyEntry Filter URL 契約，以及 Dashboard API。Dashboard 後端現已提供工作概況、經營概況與 30 天連續趨勢，並由 `DashboardSummaryResource` 對 sales／未知角色移除財務欄位。完整階段紀錄見 `docs/v1.4-phase1-handoff.md`、`docs/v1.4-phase2-handoff.md`、`docs/v1.4-phase3-handoff.md`；下一階段為第 4 部分 Dashboard 前端。
+v1.4 目前已完成第 0～4 部分：UX Design System／共用元件盤點、Vehicle／MoneyEntry Filter URL 契約、Dashboard API 與 Dashboard 前端。Dashboard 已改為 Action Bar、工作概況、經營概況、趨勢分析四區塊；KPI 只負責 URL Filter 導流，三項 30 天趨勢使用無額外 dependency 的響應式 SVG 圖表。`DashboardSummaryResource` 對 sales／未知角色移除財務欄位，API 舊版頂層相容欄位亦已移除。MoneyEntry 核准／駁回後改由 refresh token 依目前 URL Filter 重查，Vehicle／MoneyEntry 超出分頁時可保留 Filter 回到第 1 頁。完整階段紀錄見 `docs/v1.4-phase1-handoff.md`、`docs/v1.4-phase2-handoff.md`、`docs/v1.4-phase3-handoff.md`、`docs/v1.4-phase4-handoff.md`；下一階段為第 5 部分 Vehicle List API 與 Resource。
 
 ---
 

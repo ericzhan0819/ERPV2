@@ -6,6 +6,7 @@ use App\Models\CashAccount;
 use App\Models\MoneyEntry;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Services\MoneyEntryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -600,11 +601,11 @@ class MoneyEntryTest extends TestCase
             'amount' => 2000,
         ]);
 
-        $balance = app(\App\Services\MoneyEntryService::class)->balanceForAccount($cashAccount->fresh());
+        $balance = app(MoneyEntryService::class)->balanceForAccount($cashAccount->fresh());
         $this->assertSame(13000, $balance);
 
         $response = $this->actingAs($user, 'web')->getJson('/api/dashboard/summary');
         $response->assertSuccessful();
-        $response->assertJsonPath('cash_balance', 13000);
+        $response->assertJsonPath('business_overview.cash_balance', 13000);
     }
 }

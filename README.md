@@ -1,8 +1,10 @@
-# 中古車行內部營運系統（1.0 + v1.1 + v1.2 + v1.3）
+# 中古車行內部營運系統（1.0 + v1.1 + v1.2 + v1.3 + v1.4 開發中）
 
 小型中古車行內部使用的前後端分離營運管理系統。v1.1 新增角色（`admin`／`manager`／`sales`）、敏感金額遮蔽、一般收支審核、客戶模組與建車入庫欄位補強，並以 `v1.1-smoke-passed` 封版。v1.2 新增車輛照片管理與官網公開唯讀車輛 API，已完成自動測試、瀏覽器 manual smoke，並以 `v1.2-smoke-passed` 封版。v1.3 新增薪資結算與發薪流程，功能與 Smoke 已通過。另完成獨立的 v1.1 Customer Workflow hotfix：買賣表單改為單一姓名搜尋、自動建立／關聯客戶，並以資料庫 unique 與真實 MariaDB 競態測試防止並發重複。完整穩定狀態見 `docs/current-state.md`、`docs/customer-workflow-hotfix.md`、`docs/v1.3-smoke-report.md` 與 `docs/v1.3-handoff.md`。
 
 v1.3 薪資結算的功能實作、自動測試、真實 MariaDB 並發／時區測試、前端 lint／typecheck／production build、RWD／dark mode 驗證與使用者 browser manual smoke 已完成。範圍包含 admin-only 員工薪資設定、版本化獎金方案、正式收／賣車歸屬、approved-only 整月跨級獎金、異常與非阻擋提示、月份草稿／重算／確認，以及具備 transaction、idempotency 與 paid 歷史保護的整批發薪。當月只能建立與重算草稿，必須等月份結束後才能確認，避免中途鎖定後漏掉後續成交。2026-07-18 納入 Customer hotfix 後的完整回歸為 485 passed、14 environment-gated skipped、2293 assertions；所有受保護的 MariaDB 10.11.18 並發／時區測試於專用 schema 共 14 tests／176 assertions 全數通過。完整規格與驗收證據見 `企劃書_v1.3.md`、`PLAN_v1.3.md`、`PLAN_customer_workflow_hotfix.md`、`docs/current-state.md`、`docs/customer-workflow-hotfix.md`、`docs/v1.3-smoke-report.md`、`docs/v1.3-handoff.md`。Git 封板 commit／tag 尚待使用者授權建立。
+
+v1.4 資訊架構與 UI／UX 改版目前完成第 0～4 部分。Dashboard 已切換為 Action Bar、工作概況、經營概況與近 30 天趨勢，依 admin／manager／sales 角色顯示正式 API 資料並透過 URL Filter 導向既有模組；尚未進入 Vehicle Card Grid 與 Mobile Filter Drawer。階段紀錄見 `docs/v1.4-phase1-handoff.md` 至 `docs/v1.4-phase4-handoff.md`。
 
 ### v1.3 薪資公式
 

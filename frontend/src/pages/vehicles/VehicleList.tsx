@@ -103,6 +103,7 @@ export function VehicleList() {
   }, [filters.search, statusKey, filters.isPreparationCompleted, filters.page])
 
   const hasActiveFilters = hasActiveVehicleListFilters(filters)
+  const isPageOutOfRange = Boolean(meta && filters.page > meta.last_page)
 
   return (
     <div className="flex flex-col gap-6">
@@ -212,8 +213,16 @@ export function VehicleList() {
               <tr>
                 <td colSpan={columnCount} className="px-4 py-6 text-center text-fg-muted">
                   <div className="flex flex-col items-center gap-2">
-                    <span>{hasActiveFilters ? '尚無符合條件的車輛' : '目前沒有在庫車輛'}</span>
-                    {hasActiveFilters ? (
+                    <span>{isPageOutOfRange ? '此頁沒有資料' : hasActiveFilters ? '尚無符合條件的車輛' : '目前沒有在庫車輛'}</span>
+                    {isPageOutOfRange ? (
+                      <button
+                        type="button"
+                        onClick={() => updateFilters({ page: 1 }, { resetPage: false })}
+                        className="text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        回到第 1 頁
+                      </button>
+                    ) : hasActiveFilters ? (
                       <button type="button" onClick={clearFilters} className="text-sm font-medium text-primary hover:underline">
                         清除篩選條件
                       </button>

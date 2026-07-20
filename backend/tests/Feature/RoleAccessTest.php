@@ -180,10 +180,14 @@ class RoleAccessTest extends TestCase
         $response = $this->actingAs($sales, 'web')->getJson('/api/dashboard/summary');
 
         $response->assertOk();
-        $response->assertJsonMissingPath('cash_balance');
-        $response->assertJsonMissingPath('monthly_income');
-        $response->assertJsonMissingPath('monthly_sold_count');
-        $response->assertJsonStructure(['vehicle_counts']);
+        $response->assertJsonMissingPath('business_overview.cash_balance');
+        $response->assertJsonMissingPath('business_overview.monthly_income');
+        $response->assertJsonMissingPath('business_overview.monthly_sold_count');
+        $response->assertJsonStructure([
+            'work_overview' => ['preparation_pending_count', 'listing_pending_count', 'delivery_pending_count'],
+            'business_overview' => ['inventory_count'],
+            'trends' => ['sales_count'],
+        ]);
     }
 
     public function test_admin_and_manager_get_full_dashboard_summary(): void
@@ -194,7 +198,9 @@ class RoleAccessTest extends TestCase
             $response = $this->actingAs($user, 'web')->getJson('/api/dashboard/summary');
 
             $response->assertOk();
-            $response->assertJsonStructure(['cash_balance', 'monthly_income', 'vehicle_counts', 'monthly_sold_count']);
+            $response->assertJsonStructure([
+                'business_overview' => ['cash_balance', 'monthly_income', 'monthly_sold_count'],
+            ]);
         }
     }
 
@@ -214,8 +220,8 @@ class RoleAccessTest extends TestCase
 
         $dashboardResponse = $this->actingAs($unknownRoleUser, 'web')->getJson('/api/dashboard/summary');
         $dashboardResponse->assertOk();
-        $dashboardResponse->assertJsonMissingPath('cash_balance');
-        $dashboardResponse->assertJsonMissingPath('monthly_income');
+        $dashboardResponse->assertJsonMissingPath('business_overview.cash_balance');
+        $dashboardResponse->assertJsonMissingPath('business_overview.monthly_income');
     }
 
     /**
