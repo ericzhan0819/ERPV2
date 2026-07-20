@@ -138,6 +138,8 @@ Request body：
 
 `business_overview.cash_balance` 必須沿用 Cash Account 正式帳面餘額口徑，因此會計入所有 approved 收支，包括 `entry_date` 晚於今天的資料。`trends.cash_balance` 是歷史日趨勢，末點固定為今天，只累計到今天結束；若存在未來日期的 approved 收支，兩者刻意可能不同。本月收入／支出則依整個當月日期區間統計，所以同月內晚於今天的 approved 收支也會納入。本 API 不在 v1.4 改變既有收支日期驗證或正式餘額規則。
 
+車輛 `sold_at` 同樣沿用既有驗證，可晚於今天。因此 `business_overview.monthly_sold_count` 與 `monthly_gross_profit` 會計入同月內的未來成交；`trends.sales_count` 與 `trends.gross_profit` 的末點固定為今天，只呈現截至今天的成交。存在未來成交時，月份 KPI 與 30 天趨勢刻意可能不同，本 API 不在 v1.4 改變既有成交日期驗證。
+
 角色輸出：
 
 - `admin`：取得三個工作 KPI、待審核收支、完整經營概況與三項趨勢。

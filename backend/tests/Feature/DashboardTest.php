@@ -148,6 +148,25 @@ class DashboardTest extends TestCase
         $response->assertJsonPath('trends.cash_balance.29.balance', 1000);
     }
 
+    public function test_monthly_sales_and_profit_include_future_sold_at_while_trends_stop_at_today(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $cash = CashAccount::factory()->create(['type' => 'cash']);
+        $futureSale = Vehicle::factory()->create([
+            'status' => 'sold',
+            'sold_at' => '2026-07-25 12:00:00',
+        ]);
+        $this->moneyEntry($cash, $futureSale, 'income', 500000, '2026-07-21');
+
+        $response = $this->actingAs($admin, 'web')->getJson('/api/dashboard/summary');
+
+        $response->assertOk();
+        $response->assertJsonPath('business_overview.monthly_sold_count', 1);
+        $response->assertJsonPath('business_overview.monthly_gross_profit', 500000);
+        $this->assertSame(0, collect($response->json('trends.sales_count'))->sum('count'));
+        $this->assertSame(0, collect($response->json('trends.gross_profit'))->sum('amount'));
+    }
+
     public function test_role_resource_masks_pending_and_financial_fields_from_raw_json(): void
     {
         $admin = User::factory()->admin()->create(['is_active' => true]);
