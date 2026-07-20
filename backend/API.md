@@ -91,6 +91,31 @@ Request body：
 
 ```json
 {
+  "work_overview": {
+    "preparation_pending_count": 2,
+    "listing_pending_count": 1,
+    "delivery_pending_count": 3,
+    "pending_money_entry_count": 4
+  },
+  "business_overview": {
+    "inventory_count": 12,
+    "cash_balance": 100000,
+    "monthly_income": 300000,
+    "monthly_expense": 120000,
+    "monthly_gross_profit": 80000,
+    "monthly_sold_count": 2
+  },
+  "trends": {
+    "sales_count": [
+      { "date": "2026-06-22", "count": 0 }
+    ],
+    "gross_profit": [
+      { "date": "2026-06-22", "amount": 0 }
+    ],
+    "cash_balance": [
+      { "date": "2026-06-22", "balance": 100000 }
+    ]
+  },
   "cash_balance": 100000,
   "bank_balance": 500000,
   "other_balance": 0,
@@ -108,6 +133,17 @@ Request body：
   "monthly_sold_count": 2
 }
 ```
+
+`trends` 的每個序列都固定包含今天在內的 30 個 `Asia/Taipei` 連續日期點；上例只節錄第一點。成交量依 `sold_at` 歸日，毛利依成交車輛歸日並只計 approved MoneyEntry，現金變化只計 cash 類型帳戶與 approved MoneyEntry，回傳每日期末餘額。
+
+角色輸出：
+
+- `admin`：取得三個工作 KPI、待審核收支、完整經營概況與三項趨勢。
+- `manager`：取得三個工作 KPI、完整經營概況與三項趨勢，不含待審核收支數。
+- `sales`：取得三個工作 KPI、在庫數與成交量趨勢；財務欄位不會出現在 JSON。
+- 未知角色採 fail-safe，輸出同樣不含待審核收支與財務欄位。
+
+`cash_balance`、`bank_balance`、`other_balance`、`total_funds`、`monthly_income`、`monthly_expense`、`monthly_net_flow`、`vehicle_counts`、`monthly_sold_count` 為第 4 部分前端切換完成前保留的相容欄位；其財務欄位套用相同後端遮蔽規則。v1.4 新 Dashboard 應只讀取 `work_overview`、`business_overview` 與 `trends`。
 
 ---
 

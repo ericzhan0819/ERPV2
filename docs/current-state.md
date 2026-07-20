@@ -427,6 +427,8 @@ v1.3 使用者驗收已完成。Smoke 過程修正稽核類型映射、薪資勞
 
 Website MVP 可在 v1.3 Git 封板或正式部署準備時另立企劃與 PLAN，不得混入薪資結算。
 
+v1.4 目前已完成第 0～3 部分：UX Design System／共用元件盤點、Vehicle／MoneyEntry Filter URL 契約，以及 Dashboard API。Dashboard 後端現已提供工作概況、經營概況與 30 天連續趨勢，並由 `DashboardSummaryResource` 對 sales／未知角色移除財務欄位。完整階段紀錄見 `docs/v1.4-phase1-handoff.md`、`docs/v1.4-phase2-handoff.md`、`docs/v1.4-phase3-handoff.md`；下一階段為第 4 部分 Dashboard 前端。
+
 ---
 
 ## 8. 給下一位 AI / 工程師的注意事項
