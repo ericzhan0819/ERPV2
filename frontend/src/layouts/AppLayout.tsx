@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Car, Wallet, Banknote, Users, Contact, ScrollText, HandCoins, Menu, X } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
@@ -20,11 +20,69 @@ export function AppLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isMobileViewport, setIsMobileViewport] = useState(() => window.matchMedia('(max-width: 1023px)').matches)
+  const sidebarRef = useRef<HTMLElement>(null)
+  const sidebarCloseButtonRef = useRef<HTMLButtonElement>(null)
   const visibleNavItems = navItems.filter((item) => !!user?.role && item.roles.includes(user.role))
 
   useEffect(() => {
     setSidebarOpen(false)
   }, [location.pathname])
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 1023px)')
+
+    function handleViewportChange(event: MediaQueryListEvent) {
+      setIsMobileViewport(event.matches)
+      if (!event.matches) setSidebarOpen(false)
+    }
+
+    mediaQuery.addEventListener('change', handleViewportChange)
+    return () => mediaQuery.removeEventListener('change', handleViewportChange)
+  }, [])
+
+  useEffect(() => {
+    if (!sidebarOpen || !isMobileViewport) return
+
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const previousBodyOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    sidebarCloseButtonRef.current?.focus()
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setSidebarOpen(false)
+        return
+      }
+
+      if (event.key !== 'Tab' || !sidebarRef.current) return
+
+      const focusableElements = Array.from(
+        sidebarRef.current.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'),
+      )
+      const firstElement = focusableElements[0]
+      const lastElement = focusableElements.at(-1)
+
+      if (!firstElement || !lastElement) return
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault()
+        lastElement.focus()
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault()
+        firstElement.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = previousBodyOverflow
+      if (previouslyFocused?.isConnected) previouslyFocused.focus()
+    }
+  }, [isMobileViewport, sidebarOpen])
 
   async function handleLogout() {
     try {
@@ -38,16 +96,19 @@ export function AppLayout() {
 
   return (
     <div className="flex min-h-screen min-w-0 bg-bg">
-      {sidebarOpen && (
-        <button
-          type="button"
-          aria-label="關閉導覽選單"
-          className="fixed inset-0 z-30 bg-black/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring lg:hidden"
+      {sidebarOpen && isMobileViewport && (
+        <div
+          aria-hidden="true"
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
       <aside
+        ref={sidebarRef}
+        id="app-sidebar"
         aria-label="主要導覽"
+        aria-hidden={isMobileViewport && !sidebarOpen ? true : undefined}
+        inert={isMobileViewport && !sidebarOpen ? true : undefined}
         className={`fixed inset-y-0 left-0 z-40 flex w-56 shrink-0 flex-col bg-sidebar transition-transform duration-200 lg:static lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
@@ -55,9 +116,10 @@ export function AppLayout() {
         <div className="flex min-h-14 items-center justify-between gap-2 px-4 text-lg font-semibold tracking-tight text-sidebar-fg">
           <span>中古車行系統</span>
           <button
+            ref={sidebarCloseButtonRef}
             type="button"
             aria-label="關閉導覽選單"
-            className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-sidebar-fg-muted hover:bg-white/5 hover:text-sidebar-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring lg:hidden"
+            className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-sidebar-fg-muted hover:bg-white/5 hover:text-sidebar-fg focus:outline-none focus:ring-2 focus:ring-inset focus:ring-sidebar-ring lg:hidden"
             onClick={() => setSidebarOpen(false)}
           >
             <X size={20} />
@@ -71,7 +133,7 @@ export function AppLayout() {
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
-                  `flex min-h-11 items-center gap-2 rounded-lg border-l-3 px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
+                  `flex min-h-11 items-center gap-2 rounded-lg border-l-3 px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-sidebar-ring ${
                     isActive
                       ? 'border-primary bg-primary/20 text-sidebar-fg'
                       : 'border-transparent text-sidebar-fg-muted hover:bg-white/5 hover:text-sidebar-fg'
@@ -91,6 +153,7 @@ export function AppLayout() {
             type="button"
             aria-label="開啟導覽選單"
             aria-expanded={sidebarOpen}
+            aria-controls="app-sidebar"
             className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-border-strong text-fg hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface lg:hidden"
             onClick={() => setSidebarOpen(true)}
           >

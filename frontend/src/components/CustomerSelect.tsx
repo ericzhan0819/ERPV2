@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { listCustomers } from '../api/customers'
 import type { Customer } from '../types/customer'
 
@@ -31,15 +31,22 @@ export function CustomerSelect({
   const [results, setResults] = useState<Customer[]>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
   const containerRef = useRef<HTMLDivElement>(null)
   const latestRequestId = useRef(0)
+  const nameInputId = useId()
+  const phoneInputId = useId()
+  const listboxId = useId()
   const trimmedQuery = name.trim()
+  const showListbox = open && trimmedQuery !== ''
+  const activeCustomer = activeIndex >= 0 ? results[activeIndex] : undefined
 
   useEffect(() => {
     const requestId = ++latestRequestId.current
 
     if (!open || trimmedQuery === '') {
       setResults([])
+      setActiveIndex(-1)
       setLoading(false)
       return
     }
@@ -50,6 +57,7 @@ export function CustomerSelect({
         .then((response) => {
           if (requestId !== latestRequestId.current) return
           setResults(response.data)
+          setActiveIndex(-1)
         })
         .catch(() => {
           if (requestId !== latestRequestId.current) return
@@ -68,6 +76,7 @@ export function CustomerSelect({
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setOpen(false)
+        setActiveIndex(-1)
       }
     }
 
@@ -79,6 +88,7 @@ export function CustomerSelect({
     // 修改已選客戶的姓名代表改回自由輸入；保留電話，避免使用者需要重新輸入。
     onChange({ customerId: '', name: nextName, phone })
     setOpen(true)
+    setActiveIndex(-1)
   }
 
   function handleSelect(customer: Customer) {
@@ -88,31 +98,65 @@ export function CustomerSelect({
       phone: customer.phone ?? '',
     })
     setOpen(false)
+    setActiveIndex(-1)
   }
 
   function handleUseAsNewCustomer() {
     onChange({ customerId: '', name, phone })
     setOpen(false)
+    setActiveIndex(-1)
+  }
+
+  function handleNameKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setOpen(true)
+      if (results.length > 0) setActiveIndex((index) => (index + 1) % results.length)
+      return
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setOpen(true)
+      if (results.length > 0) setActiveIndex((index) => (index <= 0 ? results.length - 1 : index - 1))
+      return
+    }
+
+    if (event.key === 'Enter' && open && activeIndex >= 0 && results[activeIndex]) {
+      event.preventDefault()
+      handleSelect(results[activeIndex])
+      return
+    }
+
+    if (event.key === 'Escape' && open) {
+      event.preventDefault()
+      setOpen(false)
+      setActiveIndex(-1)
+    }
   }
 
   return (
     <div ref={containerRef} className="contents">
       <div className="relative">
-        <label className="mb-1 block text-sm font-medium text-fg-muted">
+        <label htmlFor={nameInputId} className="mb-1 block text-sm font-medium text-fg-muted">
           {nameLabel}
           {required && <span className="text-error"> *</span>}
         </label>
         <input
+          id={nameInputId}
           type="text"
           required={required}
           autoComplete="off"
           value={name}
           onFocus={() => setOpen(true)}
           onChange={(event) => handleNameChange(event.target.value)}
+          onKeyDown={handleNameKeyDown}
           placeholder="輸入姓名搜尋既有客戶"
           role="combobox"
           aria-autocomplete="list"
-          aria-expanded={open}
+          aria-expanded={showListbox}
+          aria-controls={showListbox ? listboxId : undefined}
+          aria-activedescendant={showListbox && activeCustomer ? `${listboxId}-option-${activeCustomer.id}` : undefined}
           className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
         />
 
@@ -129,20 +173,32 @@ export function CustomerSelect({
           </div>
         )}
 
-        {open && trimmedQuery !== '' && (
-          <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border-strong bg-surface shadow-lg">
-            {loading && <div className="px-3 py-2 text-sm text-fg-muted">搜尋中...</div>}
+        {showListbox && (
+          <div
+            id={listboxId}
+            role="listbox"
+            aria-label={`${nameLabel}搜尋結果`}
+            aria-busy={loading}
+            className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border-strong bg-surface shadow-lg"
+          >
+            {loading && <div role="option" aria-disabled="true" aria-selected="false" className="px-3 py-2 text-sm text-fg-muted">搜尋中...</div>}
             {!loading && results.length === 0 && (
-              <div className="px-3 py-2 text-sm text-fg-muted">
+              <div role="option" aria-disabled="true" aria-selected="false" className="px-3 py-2 text-sm text-fg-muted">
                 查無相符客戶，繼續填寫電話後會自動建立
               </div>
             )}
-            {!loading && results.map((customer) => (
+            {!loading && results.map((customer, index) => (
               <button
+                id={`${listboxId}-option-${customer.id}`}
                 type="button"
+                role="option"
+                aria-selected={index === activeIndex}
+                tabIndex={-1}
                 key={customer.id}
+                onMouseDown={(event) => event.preventDefault()}
+                onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => handleSelect(customer)}
-                className="block min-h-11 w-full px-3 py-2 text-left text-sm hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                className={`block min-h-11 w-full px-3 py-2 text-left text-sm hover:bg-surface-2 ${index === activeIndex ? 'bg-surface-2' : ''}`}
               >
                 <span className="block font-medium text-fg">{customer.name}</span>
                 <span className="block text-xs text-fg-muted">{customer.phone || '尚未填寫電話'}</span>
@@ -153,11 +209,12 @@ export function CustomerSelect({
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-fg-muted">
+        <label htmlFor={phoneInputId} className="mb-1 block text-sm font-medium text-fg-muted">
           {phoneLabel}
           {!customerId && required && <span className="text-error"> *</span>}
         </label>
         <input
+          id={phoneInputId}
           type="tel"
           required={required && !customerId}
           readOnly={Boolean(customerId)}
