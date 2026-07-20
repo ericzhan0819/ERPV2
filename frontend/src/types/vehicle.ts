@@ -78,7 +78,9 @@ export interface PendingCommissionAttributionResponse {
 
 export interface VehicleListParams {
   search?: string
-  status?: VehicleStatus
+  status?: VehicleStatus | VehicleStatus[]
+  is_preparation_completed?: boolean
+  per_page?: number
   page?: number
 }
 

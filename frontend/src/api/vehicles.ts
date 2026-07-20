@@ -23,6 +23,11 @@ export async function listVehicles(params: VehicleListParams): Promise<VehicleLi
   return data
 }
 
+export async function listVehicleOptions(): Promise<Vehicle[]> {
+  const response = await listVehicles({ per_page: 100 })
+  return response.data
+}
+
 export async function listCommissionAgentOptions(): Promise<CommissionAgent[]> {
   const { data } = await apiClient.get<{ data: CommissionAgent[] }>('/api/vehicles/commission-agent-options')
   return data.data

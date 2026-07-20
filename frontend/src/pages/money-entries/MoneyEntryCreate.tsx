@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { isAxiosError } from 'axios'
-import { apiClient } from '../../api/client'
 import { listCashAccountOptions } from '../../api/cashAccounts'
 import { createMoneyEntry } from '../../api/moneyEntries'
+import { listVehicleOptions } from '../../api/vehicles'
 import type { CashAccountOption } from '../../types/cashAccount'
 import type { CreateMoneyEntryPayload, MoneyDirection } from '../../types/moneyEntry'
-import type { Vehicle, VehicleListResponse } from '../../types/vehicle'
+import type { Vehicle } from '../../types/vehicle'
 import { generateIdempotencyKey } from '../../utils/idempotency'
 import { formatBusinessDate } from '../../utils/dateTime'
 import { categoriesForDirection, directionLabels } from '../../utils/moneyEntryCategory'
@@ -47,10 +47,7 @@ export function MoneyEntryCreate() {
 
   useEffect(() => {
     listCashAccountOptions().then((accounts) => setCashAccounts(accounts.filter((a) => a.is_active))).catch(() => setCashAccounts([]))
-    apiClient
-      .get<VehicleListResponse>('/api/vehicles', { params: { per_page: 100 } })
-      .then((response) => setVehicles(response.data.data))
-      .catch(() => setVehicles([]))
+    listVehicleOptions().then(setVehicles).catch(() => setVehicles([]))
   }, [])
 
   const categoryOptions = categoriesForDirection(direction)

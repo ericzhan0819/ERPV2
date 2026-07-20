@@ -122,11 +122,14 @@ Query 參數（`IndexVehicleRequest`）：
 | 欄位 | 型別 | 說明 |
 |---|---|---|
 | search | string | 車牌/車架號/廠牌/車型模糊搜尋 |
-| status | string | `preparing`\|`listed`\|`reserved`\|`sold`\|`cancelled` |
+| status | string 或 string[] | 單一值維持既有行為；多選可用逗號（例如 `preparing,listed,reserved`）或 `status[]`，值只允許五種既有狀態 |
+| is_preparation_completed | bool | 篩選整備是否完成；接受 API boolean 表示及 URL 的 `true`／`false` |
 | per_page | int | 1~100，預設由 Service 決定 |
 | page | int | |
 
 回傳：分頁後的 `VehicleResource` 陣列（Laravel 標準分頁格式：`data`/`links`/`meta`）。
+
+未傳 `status` 時，API 本身仍維持既有「不限制狀態」行為，避免其他呼叫端回歸。後台 `/vehicles` 工作區由前端 URL 契約套用 `preparing`、`listed`、`reserved` 預設集合；單一 `status=preparing` 連結保持相容，逗號多選、搜尋、整備完成與頁碼可由重新整理及瀏覽器上一頁／下一頁還原。
 
 ### POST /api/vehicles
 
@@ -456,7 +459,9 @@ Query 參數同 `IndexMoneyEntryRequest`（見下方），並強制以 `vehicle_
 
 ### GET /api/money-entries
 
-Query 參數（`IndexMoneyEntryRequest`）：`vehicle_id`、`cash_account_id`、`direction`(`income`\|`expense`)、`category`、`date_from`、`date_to`、`search`、`per_page`(1~100)、`page`，皆為選填。
+Query 參數（`IndexMoneyEntryRequest`）：`vehicle_id`、`cash_account_id`、`direction`(`income`\|`expense`)、`category`、`approval_status`(`approved`\|`pending`\|`rejected`)、`date_from`、`date_to`、`search`、`per_page`(1~100)、`page`，皆為選填。
+
+後台 `/money-entries` 的分享 URL 使用 `approval=pending` 等較短鍵名，前端還原後會映射成 API 的 `approval_status`；其他既有篩選與頁碼同樣由 URL 保存。這只改變列表的導流／還原方式，不改變 CRUD、審核狀態或角色可見範圍。
 
 回傳：分頁後的 `MoneyEntryResource` 陣列。`admin`/`manager` 看到完整列表；`sales` 只看到自己建立的申請，或訂金收入／尾款收入／退款等銷售收款安全分類（不論由誰建立），不會看到全公司所有成本紀錄的分類、對象、描述。`GET /api/vehicles/{id}/money-entries` 套用同一套範圍限制。
 

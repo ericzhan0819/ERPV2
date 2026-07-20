@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { listVehicles } from '../../api/vehicles'
 import type { Vehicle, VehicleListMeta, VehicleStatus } from '../../types/vehicle'
 import { VehicleStatusBadge } from '../../components/VehicleStatusBadge'
 import { useAuth } from '../../hooks/useAuth'
 import { canManageVehicles, canViewSalesPricing } from '../../utils/permissions'
+import {
+  defaultVehicleStatuses,
+  parseVehicleListFilters,
+  serializeVehicleListFilters,
+  vehicleStatuses,
+} from '../../utils/listFilters'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
@@ -12,39 +18,93 @@ function formatCurrency(amount: number | null | undefined): string {
   return amount === null || amount === undefined ? '-' : currencyFormatter.format(amount)
 }
 
-const statusOptions: { value: VehicleStatus | ''; label: string }[] = [
-  { value: '', label: '全部狀態' },
-  { value: 'preparing', label: '整備中' },
-  { value: 'listed', label: '上架中' },
-  { value: 'reserved', label: '保留中' },
-  { value: 'sold', label: '已售出' },
-  { value: 'cancelled', label: '取消 / 退車' },
-]
+const statusLabels: Record<VehicleStatus, string> = {
+  preparing: '整備中',
+  listed: '上架中',
+  reserved: '保留中',
+  sold: '已售出',
+  cancelled: '取消 / 退車',
+}
 
 export function VehicleList() {
   const { user } = useAuth()
   const canManage = canManageVehicles(user?.role)
   const canViewSalesPrice = canViewSalesPricing(user?.role)
   const columnCount = 7 + (canViewSalesPrice ? 2 : 0)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const filters = parseVehicleListFilters(searchParams)
+  const statusKey = filters.statuses.join(',')
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [meta, setMeta] = useState<VehicleListMeta | null>(null)
-  const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<VehicleStatus | ''>('')
-  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  function updateFilters(
+    updates: Partial<typeof filters>,
+    options: { resetPage?: boolean; replace?: boolean } = {},
+  ) {
+    setSearchParams(
+      serializeVehicleListFilters({
+        ...filters,
+        ...updates,
+        page: options.resetPage === false ? (updates.page ?? filters.page) : 1,
+      }),
+      { replace: options.replace ?? false },
+    )
+  }
+
+  function clearFilters() {
+    setSearchParams(
+      serializeVehicleListFilters({
+        search: '',
+        statuses: [...defaultVehicleStatuses],
+        page: 1,
+      }),
+    )
+  }
+
+  function toggleStatus(status: VehicleStatus, checked: boolean) {
+    const nextStatuses = checked
+      ? vehicleStatuses.filter((candidate) => filters.statuses.includes(candidate) || candidate === status)
+      : filters.statuses.filter((candidate) => candidate !== status)
+
+    updateFilters(
+      { statuses: nextStatuses.length > 0 ? nextStatuses : [...defaultVehicleStatuses] },
+      { resetPage: true },
+    )
+  }
+
   useEffect(() => {
+    let active = true
     setLoading(true)
     setError(null)
-    listVehicles({ search: search || undefined, status: status || undefined, page })
+    listVehicles({
+      search: filters.search || undefined,
+      status: statusKey.split(',') as VehicleStatus[],
+      is_preparation_completed: filters.isPreparationCompleted,
+      page: filters.page,
+    })
       .then((response) => {
+        if (!active) return
         setVehicles(response.data)
         setMeta(response.meta)
       })
-      .catch(() => setError('車輛列表載入失敗'))
-      .finally(() => setLoading(false))
-  }, [search, status, page])
+      .catch(() => {
+        if (active) setError('車輛列表載入失敗')
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [filters.search, statusKey, filters.isPreparationCompleted, filters.page])
+
+  const isDefaultStatusSet =
+    filters.statuses.length === defaultVehicleStatuses.length &&
+    defaultVehicleStatuses.every((status) => filters.statuses.includes(status))
+  const hasActiveFilters = Boolean(filters.search || filters.isPreparationCompleted !== undefined || !isDefaultStatusSet)
 
   return (
     <div className="flex flex-col gap-6">
@@ -73,31 +133,56 @@ export function VehicleList() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3">
-        <input
-          type="text"
-          placeholder="搜尋庫存編號 / 廠牌 / 車型 / 車牌 / VIN"
-          value={search}
-          onChange={(e) => {
-            setPage(1)
-            setSearch(e.target.value)
-          }}
-          className="w-72 rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
-        />
-        <select
-          value={status}
-          onChange={(e) => {
-            setPage(1)
-            setStatus(e.target.value as VehicleStatus | '')
-          }}
-          className="rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
-        >
-          {statusOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
+      <div className="flex flex-wrap items-end gap-4">
+        <label className="flex flex-col gap-1 text-sm font-medium text-fg-muted">
+          搜尋車輛
+          <input
+            type="search"
+            placeholder="庫存編號 / 廠牌 / 車型 / 車牌 / VIN"
+            value={filters.search}
+            onChange={(event) => updateFilters({ search: event.target.value }, { resetPage: true, replace: true })}
+            className="w-72 rounded-lg border border-border-strong px-3 py-2 text-sm text-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+          />
+        </label>
+
+        <fieldset className="flex flex-wrap gap-x-3 gap-y-2">
+          <legend className="mb-1 text-sm font-medium text-fg-muted">車輛狀態</legend>
+          {vehicleStatuses.map((status) => (
+            <label key={status} className="flex min-h-11 items-center gap-2 text-sm text-fg">
+              <input
+                type="checkbox"
+                checked={filters.statuses.includes(status)}
+                onChange={(event) => toggleStatus(status, event.target.checked)}
+                className="h-4 w-4 rounded border-border-strong text-primary focus:ring-2 focus:ring-ring/30"
+              />
+              {statusLabels[status]}
+            </label>
           ))}
-        </select>
+        </fieldset>
+
+        <label className="flex flex-col gap-1 text-sm font-medium text-fg-muted">
+          整備狀態
+          <select
+            value={filters.isPreparationCompleted === undefined ? '' : String(filters.isPreparationCompleted)}
+            onChange={(event) => {
+              const value = event.target.value
+              updateFilters({
+                isPreparationCompleted: value === '' ? undefined : value === 'true',
+              })
+            }}
+            className="min-h-11 rounded-lg border border-border-strong px-3 py-2 text-sm text-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+          >
+            <option value="">全部整備狀態</option>
+            <option value="false">整備未完成</option>
+            <option value="true">整備已完成</option>
+          </select>
+        </label>
+
+        {hasActiveFilters && (
+          <button type="button" onClick={clearFilters} className="min-h-11 text-sm font-medium text-primary hover:underline">
+            清除篩選條件
+          </button>
+        )}
       </div>
 
       {error && <p className="text-sm text-error">{error}</p>}
@@ -128,30 +213,20 @@ export function VehicleList() {
             {!loading && vehicles.length === 0 && (
               <tr>
                 <td colSpan={columnCount} className="px-4 py-6 text-center text-fg-muted">
-                  {search || status ? (
-                    <div className="flex flex-col items-center gap-2">
-                      <span>尚無符合條件的車輛</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSearch('')
-                          setStatus('')
-                        }}
-                        className="text-sm font-medium text-primary hover:underline"
-                      >
+                  <div className="flex flex-col items-center gap-2">
+                    <span>{hasActiveFilters ? '尚無符合條件的車輛' : '目前沒有在庫車輛'}</span>
+                    {hasActiveFilters ? (
+                      <button type="button" onClick={clearFilters} className="text-sm font-medium text-primary hover:underline">
                         清除篩選條件
                       </button>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-2">
-                      <span>尚無車輛資料</span>
-                      {canManage && (
+                    ) : (
+                      canManage && (
                         <Link to="/vehicles/create" className="text-sm font-medium text-primary hover:underline">
                           新增第一輛車
                         </Link>
-                      )}
-                    </div>
-                  )}
+                      )
+                    )}
+                  </div>
                 </td>
               </tr>
             )}
@@ -186,14 +261,16 @@ export function VehicleList() {
           </span>
           <div className="flex gap-2">
             <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              type="button"
+              onClick={() => updateFilters({ page: Math.max(1, filters.page - 1) }, { resetPage: false })}
               disabled={meta.current_page <= 1}
               className="rounded-lg border border-border-strong px-3 py-1.5 disabled:opacity-50"
             >
               上一頁
             </button>
             <button
-              onClick={() => setPage((p) => Math.min(meta.last_page, p + 1))}
+              type="button"
+              onClick={() => updateFilters({ page: Math.min(meta.last_page, filters.page + 1) }, { resetPage: false })}
               disabled={meta.current_page >= meta.last_page}
               className="rounded-lg border border-border-strong px-3 py-1.5 disabled:opacity-50"
             >

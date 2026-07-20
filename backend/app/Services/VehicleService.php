@@ -75,7 +75,18 @@ class VehicleService
         }
 
         if (! empty($filters['status'])) {
-            $query->where('status', $filters['status']);
+            if (is_array($filters['status'])) {
+                $query->whereIn('status', $filters['status']);
+            } else {
+                $query->where('status', $filters['status']);
+            }
+        }
+
+        if (array_key_exists('is_preparation_completed', $filters)) {
+            $query->where(
+                'is_preparation_completed',
+                filter_var($filters['is_preparation_completed'], FILTER_VALIDATE_BOOLEAN),
+            );
         }
 
         return $query

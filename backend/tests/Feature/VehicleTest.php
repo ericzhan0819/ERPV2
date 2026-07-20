@@ -540,6 +540,77 @@ class VehicleTest extends TestCase
         $this->assertSame('Honda', $response->json('data.0.brand'));
     }
 
+    public function test_index_supports_comma_separated_statuses_and_preparation_filter(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $matchingPreparing = Vehicle::factory()->create([
+            'status' => 'preparing',
+            'is_preparation_completed' => false,
+        ]);
+        $matchingListed = Vehicle::factory()->create([
+            'status' => 'listed',
+            'is_preparation_completed' => false,
+        ]);
+        Vehicle::factory()->create([
+            'status' => 'preparing',
+            'is_preparation_completed' => true,
+        ]);
+        Vehicle::factory()->create([
+            'status' => 'sold',
+            'is_preparation_completed' => false,
+        ]);
+
+        $response = $this->actingAs($user, 'web')->getJson(
+            '/api/vehicles?status=preparing,listed&is_preparation_completed=false'
+        );
+
+        $response->assertSuccessful();
+        $this->assertEqualsCanonicalizing(
+            [$matchingPreparing->id, $matchingListed->id],
+            collect($response->json('data'))->pluck('id')->all(),
+        );
+    }
+
+    public function test_index_supports_status_array_and_keeps_filters_across_pages(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        Vehicle::factory()->count(2)->create(['status' => 'preparing']);
+        Vehicle::factory()->create(['status' => 'reserved']);
+        Vehicle::factory()->create(['status' => 'sold']);
+
+        $response = $this->actingAs($user, 'web')->getJson(
+            '/api/vehicles?status[]=preparing&status[]=reserved&per_page=2&page=2'
+        );
+
+        $response
+            ->assertSuccessful()
+            ->assertJsonPath('meta.current_page', 2)
+            ->assertJsonPath('meta.per_page', 2)
+            ->assertJsonPath('meta.total', 3);
+        $this->assertCount(1, $response->json('data'));
+        $this->assertContains($response->json('data.0.status'), ['preparing', 'reserved']);
+    }
+
+    public function test_index_rejects_invalid_status_combinations_and_preparation_filter(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+
+        $this->actingAs($user, 'web')
+            ->getJson('/api/vehicles?status=preparing,unknown')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('status.1');
+
+        $this->actingAs($user, 'web')
+            ->getJson('/api/vehicles?status[]=listed&status[]=listed')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('status.1');
+
+        $this->actingAs($user, 'web')
+            ->getJson('/api/vehicles?is_preparation_completed=unknown')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('is_preparation_completed');
+    }
+
     public function test_show_returns_financial_summary_and_money_entries(): void
     {
         $user = User::factory()->create(['is_active' => true]);
