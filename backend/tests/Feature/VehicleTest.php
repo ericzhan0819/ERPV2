@@ -605,6 +605,81 @@ class VehicleTest extends TestCase
         $this->assertContains($response->json('data.0.status'), ['preparing', 'reserved']);
     }
 
+    public function test_index_filters_sold_at_by_taipei_month_with_independent_status_condition(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        Vehicle::factory()->create(['status' => 'sold', 'sold_at' => '2026-06-30 23:59:59']);
+        $first = Vehicle::factory()->create([
+            'status' => 'sold',
+            'sold_at' => '2026-07-01 00:00:00',
+            'brand' => '月份符合',
+        ]);
+        $last = Vehicle::factory()->create(['status' => 'sold', 'sold_at' => '2026-07-31 23:59:59']);
+        Vehicle::factory()->create(['status' => 'sold', 'sold_at' => '2026-08-01 00:00:00']);
+        $listed = Vehicle::factory()->create(['status' => 'listed', 'sold_at' => '2026-07-15 12:00:00']);
+
+        $response = $this->actingAs($user, 'web')
+            ->getJson('/api/vehicles?status=sold&sold_month=2026-07');
+
+        $response->assertOk()->assertJsonPath('meta.total', 2);
+        $this->assertEqualsCanonicalizing(
+            [$first->id, $last->id],
+            collect($response->json('data'))->pluck('id')->all(),
+        );
+
+        $this->actingAs($user, 'web')
+            ->getJson('/api/vehicles?status=listed&sold_month=2026-07')
+            ->assertOk()
+            ->assertJsonPath('meta.total', 1)
+            ->assertJsonPath('data.0.id', $listed->id);
+    }
+
+    public function test_index_combines_sold_month_with_existing_filters_and_pagination(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        Vehicle::factory()->count(3)->create([
+            'status' => 'sold',
+            'sold_at' => '2026-07-15 12:00:00',
+            'brand' => '月份搜尋符合',
+            'is_preparation_completed' => false,
+        ]);
+        Vehicle::factory()->create([
+            'status' => 'sold',
+            'sold_at' => '2026-07-15 12:00:00',
+            'brand' => '月份搜尋符合',
+            'is_preparation_completed' => true,
+        ]);
+        Vehicle::factory()->create([
+            'status' => 'sold',
+            'sold_at' => '2026-08-15 12:00:00',
+            'brand' => '月份搜尋符合',
+            'is_preparation_completed' => false,
+        ]);
+
+        $response = $this->actingAs($user, 'web')->getJson(
+            '/api/vehicles?status=sold&sold_month=2026-07&search='.urlencode('月份搜尋').'&is_preparation_completed=false&per_page=2&page=2'
+        );
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('meta.current_page', 2)
+            ->assertJsonPath('meta.per_page', 2)
+            ->assertJsonPath('meta.total', 3);
+        $this->assertCount(1, $response->json('data'));
+    }
+
+    public function test_index_rejects_invalid_sold_month_formats(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+
+        foreach (['2026-7', '2026-00', '2026-13', '2026/07', 'July-2026'] as $soldMonth) {
+            $this->actingAs($user, 'web')
+                ->getJson('/api/vehicles?sold_month='.urlencode($soldMonth))
+                ->assertStatus(422)
+                ->assertJsonValidationErrors('sold_month');
+        }
+    }
+
     public function test_index_rejects_invalid_status_combinations_and_preparation_filter(): void
     {
         $user = User::factory()->create(['is_active' => true]);

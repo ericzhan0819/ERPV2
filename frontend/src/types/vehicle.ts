@@ -80,6 +80,7 @@ export interface VehicleListParams {
   search?: string
   status?: VehicleStatus | VehicleStatus[]
   is_preparation_completed?: boolean
+  sold_month?: string
   per_page?: number
   page?: number
 }

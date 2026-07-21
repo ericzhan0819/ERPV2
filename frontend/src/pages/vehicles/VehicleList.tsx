@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { SlidersHorizontal, X } from 'lucide-react'
 import { listVehicles } from '../../api/vehicles'
 import type { Vehicle, VehicleListMeta, VehicleStatus } from '../../types/vehicle'
 import { VehicleStatusBadge } from '../../components/VehicleStatusBadge'
@@ -8,8 +9,10 @@ import { canManageVehicles, canViewSalesPricing } from '../../utils/permissions'
 import {
   defaultVehicleStatuses,
   hasActiveVehicleListFilters,
+  hasDefaultVehicleStatuses,
   parseVehicleListFilters,
   serializeVehicleListFilters,
+  type VehicleListFilters,
   vehicleStatuses,
 } from '../../utils/listFilters'
 
@@ -27,6 +30,98 @@ const statusLabels: Record<VehicleStatus, string> = {
   cancelled: '取消 / 退車',
 }
 
+type FilterChangeHandler = (
+  updates: Partial<VehicleListFilters>,
+  options?: { replace?: boolean },
+) => void
+
+function formatSoldMonth(value: string): string {
+  const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(value)
+  return match ? `${match[1]} 年 ${Number(match[2])} 月` : value
+}
+
+function VehicleFilterFields({
+  filters,
+  onChange,
+}: {
+  filters: VehicleListFilters
+  onChange: FilterChangeHandler
+}) {
+  function toggleStatus(status: VehicleStatus, checked: boolean) {
+    const nextStatuses = checked
+      ? vehicleStatuses.filter((candidate) => filters.statuses.includes(candidate) || candidate === status)
+      : filters.statuses.filter((candidate) => candidate !== status)
+
+    onChange({ statuses: nextStatuses.length > 0 ? nextStatuses : [...defaultVehicleStatuses] })
+  }
+
+  return (
+    <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+      <label className="flex flex-col gap-1 text-sm font-medium text-fg-muted">
+        搜尋車輛
+        <input
+          type="search"
+          placeholder="庫存編號 / 廠牌 / 車型 / 車牌 / VIN"
+          value={filters.search}
+          onChange={(event) => onChange({ search: event.target.value }, { replace: true })}
+          className="min-h-11 w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-base text-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring sm:w-72 sm:text-sm"
+        />
+      </label>
+
+      <fieldset className="flex flex-wrap gap-x-3 gap-y-1">
+        <legend className="mb-1 text-sm font-medium text-fg-muted">車輛狀態</legend>
+        {vehicleStatuses.map((status) => (
+          <label key={status} className="flex min-h-11 items-center gap-2 text-sm text-fg">
+            <input
+              type="checkbox"
+              checked={filters.statuses.includes(status)}
+              onChange={(event) => toggleStatus(status, event.target.checked)}
+              className="h-4 w-4 rounded border-border-strong text-primary focus:ring-2 focus:ring-ring"
+            />
+            {statusLabels[status]}
+          </label>
+        ))}
+      </fieldset>
+
+      <label className="flex flex-col gap-1 text-sm font-medium text-fg-muted">
+        整備狀態
+        <select
+          value={filters.isPreparationCompleted === undefined ? '' : String(filters.isPreparationCompleted)}
+          onChange={(event) => {
+            const value = event.target.value
+            onChange({ isPreparationCompleted: value === '' ? undefined : value === 'true' })
+          }}
+          className="min-h-11 rounded-lg border border-border-strong bg-surface px-3 py-2 text-base text-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring sm:text-sm"
+        >
+          <option value="">全部整備狀態</option>
+          <option value="false">整備未完成</option>
+          <option value="true">整備已完成</option>
+        </select>
+      </label>
+
+      <label className="flex flex-col gap-1 text-sm font-medium text-fg-muted">
+        成交月份
+        <input
+          type="month"
+          value={filters.soldMonth}
+          onChange={(event) => onChange({ soldMonth: event.target.value })}
+          className="min-h-11 rounded-lg border border-border-strong bg-surface px-3 py-2 text-base text-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring sm:text-sm"
+        />
+      </label>
+
+      {filters.soldMonth && (
+        <button
+          type="button"
+          onClick={() => onChange({ soldMonth: '' })}
+          className="min-h-11 self-start text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:self-auto"
+        >
+          清除成交月份
+        </button>
+      )}
+    </div>
+  )
+}
+
 export function VehicleList() {
   const { user } = useAuth()
   const canManage = canManageVehicles(user?.role)
@@ -39,6 +134,14 @@ export function VehicleList() {
   const [meta, setMeta] = useState<VehicleListMeta | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false)
+  const [draftFilters, setDraftFilters] = useState<VehicleListFilters>(() => ({
+    ...filters,
+    statuses: [...filters.statuses],
+  }))
+  const filterDrawerTriggerRef = useRef<HTMLButtonElement>(null)
+  const filterDrawerRef = useRef<HTMLElement>(null)
+  const filterDrawerCloseRef = useRef<HTMLButtonElement>(null)
 
   function updateFilters(
     updates: Partial<typeof filters>,
@@ -59,21 +162,84 @@ export function VehicleList() {
       serializeVehicleListFilters({
         search: '',
         statuses: [...defaultVehicleStatuses],
+        soldMonth: '',
         page: 1,
       }),
     )
   }
 
-  function toggleStatus(status: VehicleStatus, checked: boolean) {
-    const nextStatuses = checked
-      ? vehicleStatuses.filter((candidate) => filters.statuses.includes(candidate) || candidate === status)
-      : filters.statuses.filter((candidate) => candidate !== status)
-
-    updateFilters(
-      { statuses: nextStatuses.length > 0 ? nextStatuses : [...defaultVehicleStatuses] },
-      { resetPage: true },
-    )
+  function openFilterDrawer() {
+    setDraftFilters({ ...filters, statuses: [...filters.statuses] })
+    setFilterDrawerOpen(true)
   }
+
+  function applyDraftFilters() {
+    setSearchParams(serializeVehicleListFilters({ ...draftFilters, page: 1 }))
+    setFilterDrawerOpen(false)
+  }
+
+  function clearDraftFilters() {
+    setDraftFilters({
+      search: '',
+      statuses: [...defaultVehicleStatuses],
+      soldMonth: '',
+      page: 1,
+    })
+  }
+
+  useEffect(() => {
+    if (!filterDrawerOpen) return
+
+    const previousBodyOverflow = document.body.style.overflow
+    const drawerTrigger = filterDrawerTriggerRef.current
+    document.body.style.overflow = 'hidden'
+    filterDrawerCloseRef.current?.focus()
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setFilterDrawerOpen(false)
+        return
+      }
+
+      if (event.key !== 'Tab' || !filterDrawerRef.current) return
+
+      const focusableElements = Array.from(
+        filterDrawerRef.current.querySelectorAll<HTMLElement>(
+          'input:not([disabled]), select:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      )
+      const firstElement = focusableElements[0]
+      const lastElement = focusableElements.at(-1)
+
+      if (!firstElement || !lastElement) return
+      if (!filterDrawerRef.current.contains(document.activeElement)) {
+        event.preventDefault()
+        firstElement.focus()
+      } else if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault()
+        lastElement.focus()
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault()
+        firstElement.focus()
+      }
+    }
+
+    function closeIfHiddenAtDesktopBreakpoint() {
+      if (filterDrawerRef.current && getComputedStyle(filterDrawerRef.current).display === 'none') {
+        setFilterDrawerOpen(false)
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('resize', closeIfHiddenAtDesktopBreakpoint)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('resize', closeIfHiddenAtDesktopBreakpoint)
+      document.body.style.overflow = previousBodyOverflow
+      drawerTrigger?.focus()
+    }
+  }, [filterDrawerOpen])
 
   useEffect(() => {
     let active = true
@@ -83,6 +249,7 @@ export function VehicleList() {
       search: filters.search || undefined,
       status: statusKey.split(',') as VehicleStatus[],
       is_preparation_completed: filters.isPreparationCompleted,
+      sold_month: filters.soldMonth || undefined,
       page: filters.page,
     })
       .then((response) => {
@@ -100,10 +267,14 @@ export function VehicleList() {
     return () => {
       active = false
     }
-  }, [filters.search, statusKey, filters.isPreparationCompleted, filters.page])
+  }, [filters.search, statusKey, filters.isPreparationCompleted, filters.soldMonth, filters.page])
 
   const hasActiveFilters = hasActiveVehicleListFilters(filters)
   const isPageOutOfRange = Boolean(meta && filters.page > meta.last_page)
+  const activeFilterCount = Number(Boolean(filters.search)) +
+    Number(!hasDefaultVehicleStatuses(filters.statuses)) +
+    Number(filters.isPreparationCompleted !== undefined) +
+    Number(Boolean(filters.soldMonth))
 
   return (
     <div className="flex flex-col gap-6">
@@ -132,57 +303,110 @@ export function VehicleList() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-end gap-4">
-        <label className="flex flex-col gap-1 text-sm font-medium text-fg-muted">
-          搜尋車輛
-          <input
-            type="search"
-            placeholder="庫存編號 / 廠牌 / 車型 / 車牌 / VIN"
-            value={filters.search}
-            onChange={(event) => updateFilters({ search: event.target.value }, { resetPage: true, replace: true })}
-            className="w-72 rounded-lg border border-border-strong px-3 py-2 text-sm text-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
-          />
-        </label>
-
-        <fieldset className="flex flex-wrap gap-x-3 gap-y-2">
-          <legend className="mb-1 text-sm font-medium text-fg-muted">車輛狀態</legend>
-          {vehicleStatuses.map((status) => (
-            <label key={status} className="flex min-h-11 items-center gap-2 text-sm text-fg">
-              <input
-                type="checkbox"
-                checked={filters.statuses.includes(status)}
-                onChange={(event) => toggleStatus(status, event.target.checked)}
-                className="h-4 w-4 rounded border-border-strong text-primary focus:ring-2 focus:ring-ring/30"
-              />
-              {statusLabels[status]}
-            </label>
-          ))}
-        </fieldset>
-
-        <label className="flex flex-col gap-1 text-sm font-medium text-fg-muted">
-          整備狀態
-          <select
-            value={filters.isPreparationCompleted === undefined ? '' : String(filters.isPreparationCompleted)}
-            onChange={(event) => {
-              const value = event.target.value
-              updateFilters({
-                isPreparationCompleted: value === '' ? undefined : value === 'true',
-              })
-            }}
-            className="min-h-11 rounded-lg border border-border-strong px-3 py-2 text-sm text-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
-          >
-            <option value="">全部整備狀態</option>
-            <option value="false">整備未完成</option>
-            <option value="true">整備已完成</option>
-          </select>
-        </label>
-
+      <div className="hidden sm:block">
+        <VehicleFilterFields
+          filters={filters}
+          onChange={(updates, options) => updateFilters(updates, { replace: options?.replace })}
+        />
         {hasActiveFilters && (
-          <button type="button" onClick={clearFilters} className="min-h-11 text-sm font-medium text-primary hover:underline">
-            清除篩選條件
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="mt-3 min-h-11 text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            清除全部篩選條件
           </button>
         )}
       </div>
+
+      <div className="flex flex-wrap items-center gap-3 sm:hidden">
+        <button
+          ref={filterDrawerTriggerRef}
+          type="button"
+          aria-expanded={filterDrawerOpen}
+          aria-controls="vehicle-filter-drawer"
+          onClick={openFilterDrawer}
+          className="flex min-h-11 items-center gap-2 rounded-lg border border-border-strong bg-surface px-4 text-sm font-medium text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <SlidersHorizontal aria-hidden className="h-4 w-4" />
+          篩選
+          {activeFilterCount > 0 && <span className="rounded-full bg-primary px-2 py-0.5 text-xs text-primary-fg">{activeFilterCount}</span>}
+        </button>
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="min-h-11 text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            清除全部
+          </button>
+        )}
+      </div>
+
+      {filters.soldMonth && (
+        <div className="flex flex-wrap items-center gap-2" aria-label="已套用篩選條件">
+          <span className="inline-flex min-h-9 items-center gap-2 rounded-full border border-border-strong bg-surface-2 px-3 text-sm text-fg">
+            成交月份：{formatSoldMonth(filters.soldMonth)}
+            <button
+              type="button"
+              aria-label="清除成交月份"
+              onClick={() => updateFilters({ soldMonth: '' })}
+              className="rounded-full p-1 text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <X aria-hidden className="h-4 w-4" />
+            </button>
+          </span>
+        </div>
+      )}
+
+      {filterDrawerOpen && (
+        <>
+          <div aria-hidden="true" className="fixed inset-0 z-40 bg-black/50 sm:hidden" onClick={() => setFilterDrawerOpen(false)} />
+          <aside
+            ref={filterDrawerRef}
+            id="vehicle-filter-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="vehicle-filter-title"
+            className="fixed inset-y-0 right-0 z-50 flex w-[min(100%,24rem)] flex-col border-l border-border bg-surface shadow-lg sm:hidden"
+          >
+            <div className="flex min-h-14 items-center justify-between border-b border-border px-4">
+              <h2 id="vehicle-filter-title" className="text-lg font-semibold text-fg">篩選車輛</h2>
+              <button
+                ref={filterDrawerCloseRef}
+                type="button"
+                aria-label="關閉篩選"
+                onClick={() => setFilterDrawerOpen(false)}
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-fg-muted hover:bg-surface-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ring"
+              >
+                <X aria-hidden className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <VehicleFilterFields
+                filters={draftFilters}
+                onChange={(updates) => setDraftFilters((current) => ({ ...current, ...updates, page: 1 }))}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3 border-t border-border p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              <button
+                type="button"
+                onClick={clearDraftFilters}
+                className="min-h-11 rounded-lg border border-border-strong px-4 text-sm font-medium text-fg hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                清除全部
+              </button>
+              <button
+                type="button"
+                onClick={applyDraftFilters}
+                className="min-h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-fg hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                套用篩選
+              </button>
+            </div>
+          </aside>
+        </>
+      )}
 
       {error && <p className="text-sm text-error">{error}</p>}
 

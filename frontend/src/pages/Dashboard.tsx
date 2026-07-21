@@ -31,16 +31,19 @@ const currencyFormatter = new Intl.NumberFormat('zh-TW', {
 })
 const numberFormatter = new Intl.NumberFormat('zh-TW')
 
-function currentMonthRange(): { dateFrom: string; dateTo: string } {
-  const currentMonth = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Taipei' }).slice(0, 7)
-  const [year, month] = currentMonth.split('-').map(Number)
+function monthRange(yearMonth: string): { dateFrom: string; dateTo: string } {
+  const [year, month] = yearMonth.split('-').map(Number)
   const finalDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
-  return { dateFrom: `${currentMonth}-01`, dateTo: `${currentMonth}-${String(finalDay).padStart(2, '0')}` }
+  return { dateFrom: `${yearMonth}-01`, dateTo: `${yearMonth}-${String(finalDay).padStart(2, '0')}` }
 }
 
-function moneyEntriesLink(direction: 'income' | 'expense'): string {
-  const { dateFrom, dateTo } = currentMonthRange()
+function moneyEntriesLink(direction: 'income' | 'expense', yearMonth: string): string {
+  const { dateFrom, dateTo } = monthRange(yearMonth)
   return `/money-entries?direction=${direction}&date_from=${dateFrom}&date_to=${dateTo}&approval=approved`
+}
+
+function soldVehiclesLink(yearMonth: string): string {
+  return `/vehicles?status=sold&sold_month=${yearMonth}`
 }
 
 interface ActionLinkProps {
@@ -198,17 +201,17 @@ export function Dashboard() {
             {canViewFinance && business.cash_balance !== undefined && (
               <KpiCard to="/cash-accounts" label="現金帳面餘額" value={currencyFormatter.format(business.cash_balance)} description="所有已核准現金收支" icon={Banknote} />
             )}
-            {canViewFinance && business.monthly_income !== undefined && (
-              <KpiCard to={moneyEntriesLink('income')} label="本月收入" value={currencyFormatter.format(business.monthly_income)} description="完整當月・僅計已核准" icon={ArrowDownToLine} />
+            {canViewFinance && business.sold_month && business.monthly_income !== undefined && (
+              <KpiCard to={moneyEntriesLink('income', business.sold_month)} label="本月收入" value={currencyFormatter.format(business.monthly_income)} description="完整當月・僅計已核准" icon={ArrowDownToLine} />
             )}
-            {canViewFinance && business.monthly_expense !== undefined && (
-              <KpiCard to={moneyEntriesLink('expense')} label="本月支出" value={currencyFormatter.format(business.monthly_expense)} description="完整當月・僅計已核准" icon={HandCoins} />
+            {canViewFinance && business.sold_month && business.monthly_expense !== undefined && (
+              <KpiCard to={moneyEntriesLink('expense', business.sold_month)} label="本月支出" value={currencyFormatter.format(business.monthly_expense)} description="完整當月・僅計已核准" icon={HandCoins} />
             )}
-            {canViewFinance && business.monthly_gross_profit !== undefined && (
-              <KpiCard to="/vehicles?status=sold" label="本月毛利" value={currencyFormatter.format(business.monthly_gross_profit)} description="完整當月成交・僅計已核准收支" icon={TrendingUp} />
+            {canViewFinance && business.sold_month && business.monthly_gross_profit !== undefined && (
+              <KpiCard to={soldVehiclesLink(business.sold_month)} label="本月毛利" value={currencyFormatter.format(business.monthly_gross_profit)} description="完整當月成交・僅計已核准收支" icon={TrendingUp} />
             )}
-            {canViewFinance && business.monthly_sold_count !== undefined && (
-              <KpiCard to="/vehicles?status=sold" label="本月成交" value={`${numberFormatter.format(business.monthly_sold_count)} 台`} description="依完整當月成交日期統計" icon={CircleDollarSign} />
+            {canViewFinance && business.sold_month && business.monthly_sold_count !== undefined && (
+              <KpiCard to={soldVehiclesLink(business.sold_month)} label="本月成交" value={`${numberFormatter.format(business.monthly_sold_count)} 台`} description="依完整當月成交日期統計" icon={CircleDollarSign} />
             )}
           </div>
         )}

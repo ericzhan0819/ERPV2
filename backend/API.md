@@ -99,6 +99,7 @@ Request body：
   },
   "business_overview": {
     "inventory_count": 12,
+    "sold_month": "2026-07",
     "cash_balance": 100000,
     "monthly_income": 300000,
     "monthly_expense": 120000,
@@ -125,6 +126,8 @@ Request body：
 
 車輛 `sold_at` 同樣沿用既有驗證，可晚於今天。因此 `business_overview.monthly_sold_count` 與 `monthly_gross_profit` 會計入同月內的未來成交；`trends.sales_count` 與 `trends.gross_profit` 的末點固定為今天，只呈現截至今天的成交。存在未來成交時，月份 KPI 與 30 天趨勢刻意可能不同，本 API 不在 v1.4 改變既有成交日期驗證。
 
+`business_overview.sold_month` 是 Dashboard 後端依 `Asia/Taipei` 產生的正式月份（`YYYY-MM`）。本月成交與本月毛利皆使用此值導向 `/vehicles?status=sold&sold_month=YYYY-MM`，前端不得由瀏覽器時區另行推導。此欄位與其他財務月份 KPI 一樣，只回傳給 `admin`／`manager`；`sales` 與未知角色的原始 JSON 不包含此欄位。
+
 角色輸出：
 
 - `admin`：取得三個工作 KPI、待審核收支、完整經營概況與三項趨勢。
@@ -149,12 +152,13 @@ Query 參數（`IndexVehicleRequest`）：
 | search | string | 車牌/車架號/廠牌/車型模糊搜尋 |
 | status | string 或 string[] | 單一值維持既有行為；多選可用逗號（例如 `preparing,listed,reserved`）或 `status[]`，值只允許五種既有狀態 |
 | is_preparation_completed | bool | 篩選整備是否完成；接受 API boolean 表示及 URL 的 `true`／`false`；空值視為未指定，不套用篩選 |
+| sold_month | string | 選填，嚴格格式 `YYYY-MM`；依 `Asia/Taipei` 的 `sold_at` 月份套用起點包含、次月起點不包含的半開區間。與 `status` 獨立，不會暗中補 `status=sold`；非法格式回傳 422 |
 | per_page | int | 1~100，預設由 Service 決定 |
 | page | int | |
 
 回傳：分頁後的 `VehicleResource` 陣列（Laravel 標準分頁格式：`data`/`links`/`meta`）。
 
-未傳 `status` 時，API 本身仍維持既有「不限制狀態」行為，避免其他呼叫端回歸。後台 `/vehicles` 工作區由前端 URL 契約套用 `preparing`、`listed`、`reserved` 預設集合；單一 `status=preparing` 連結保持相容，逗號多選、搜尋、整備完成與頁碼可由重新整理及瀏覽器上一頁／下一頁還原。
+未傳 `status` 時，API 本身仍維持既有「不限制狀態」行為，避免其他呼叫端回歸。後台 `/vehicles` 工作區由前端 URL 契約套用 `preparing`、`listed`、`reserved` 預設集合；單一 `status=preparing` 連結保持相容，逗號多選、搜尋、整備完成、成交月份與頁碼可由重新整理及瀏覽器上一頁／下一頁還原。`sold_month` 只查車輛 `sold_at`，不使用 `MoneyEntry.entry_date`，也不擴張為任意成交日期區間。
 
 ### POST /api/vehicles
 

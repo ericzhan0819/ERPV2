@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Services\SalaryEligibilityService;
+use App\Services\VehicleService;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -88,6 +89,38 @@ class TimezoneMysqlIntegrationTest extends TestCase
         $this->assertSame([$ids['first'], $ids['last']], array_keys($result['vehicle_results']));
         $this->assertArrayNotHasKey($ids['before'], $result['vehicle_results']);
         $this->assertArrayNotHasKey($ids['next'], $result['vehicle_results']);
+    }
+
+    public function test_vehicle_sold_month_filter_uses_real_mysql_taipei_timestamp_boundaries(): void
+    {
+        $this->prepareDisposableMysqlDatabase();
+
+        $connection = DB::connection();
+        $ids = [];
+        foreach ([
+            'before' => '2026-06-30 23:59:59',
+            'first' => '2026-07-01 00:00:00',
+            'last' => '2026-07-31 23:59:59',
+            'next' => '2026-08-01 00:00:00',
+        ] as $label => $soldAt) {
+            $ids[$label] = $connection->table('vehicles')->insertGetId([
+                'stock_no' => 'TZ-SOLD-MONTH-'.strtoupper($label),
+                'status' => 'sold',
+                'brand' => 'Timezone',
+                'model' => 'SoldMonth',
+                'sold_at' => $soldAt,
+                'created_at' => $soldAt,
+                'updated_at' => $soldAt,
+            ]);
+        }
+
+        $result = app(VehicleService::class)->listVehicles([
+            'status' => 'sold',
+            'sold_month' => '2026-07',
+            'per_page' => 100,
+        ]);
+
+        $this->assertEqualsCanonicalizing([$ids['first'], $ids['last']], $result->pluck('id')->all());
     }
 
     private function prepareDisposableMysqlDatabase(): void

@@ -25,6 +25,7 @@ class IndexVehicleRequest extends FormRequest
             'status' => $statusRules,
             'status.*' => ['string', 'distinct', Rule::in(self::STATUSES)],
             'is_preparation_completed' => ['nullable', 'boolean'],
+            'sold_month' => ['nullable', 'regex:/^\d{4}-(0[1-9]|1[0-2])$/'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
             'page' => ['nullable', 'integer', 'min:1'],
         ];

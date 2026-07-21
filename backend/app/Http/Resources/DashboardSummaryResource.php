@@ -35,6 +35,7 @@ class DashboardSummaryResource extends JsonResource
 
         if ($canViewFinancials) {
             $businessOverview = array_merge($businessOverview, [
+                'sold_month' => $this->resource['business_overview']['sold_month'],
                 'cash_balance' => $this->resource['business_overview']['cash_balance'],
                 'monthly_income' => $this->resource['business_overview']['monthly_income'],
                 'monthly_expense' => $this->resource['business_overview']['monthly_expense'],

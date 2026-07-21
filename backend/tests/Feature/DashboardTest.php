@@ -167,6 +167,32 @@ class DashboardTest extends TestCase
         $this->assertSame(0, collect($response->json('trends.gross_profit'))->sum('amount'));
     }
 
+    public function test_dashboard_sold_month_matches_the_vehicle_filter_collection(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        Vehicle::factory()->create(['status' => 'sold', 'sold_at' => '2026-06-30 23:59:59']);
+        $first = Vehicle::factory()->create(['status' => 'sold', 'sold_at' => '2026-07-01 00:00:00']);
+        $futureThisMonth = Vehicle::factory()->create(['status' => 'sold', 'sold_at' => '2026-07-31 23:59:59']);
+        Vehicle::factory()->create(['status' => 'sold', 'sold_at' => '2026-08-01 00:00:00']);
+
+        $dashboard = $this->actingAs($admin, 'web')
+            ->getJson('/api/dashboard/summary')
+            ->assertOk()
+            ->assertJsonPath('business_overview.sold_month', '2026-07')
+            ->assertJsonPath('business_overview.monthly_sold_count', 2);
+
+        $soldMonth = $dashboard->json('business_overview.sold_month');
+        $vehicles = $this->actingAs($admin, 'web')
+            ->getJson("/api/vehicles?status=sold&sold_month={$soldMonth}")
+            ->assertOk()
+            ->assertJsonPath('meta.total', 2);
+
+        $this->assertEqualsCanonicalizing(
+            [$first->id, $futureThisMonth->id],
+            collect($vehicles->json('data'))->pluck('id')->all(),
+        );
+    }
+
     public function test_role_resource_masks_pending_and_financial_fields_from_raw_json(): void
     {
         $admin = User::factory()->admin()->create(['is_active' => true]);
@@ -183,7 +209,7 @@ class DashboardTest extends TestCase
             $response->assertJsonStructure([
                 'work_overview' => ['preparation_pending_count', 'listing_pending_count', 'delivery_pending_count'],
                 'business_overview' => [
-                    'inventory_count', 'cash_balance', 'monthly_income', 'monthly_expense',
+                    'inventory_count', 'sold_month', 'cash_balance', 'monthly_income', 'monthly_expense',
                     'monthly_gross_profit', 'monthly_sold_count',
                 ],
                 'trends' => ['sales_count', 'gross_profit', 'cash_balance'],
@@ -214,6 +240,7 @@ class DashboardTest extends TestCase
             $this->assertArrayNotHasKey('monthly_expense', $json['business_overview']);
             $this->assertArrayNotHasKey('monthly_gross_profit', $json['business_overview']);
             $this->assertArrayNotHasKey('monthly_sold_count', $json['business_overview']);
+            $this->assertArrayNotHasKey('sold_month', $json['business_overview']);
             $this->assertArrayNotHasKey('gross_profit', $json['trends']);
             $this->assertArrayNotHasKey('cash_balance', $json['trends']);
             $this->assertSame(['work_overview', 'business_overview', 'trends'], array_keys($json));

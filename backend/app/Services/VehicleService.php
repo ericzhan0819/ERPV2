@@ -10,6 +10,7 @@ use App\Models\SalarySettlementItem;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehiclePhoto;
+use App\Support\TaipeiMonthRange;
 use App\Support\VehicleMoneyCategories;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\QueryException;
@@ -87,6 +88,13 @@ class VehicleService
                 'is_preparation_completed',
                 filter_var($filters['is_preparation_completed'], FILTER_VALIDATE_BOOLEAN),
             );
+        }
+
+        if (! empty($filters['sold_month'])) {
+            [$monthStart, $nextMonthStart] = TaipeiMonthRange::fromYearMonth($filters['sold_month']);
+            $query
+                ->where('sold_at', '>=', $monthStart)
+                ->where('sold_at', '<', $nextMonthStart);
         }
 
         return $query

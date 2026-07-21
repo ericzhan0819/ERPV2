@@ -12,6 +12,7 @@ export interface VehicleListFilters {
   search: string
   statuses: VehicleStatus[]
   isPreparationCompleted?: boolean
+  soldMonth: string
   page: number
 }
 
@@ -50,7 +51,10 @@ export function hasDefaultVehicleStatuses(statuses: VehicleStatus[]): boolean {
 
 export function hasActiveVehicleListFilters(filters: VehicleListFilters): boolean {
   return Boolean(
-    filters.search || filters.isPreparationCompleted !== undefined || !hasDefaultVehicleStatuses(filters.statuses),
+    filters.search ||
+      filters.isPreparationCompleted !== undefined ||
+      filters.soldMonth ||
+      !hasDefaultVehicleStatuses(filters.statuses),
   )
 }
 
@@ -78,6 +82,7 @@ export function parseVehicleListFilters(params: URLSearchParams): VehicleListFil
   return {
     search: params.get('search') ?? '',
     statuses: statuses.length > 0 ? statuses : [...defaultVehicleStatuses],
+    soldMonth: params.get('sold_month') ?? '',
     ...(preparation === 'true'
       ? { isPreparationCompleted: true }
       : preparation === 'false'
@@ -97,6 +102,7 @@ export function serializeVehicleListFilters(filters: VehicleListFilters): URLSea
   if (filters.isPreparationCompleted !== undefined) {
     params.set('is_preparation_completed', String(filters.isPreparationCompleted))
   }
+  if (filters.soldMonth.trim()) params.set('sold_month', filters.soldMonth.trim())
   if (filters.page > 1) params.set('page', String(filters.page))
 
   return params

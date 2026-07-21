@@ -7,6 +7,7 @@ export interface DashboardSummary {
   }
   business_overview: {
     inventory_count: number
+    sold_month?: string
     cash_balance?: number
     monthly_income?: number
     monthly_expense?: number

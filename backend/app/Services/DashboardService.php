@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\CashAccount;
 use App\Models\MoneyEntry;
 use App\Models\Vehicle;
+use App\Support\TaipeiMonthRange;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -38,8 +39,8 @@ class DashboardService
     {
         $today = Carbon::now(config('app.timezone'))->startOfDay();
         $tomorrow = $today->copy()->addDay();
-        $monthStart = $today->copy()->startOfMonth();
-        $nextMonthStart = $monthStart->copy()->addMonth();
+        $soldMonth = $today->format('Y-m');
+        [$monthStart, $nextMonthStart] = TaipeiMonthRange::fromYearMonth($soldMonth);
         $trendStart = $today->copy()->subDays(29);
 
         $cashBalance = $this->accountBalance('cash');
@@ -80,6 +81,7 @@ class DashboardService
             'work_overview' => $workOverview,
             'business_overview' => [
                 'inventory_count' => $inventoryCount,
+                'sold_month' => $soldMonth,
                 'cash_balance' => $cashBalance,
                 'monthly_income' => $monthlyIncome,
                 'monthly_expense' => $monthlyExpense,
