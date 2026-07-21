@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { SlidersHorizontal, X } from 'lucide-react'
+import { ImageOff, SlidersHorizontal, X } from 'lucide-react'
 import { isAxiosError } from 'axios'
 import { listVehicles } from '../../api/vehicles'
-import type { Vehicle, VehicleListMeta, VehicleStatus } from '../../types/vehicle'
+import type { VehicleListItem, VehicleListMeta, VehicleStatus } from '../../types/vehicle'
 import { VehicleStatusBadge } from '../../components/VehicleStatusBadge'
 import { useAuth } from '../../hooks/useAuth'
-import { canManageVehicles, canViewSalesPricing } from '../../utils/permissions'
+import { canManageVehicles, canViewFinancials } from '../../utils/permissions'
 import {
   defaultVehicleStatuses,
   hasActiveVehicleListFilters,
@@ -20,7 +20,7 @@ import {
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
 function formatCurrency(amount: number | null | undefined): string {
-  return amount === null || amount === undefined ? '-' : currencyFormatter.format(amount)
+  return amount === null || amount === undefined ? '—' : currencyFormatter.format(amount)
 }
 
 const statusLabels: Record<VehicleStatus, string> = {
@@ -137,15 +137,104 @@ function VehicleFilterFields({
   )
 }
 
+function VehicleCover({ vehicle }: { vehicle: VehicleListItem }) {
+  const thumbnailUrl = vehicle.cover_photo?.thumbnail_url
+  const [failedUrl, setFailedUrl] = useState<string | null>(null)
+
+  if (thumbnailUrl && failedUrl !== thumbnailUrl) {
+    return (
+      <img
+        src={thumbnailUrl}
+        alt={`${vehicle.brand} ${vehicle.model} 封面照片`}
+        className="aspect-[4/3] w-full bg-surface-2 object-cover"
+        onError={() => setFailedUrl(thumbnailUrl)}
+      />
+    )
+  }
+
+  return (
+    <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 bg-surface-2 text-fg-muted">
+      <ImageOff aria-hidden className="h-9 w-9 text-fg-subtle" strokeWidth={1.5} />
+      <span className="text-sm">尚無照片</span>
+    </div>
+  )
+}
+
+function VehicleCard({ vehicle, showFloorPrice }: { vehicle: VehicleListItem; showFloorPrice: boolean }) {
+  return (
+    <Link
+      to={`/vehicles/${vehicle.id}`}
+      aria-label={`查看 ${vehicle.brand} ${vehicle.model} 詳情`}
+      className="group min-w-0 overflow-hidden rounded-xl border border-border bg-surface shadow-sm transition-colors hover:border-border-strong hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+    >
+      <VehicleCover vehicle={vehicle} />
+      <div className="flex flex-col gap-4 p-4 sm:p-5">
+        <div className="flex min-w-0 items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-semibold text-fg group-hover:text-primary">
+              {vehicle.brand} {vehicle.model}
+            </h2>
+          </div>
+          <VehicleStatusBadge status={vehicle.status} />
+        </div>
+
+        <dl className="grid grid-cols-3 gap-3 text-sm">
+          <div className="min-w-0">
+            <dt className="text-xs text-fg-muted">年份</dt>
+            <dd className="mt-1 truncate text-fg">{vehicle.year ?? '—'}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-xs text-fg-muted">顏色</dt>
+            <dd className="mt-1 truncate text-fg">{vehicle.color || '—'}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-xs text-fg-muted">車牌</dt>
+            <dd className="mt-1 truncate text-fg">{vehicle.license_plate || '—'}</dd>
+          </div>
+        </dl>
+
+        <dl className={`grid gap-3 border-t border-border pt-4 ${showFloorPrice ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          <div>
+            <dt className="text-xs text-fg-muted">開價</dt>
+            <dd className="mt-1 text-base font-semibold tabular-nums text-fg">{formatCurrency(vehicle.asking_price)}</dd>
+          </div>
+          {showFloorPrice && (
+            <div className="text-right">
+              <dt className="text-xs text-fg-muted">底價</dt>
+              <dd className="mt-1 text-base font-semibold tabular-nums text-fg">{formatCurrency(vehicle.floor_price)}</dd>
+            </div>
+          )}
+        </dl>
+      </div>
+    </Link>
+  )
+}
+
+function VehicleCardSkeleton() {
+  return (
+    <div aria-hidden className="overflow-hidden rounded-xl border border-border bg-surface">
+      <div className="aspect-[4/3] animate-pulse bg-surface-2" />
+      <div className="space-y-4 p-4 sm:p-5">
+        <div className="h-5 w-2/3 animate-pulse rounded bg-surface-2" />
+        <div className="grid grid-cols-3 gap-3">
+          <div className="h-9 animate-pulse rounded bg-surface-2" />
+          <div className="h-9 animate-pulse rounded bg-surface-2" />
+          <div className="h-9 animate-pulse rounded bg-surface-2" />
+        </div>
+        <div className="h-11 animate-pulse rounded bg-surface-2" />
+      </div>
+    </div>
+  )
+}
+
 export function VehicleList() {
   const { user } = useAuth()
   const canManage = canManageVehicles(user?.role)
-  const canViewSalesPrice = canViewSalesPricing(user?.role)
-  const columnCount = 7 + (canViewSalesPrice ? 2 : 0)
+  const showFloorPrice = canViewFinancials(user?.role)
   const [searchParams, setSearchParams] = useSearchParams()
   const filters = parseVehicleListFilters(searchParams)
   const statusKey = filters.statuses.join(',')
-  const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [vehicles, setVehicles] = useState<VehicleListItem[]>([])
   const [meta, setMeta] = useState<VehicleListMeta | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -260,6 +349,7 @@ export function VehicleList() {
     let active = true
     setLoading(true)
     setError(null)
+    setMeta(null)
     listVehicles({
       search: filters.search || undefined,
       status: statusKey.split(',') as VehicleStatus[],
@@ -293,12 +383,12 @@ export function VehicleList() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold text-fg">車輛管理</h1>
           <p className="mt-1 text-sm text-fg-muted">車輛庫存與銷售狀態總覽</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           {user?.role === 'admin' && (
             <Link
               to="/vehicles/commission-attribution"
@@ -423,94 +513,67 @@ export function VehicleList() {
         </>
       )}
 
-      {error && <p className="text-sm text-error">{error}</p>}
+      <div
+        className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+        aria-live="polite"
+        aria-busy={loading}
+      >
+        {loading && Array.from({ length: 6 }, (_, index) => <VehicleCardSkeleton key={index} />)}
 
-      <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
-        <table className="min-w-full divide-y divide-border text-sm">
-          <thead className="bg-surface-2">
-            <tr>
-              <th className="px-4 py-3 text-left font-medium text-fg-muted">庫存編號</th>
-              <th className="px-4 py-3 text-left font-medium text-fg-muted">狀態</th>
-              <th className="px-4 py-3 text-left font-medium text-fg-muted">廠牌</th>
-              <th className="px-4 py-3 text-left font-medium text-fg-muted">車型</th>
-              <th className="px-4 py-3 text-left font-medium text-fg-muted">年式</th>
-              <th className="px-4 py-3 text-left font-medium text-fg-muted">車牌</th>
-              {canViewSalesPrice && <th className="px-4 py-3 text-left font-medium text-fg-muted">開價</th>}
-              {canViewSalesPrice && <th className="px-4 py-3 text-left font-medium text-fg-muted">成交價</th>}
-              <th className="px-4 py-3 text-left font-medium text-fg-muted">建立日期</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {loading && (
-              <tr>
-                <td colSpan={columnCount} className="px-4 py-6 text-center text-fg-muted">
-                  載入中...
-                </td>
-              </tr>
+        {!loading && error && (
+          <div role="alert" className="col-span-full rounded-xl border border-error/30 bg-surface p-6 text-center text-sm text-error">
+            {error}
+          </div>
+        )}
+
+        {!loading && !error && vehicles.length === 0 && (
+          <div className="col-span-full flex min-h-48 flex-col items-center justify-center gap-3 rounded-xl border border-border bg-surface p-6 text-center text-fg-muted">
+            <span>{isPageOutOfRange ? '此頁沒有資料' : hasActiveFilters ? '尚無符合條件的車輛' : '目前沒有在庫車輛'}</span>
+            {isPageOutOfRange ? (
+              <button
+                type="button"
+                onClick={() => updateFilters({ page: 1 }, { resetPage: false })}
+                className="min-h-11 text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                回到第 1 頁
+              </button>
+            ) : hasActiveFilters ? (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="min-h-11 text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                清除篩選條件
+              </button>
+            ) : (
+              canManage && (
+                <Link
+                  to="/vehicles/create"
+                  className="flex min-h-11 items-center text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  新增第一輛車
+                </Link>
+              )
             )}
-            {!loading && vehicles.length === 0 && (
-              <tr>
-                <td colSpan={columnCount} className="px-4 py-6 text-center text-fg-muted">
-                  <div className="flex flex-col items-center gap-2">
-                    <span>{isPageOutOfRange ? '此頁沒有資料' : hasActiveFilters ? '尚無符合條件的車輛' : '目前沒有在庫車輛'}</span>
-                    {isPageOutOfRange ? (
-                      <button
-                        type="button"
-                        onClick={() => updateFilters({ page: 1 }, { resetPage: false })}
-                        className="text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        回到第 1 頁
-                      </button>
-                    ) : hasActiveFilters ? (
-                      <button type="button" onClick={clearFilters} className="text-sm font-medium text-primary hover:underline">
-                        清除篩選條件
-                      </button>
-                    ) : (
-                      canManage && (
-                        <Link to="/vehicles/create" className="text-sm font-medium text-primary hover:underline">
-                          新增第一輛車
-                        </Link>
-                      )
-                    )}
-                  </div>
-                </td>
-              </tr>
-            )}
-            {!loading &&
-              vehicles.map((vehicle) => (
-                <tr key={vehicle.id} className="hover:bg-surface-2">
-                  <td className="px-4 py-3">
-                    <Link to={`/vehicles/${vehicle.id}`} className="font-medium text-fg hover:underline">
-                      {vehicle.stock_no}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3">
-                    <VehicleStatusBadge status={vehicle.status} />
-                  </td>
-                  <td className="px-4 py-3">{vehicle.brand}</td>
-                  <td className="px-4 py-3">{vehicle.model}</td>
-                  <td className="px-4 py-3">{vehicle.year ?? '-'}</td>
-                  <td className="px-4 py-3">{vehicle.license_plate ?? '-'}</td>
-                  {canViewSalesPrice && <td className="px-4 py-3 tabular-nums">{formatCurrency(vehicle.asking_price)}</td>}
-                  {canViewSalesPrice && <td className="px-4 py-3 tabular-nums">{formatCurrency(vehicle.sold_price)}</td>}
-                  <td className="px-4 py-3">{vehicle.created_at ? vehicle.created_at.slice(0, 10) : '-'}</td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
+          </div>
+        )}
+
+        {!loading && !error && vehicles.map((vehicle) => (
+          <VehicleCard key={vehicle.id} vehicle={vehicle} showFloorPrice={showFloorPrice} />
+        ))}
       </div>
 
       {meta && meta.last_page > 1 && (
-        <div className="flex items-center justify-between text-sm text-fg-muted">
+        <div className="flex flex-col gap-3 text-sm text-fg-muted sm:flex-row sm:items-center sm:justify-between">
           <span>
             第 {meta.current_page} / {meta.last_page} 頁，共 {meta.total} 筆
           </span>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex">
             <button
               type="button"
               onClick={() => updateFilters({ page: Math.max(1, filters.page - 1) }, { resetPage: false })}
               disabled={meta.current_page <= 1}
-              className="rounded-lg border border-border-strong px-3 py-1.5 disabled:opacity-50"
+              className="min-h-11 rounded-lg border border-border-strong px-4 py-2 font-medium hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             >
               上一頁
             </button>
@@ -518,7 +581,7 @@ export function VehicleList() {
               type="button"
               onClick={() => updateFilters({ page: Math.min(meta.last_page, filters.page + 1) }, { resetPage: false })}
               disabled={meta.current_page >= meta.last_page}
-              className="rounded-lg border border-border-strong px-3 py-1.5 disabled:opacity-50"
+              className="min-h-11 rounded-lg border border-border-strong px-4 py-2 font-medium hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             >
               下一頁
             </button>

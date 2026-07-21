@@ -4,7 +4,7 @@
 
 v1.3 薪資結算的功能實作、自動測試、真實 MariaDB 並發／時區測試、前端 lint／typecheck／production build、RWD／dark mode 驗證與使用者 browser manual smoke 已完成。範圍包含 admin-only 員工薪資設定、版本化獎金方案、正式收／賣車歸屬、approved-only 整月跨級獎金、異常與非阻擋提示、月份草稿／重算／確認，以及具備 transaction、idempotency 與 paid 歷史保護的整批發薪。當月只能建立與重算草稿，必須等月份結束後才能確認，避免中途鎖定後漏掉後續成交。2026-07-18 納入 Customer hotfix 後的完整回歸為 485 passed、14 environment-gated skipped、2293 assertions；所有受保護的 MariaDB 10.11.18 並發／時區測試於專用 schema 共 14 tests／176 assertions 全數通過。完整規格與驗收證據見 `企劃書_v1.3.md`、`PLAN_v1.3.md`、`PLAN_customer_workflow_hotfix.md`、`docs/current-state.md`、`docs/customer-workflow-hotfix.md`、`docs/v1.3-smoke-report.md`、`docs/v1.3-handoff.md`。Git 封板 commit／tag 尚待使用者授權建立。
 
-v1.4 資訊架構與 UI／UX 改版目前完成第 0～5 部分。Dashboard 已切換為 Action Bar、工作概況、經營概況與近 30 天趨勢，依 admin／manager／sales 角色顯示正式 API 資料並透過 URL Filter 導向既有模組；第 4 部分 review 後另完成單月 `sold_month=YYYY-MM` 契約，使本月成交／毛利精確導向同一批台北月份成交車。後台 Vehicle List API 現在只 eager load 已提交的封面縮圖，沒有封面時明確回傳 `null`，不載入完整相簿且維持既有角色遮蔽。完整 Vehicle Card Grid 與第 7 部分其餘 Filter UI 工作尚未開始。階段紀錄見 `docs/v1.4-phase1-handoff.md` 至 `docs/v1.4-phase5-handoff.md`。
+v1.4 資訊架構與 UI／UX 改版目前完成第 0～6 部分。Dashboard 已切換為 Action Bar、工作概況、經營概況與近 30 天趨勢，依 admin／manager／sales 角色顯示正式 API 資料並透過 URL Filter 導向既有模組；第 4 部分 review 後另完成單月 `sold_month=YYYY-MM` 契約，使本月成交／毛利精確導向同一批台北月份成交車。後台 Vehicle List API 只 eager load 已提交的封面縮圖，不載入完整相簿且維持既有角色遮蔽；車輛工作區已改為圖片主導的響應式 Card Grid，Mobile 1 欄、Tablet 2 欄、Desktop 多欄，admin／manager 顯示底價，sales 不顯示底價，所有角色都不在卡片顯示收購價或毛利。第 7 部分其餘 Filter UI 工作尚待完成。階段紀錄見 `docs/v1.4-phase1-handoff.md` 至 `docs/v1.4-phase6-handoff.md`。
 
 ### v1.3 薪資公式
 
