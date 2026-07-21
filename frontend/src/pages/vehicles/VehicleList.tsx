@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { SlidersHorizontal, X } from 'lucide-react'
+import { isAxiosError } from 'axios'
 import { listVehicles } from '../../api/vehicles'
 import type { Vehicle, VehicleListMeta, VehicleStatus } from '../../types/vehicle'
 import { VehicleStatusBadge } from '../../components/VehicleStatusBadge'
@@ -30,14 +31,28 @@ const statusLabels: Record<VehicleStatus, string> = {
   cancelled: '取消 / 退車',
 }
 
+const soldMonthPattern = /^(\d{4})-(0[1-9]|1[0-2])$/
+
 type FilterChangeHandler = (
   updates: Partial<VehicleListFilters>,
   options?: { replace?: boolean },
 ) => void
 
 function formatSoldMonth(value: string): string {
-  const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(value)
+  const match = soldMonthPattern.exec(value)
   return match ? `${match[1]} 年 ${Number(match[2])} 月` : value
+}
+
+function vehicleListError(error: unknown): string {
+  if (
+    isAxiosError<{ errors?: Record<string, string[]> }>(error) &&
+    error.response?.status === 422 &&
+    error.response.data.errors?.sold_month
+  ) {
+    return '成交月份格式錯誤，請清除成交月份後重試。'
+  }
+
+  return '車輛列表載入失敗'
 }
 
 function VehicleFilterFields({
@@ -103,7 +118,7 @@ function VehicleFilterFields({
         成交月份
         <input
           type="month"
-          value={filters.soldMonth}
+          value={soldMonthPattern.test(filters.soldMonth) ? filters.soldMonth : ''}
           onChange={(event) => onChange({ soldMonth: event.target.value })}
           className="min-h-11 rounded-lg border border-border-strong bg-surface px-3 py-2 text-base text-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring sm:text-sm"
         />
@@ -257,8 +272,8 @@ export function VehicleList() {
         setVehicles(response.data)
         setMeta(response.meta)
       })
-      .catch(() => {
-        if (active) setError('車輛列表載入失敗')
+      .catch((caught) => {
+        if (active) setError(vehicleListError(caught))
       })
       .finally(() => {
         if (active) setLoading(false)
