@@ -17,6 +17,7 @@ use App\Http\Requests\UpdateVehicleRequest;
 use App\Http\Requests\VehicleExpenseRequest;
 use App\Http\Resources\CommissionAgentOptionResource;
 use App\Http\Resources\MoneyEntryResource;
+use App\Http\Resources\VehicleListResource;
 use App\Http\Resources\VehicleResource;
 use App\Models\Vehicle;
 use App\Services\MoneyEntryService;
@@ -36,7 +37,7 @@ class VehicleController extends Controller
     {
         $vehicles = $this->vehicleService->listVehicles($request->validated());
 
-        return VehicleResource::collection($vehicles);
+        return VehicleListResource::collection($vehicles);
     }
 
     public function store(StoreVehicleRequest $request): VehicleResource

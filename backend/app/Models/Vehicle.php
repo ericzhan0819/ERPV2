@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'stock_no',
@@ -115,6 +116,16 @@ class Vehicle extends Model
     public function photos(): HasMany
     {
         return $this->hasMany(VehiclePhoto::class)->visible()->orderBy('sort_order');
+    }
+
+    /**
+     * 後台與官網列表只需要已提交的封面照；獨立關聯可避免為每台車載入完整相簿。
+     */
+    public function coverPhoto(): HasOne
+    {
+        return $this->hasOne(VehiclePhoto::class)
+            ->visible()
+            ->where('is_cover', true);
     }
 
     public function sellerCustomer(): BelongsTo

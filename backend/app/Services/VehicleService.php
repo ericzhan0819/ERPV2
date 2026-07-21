@@ -62,6 +62,7 @@ class VehicleService
         $query = Vehicle::query()->with([
             'purchaseAgent:id,name',
             'salesAgent:id,name',
+            'coverPhoto:id,vehicle_id,disk,thumbnail_path',
         ]);
 
         if (! empty($filters['search'])) {

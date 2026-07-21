@@ -156,7 +156,18 @@ Query 參數（`IndexVehicleRequest`）：
 | per_page | int | 1~100，預設由 Service 決定 |
 | page | int | |
 
-回傳：分頁後的 `VehicleResource` 陣列（Laravel 標準分頁格式：`data`/`links`/`meta`）。
+回傳：分頁後的 `VehicleListResource` 陣列（Laravel 標準分頁格式：`data`/`links`/`meta`）。既有 `VehicleResource` 欄位與 admin／manager／sales 遮蔽契約保持不變，另外固定回傳：
+
+```json
+{
+  "cover_photo": {
+    "id": 12,
+    "thumbnail_url": "http://localhost:8000/storage/vehicles/15/xxxx_thumb.webp"
+  }
+}
+```
+
+列表只 eager load 已提交（`upload_batch_id IS NULL`）且標記為封面的照片，照片查詢只取得 `id`、`vehicle_id`、`disk`、`thumbnail_path`。沒有正式封面時 `cover_photo` 為 `null`；不回傳完整 `photos` 相簿、原圖 URL、原始檔名、上傳者或其他照片內部欄位。封面縮圖不改變既有價格權限，也不新增毛利、資金帳戶、收支摘要等資料。
 
 未傳 `status` 時，API 本身仍維持既有「不限制狀態」行為，避免其他呼叫端回歸。後台 `/vehicles` 工作區由前端 URL 契約套用 `preparing`、`listed`、`reserved` 預設集合；單一 `status=preparing` 連結保持相容，逗號多選、搜尋、整備完成、成交月份與頁碼可由重新整理及瀏覽器上一頁／下一頁還原。`sold_month` 只查車輛 `sold_at`，不使用 `MoneyEntry.entry_date`，也不擴張為任意成交日期區間。
 

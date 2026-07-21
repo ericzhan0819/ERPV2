@@ -57,8 +57,17 @@ export interface VehicleListMeta {
   total: number
 }
 
+export interface VehicleCoverPhoto {
+  id: number
+  thumbnail_url: string
+}
+
+export interface VehicleListItem extends Vehicle {
+  cover_photo: VehicleCoverPhoto | null
+}
+
 export interface VehicleListResponse {
-  data: Vehicle[]
+  data: VehicleListItem[]
   meta: VehicleListMeta
 }
 
