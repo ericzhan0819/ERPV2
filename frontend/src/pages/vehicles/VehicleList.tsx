@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ImageOff, SlidersHorizontal, X } from 'lucide-react'
+import { ImageOff, SlidersHorizontal } from 'lucide-react'
 import { isAxiosError } from 'axios'
 import { listVehicles } from '../../api/vehicles'
 import type { VehicleListItem, VehicleListMeta, VehicleStatus } from '../../types/vehicle'
 import { VehicleStatusBadge } from '../../components/VehicleStatusBadge'
+import { ActiveFilterChip } from '../../components/ActiveFilterChip'
+import { DebouncedSearchInput } from '../../components/DebouncedSearchInput'
+import { MobileFilterDrawer } from '../../components/MobileFilterDrawer'
 import { useAuth } from '../../hooks/useAuth'
 import { canManageVehicles, canViewFinancials } from '../../utils/permissions'
 import {
@@ -58,30 +61,45 @@ function vehicleListError(error: unknown): string {
 function VehicleFilterFields({
   filters,
   onChange,
+  debounceSearch = false,
 }: {
   filters: VehicleListFilters
   onChange: FilterChangeHandler
+  debounceSearch?: boolean
 }) {
   function toggleStatus(status: VehicleStatus, checked: boolean) {
     const nextStatuses = checked
       ? vehicleStatuses.filter((candidate) => filters.statuses.includes(candidate) || candidate === status)
       : filters.statuses.filter((candidate) => candidate !== status)
 
-    onChange({ statuses: nextStatuses.length > 0 ? nextStatuses : [...defaultVehicleStatuses] })
+    if (nextStatuses.length > 0) onChange({ statuses: nextStatuses })
   }
+
+  const searchClassName = 'min-h-11 w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-base text-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring sm:w-72 sm:text-sm'
 
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
-      <label className="flex flex-col gap-1 text-sm font-medium text-fg-muted">
-        搜尋車輛
+      {debounceSearch ? (
+        <DebouncedSearchInput
+          id="vehicle-search"
+          label="搜尋車輛"
+          placeholder="庫存編號 / 廠牌 / 車型 / 車牌 / VIN"
+          value={filters.search}
+          onCommit={(search) => onChange({ search }, { replace: true })}
+          className={searchClassName}
+        />
+      ) : (
+        <label className="flex flex-col gap-1 text-sm font-medium text-fg-muted">
+          搜尋車輛
         <input
           type="search"
           placeholder="庫存編號 / 廠牌 / 車型 / 車牌 / VIN"
           value={filters.search}
           onChange={(event) => onChange({ search: event.target.value }, { replace: true })}
-          className="min-h-11 w-full rounded-lg border border-border-strong bg-surface px-3 py-2 text-base text-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring sm:w-72 sm:text-sm"
+          className={searchClassName}
         />
-      </label>
+        </label>
+      )}
 
       <fieldset className="flex flex-wrap gap-x-3 gap-y-1">
         <legend className="mb-1 text-sm font-medium text-fg-muted">車輛狀態</legend>
@@ -90,12 +108,14 @@ function VehicleFilterFields({
             <input
               type="checkbox"
               checked={filters.statuses.includes(status)}
+              disabled={filters.statuses.length === 1 && filters.statuses.includes(status)}
               onChange={(event) => toggleStatus(status, event.target.checked)}
-              className="h-4 w-4 rounded border-border-strong text-primary focus:ring-2 focus:ring-ring"
+              className="h-4 w-4 rounded border-border-strong text-primary focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             />
             {statusLabels[status]}
           </label>
         ))}
+        <p className="w-full text-xs text-fg-subtle">至少保留一個車輛狀態。</p>
       </fieldset>
 
       <label className="flex flex-col gap-1 text-sm font-medium text-fg-muted">
@@ -233,6 +253,7 @@ export function VehicleList() {
   const showFloorPrice = canViewFinancials(user?.role)
   const [searchParams, setSearchParams] = useSearchParams()
   const filters = parseVehicleListFilters(searchParams)
+  const filterUrlKey = searchParams.toString()
   const statusKey = filters.statuses.join(',')
   const [vehicles, setVehicles] = useState<VehicleListItem[]>([])
   const [meta, setMeta] = useState<VehicleListMeta | null>(null)
@@ -244,8 +265,6 @@ export function VehicleList() {
     statuses: [...filters.statuses],
   }))
   const filterDrawerTriggerRef = useRef<HTMLButtonElement>(null)
-  const filterDrawerRef = useRef<HTMLElement>(null)
-  const filterDrawerCloseRef = useRef<HTMLButtonElement>(null)
 
   function updateFilters(
     updates: Partial<typeof filters>,
@@ -292,58 +311,10 @@ export function VehicleList() {
   }
 
   useEffect(() => {
-    if (!filterDrawerOpen) return
-
-    const previousBodyOverflow = document.body.style.overflow
-    const drawerTrigger = filterDrawerTriggerRef.current
-    document.body.style.overflow = 'hidden'
-    filterDrawerCloseRef.current?.focus()
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        event.preventDefault()
-        setFilterDrawerOpen(false)
-        return
-      }
-
-      if (event.key !== 'Tab' || !filterDrawerRef.current) return
-
-      const focusableElements = Array.from(
-        filterDrawerRef.current.querySelectorAll<HTMLElement>(
-          'input:not([disabled]), select:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      )
-      const firstElement = focusableElements[0]
-      const lastElement = focusableElements.at(-1)
-
-      if (!firstElement || !lastElement) return
-      if (!filterDrawerRef.current.contains(document.activeElement)) {
-        event.preventDefault()
-        firstElement.focus()
-      } else if (event.shiftKey && document.activeElement === firstElement) {
-        event.preventDefault()
-        lastElement.focus()
-      } else if (!event.shiftKey && document.activeElement === lastElement) {
-        event.preventDefault()
-        firstElement.focus()
-      }
-    }
-
-    function closeIfHiddenAtDesktopBreakpoint() {
-      if (filterDrawerRef.current && getComputedStyle(filterDrawerRef.current).display === 'none') {
-        setFilterDrawerOpen(false)
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('resize', closeIfHiddenAtDesktopBreakpoint)
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-      window.removeEventListener('resize', closeIfHiddenAtDesktopBreakpoint)
-      document.body.style.overflow = previousBodyOverflow
-      drawerTrigger?.focus()
-    }
-  }, [filterDrawerOpen])
+    if (filterDrawerOpen) return
+    const urlFilters = parseVehicleListFilters(new URLSearchParams(filterUrlKey))
+    setDraftFilters({ ...urlFilters, statuses: [...urlFilters.statuses] })
+  }, [filterDrawerOpen, filterUrlKey])
 
   useEffect(() => {
     let active = true
@@ -410,8 +381,12 @@ export function VehicleList() {
 
       <div className="hidden sm:block">
         <VehicleFilterFields
-          filters={filters}
-          onChange={(updates, options) => updateFilters(updates, { replace: options?.replace })}
+          filters={draftFilters}
+          debounceSearch
+          onChange={(updates, options) => {
+            setDraftFilters((current) => ({ ...current, ...updates, page: 1 }))
+            updateFilters(updates, { replace: options?.replace })
+          }}
         />
         {hasActiveFilters && (
           <button
@@ -448,70 +423,45 @@ export function VehicleList() {
         )}
       </div>
 
-      {filters.soldMonth && (
+      {hasActiveFilters && (
         <div className="flex flex-wrap items-center gap-2" aria-label="已套用篩選條件">
-          <span className="inline-flex min-h-9 items-center gap-2 rounded-full border border-border-strong bg-surface-2 px-3 text-sm text-fg">
-            成交月份：{formatSoldMonth(filters.soldMonth)}
-            <button
-              type="button"
-              aria-label="清除成交月份"
-              onClick={() => updateFilters({ soldMonth: '' })}
-              className="rounded-full p-1 text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <X aria-hidden className="h-4 w-4" />
-            </button>
-          </span>
+          {filters.search && <ActiveFilterChip label={`搜尋：${filters.search}`} onRemove={() => updateFilters({ search: '' })} />}
+          {!hasDefaultVehicleStatuses(filters.statuses) && (
+            <ActiveFilterChip
+              label={`狀態：${filters.statuses.map((status) => statusLabels[status]).join('、')}`}
+              onRemove={() => updateFilters({ statuses: [...defaultVehicleStatuses] })}
+            />
+          )}
+          {filters.isPreparationCompleted !== undefined && (
+            <ActiveFilterChip
+              label={`整備狀態：${filters.isPreparationCompleted ? '已完成' : '未完成'}`}
+              onRemove={() => updateFilters({ isPreparationCompleted: undefined })}
+            />
+          )}
+          {filters.soldMonth && (
+            <ActiveFilterChip label={`成交月份：${formatSoldMonth(filters.soldMonth)}`} onRemove={() => updateFilters({ soldMonth: '' })} />
+          )}
         </div>
       )}
 
-      {filterDrawerOpen && (
-        <>
-          <div aria-hidden="true" className="fixed inset-0 z-40 bg-black/50 sm:hidden" onClick={() => setFilterDrawerOpen(false)} />
-          <aside
-            ref={filterDrawerRef}
-            id="vehicle-filter-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="vehicle-filter-title"
-            className="fixed inset-y-0 right-0 z-50 flex w-[min(100%,24rem)] flex-col border-l border-border bg-surface shadow-lg sm:hidden"
-          >
-            <div className="flex min-h-14 items-center justify-between border-b border-border px-4">
-              <h2 id="vehicle-filter-title" className="text-lg font-semibold text-fg">篩選車輛</h2>
-              <button
-                ref={filterDrawerCloseRef}
-                type="button"
-                aria-label="關閉篩選"
-                onClick={() => setFilterDrawerOpen(false)}
-                className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-fg-muted hover:bg-surface-2 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-ring"
-              >
-                <X aria-hidden className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4">
-              <VehicleFilterFields
-                filters={draftFilters}
-                onChange={(updates) => setDraftFilters((current) => ({ ...current, ...updates, page: 1 }))}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3 border-t border-border p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-              <button
-                type="button"
-                onClick={clearDraftFilters}
-                className="min-h-11 rounded-lg border border-border-strong px-4 text-sm font-medium text-fg hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                清除全部
-              </button>
-              <button
-                type="button"
-                onClick={applyDraftFilters}
-                className="min-h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-fg hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                套用篩選
-              </button>
-            </div>
-          </aside>
-        </>
-      )}
+      <MobileFilterDrawer
+        id="vehicle-filter-drawer"
+        title="篩選車輛"
+        open={filterDrawerOpen}
+        triggerRef={filterDrawerTriggerRef}
+        onClose={() => setFilterDrawerOpen(false)}
+        footer={(
+          <>
+            <button type="button" onClick={clearDraftFilters} className="min-h-11 rounded-lg border border-border-strong px-4 text-sm font-medium text-fg hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">清除全部</button>
+            <button type="button" onClick={applyDraftFilters} className="min-h-11 rounded-lg bg-primary px-4 text-sm font-medium text-primary-fg hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">套用篩選</button>
+          </>
+        )}
+      >
+        <VehicleFilterFields
+          filters={draftFilters}
+          onChange={(updates) => setDraftFilters((current) => ({ ...current, ...updates, page: 1 }))}
+        />
+      </MobileFilterDrawer>
 
       <div
         className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
