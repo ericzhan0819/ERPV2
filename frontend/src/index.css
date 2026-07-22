@@ -66,10 +66,18 @@
   --color-ring: #3B82F6;
 }
 
+html,
+body,
+#root {
+  min-height: 100%;
+  background-color: var(--color-bg);
+}
+
 body {
   margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
   font-family: var(--font-sans);
-  background-color: var(--color-bg);
   color: var(--color-fg);
 }
 
@@ -79,6 +87,28 @@ html {
 
 html.dark {
   color-scheme: dark;
+}
+
+/* iOS 全螢幕 viewport 的瀏海與 Home Indicator 必須由 App Shell 自己承接。 */
+.app-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.app-header {
+  padding-top: calc(0.5rem + env(safe-area-inset-top, 0px));
+}
+
+.app-sidebar {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.app-sidebar-brand {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.app-main {
+  padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
 }
 
 .form-control-touch {

@@ -23,6 +23,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
+    document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute(
+      'content',
+      theme === 'dark' ? '#0B1120' : '#F8FAFC',
+    )
     localStorage.setItem(STORAGE_KEY, theme)
   }, [theme])
 

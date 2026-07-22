@@ -119,7 +119,7 @@ export function AppLayout() {
   }
 
   return (
-    <div className="flex min-h-screen min-w-0 bg-bg">
+    <div className="app-shell flex min-w-0 bg-bg">
       {sidebarOpen && isMobileViewport && (
         <div
           aria-hidden="true"
@@ -133,11 +133,11 @@ export function AppLayout() {
         aria-label="主要導覽"
         aria-hidden={isMobileViewport && !sidebarOpen ? true : undefined}
         inert={isMobileViewport && !sidebarOpen ? true : undefined}
-        className={`fixed inset-y-0 left-0 z-40 flex w-56 shrink-0 flex-col bg-sidebar transition-transform duration-200 lg:static lg:translate-x-0 ${
+        className={`app-sidebar fixed inset-y-0 left-0 z-40 flex w-56 shrink-0 flex-col bg-sidebar transition-transform duration-200 lg:static lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="flex min-h-14 items-center justify-between gap-2 px-4 text-lg font-semibold tracking-tight text-sidebar-fg">
+        <div className="app-sidebar-brand flex min-h-14 items-center justify-between gap-2 px-4 text-lg font-semibold tracking-tight text-sidebar-fg">
           <span>中古車行系統</span>
           <button
             ref={sidebarCloseButtonRef}
@@ -149,7 +149,7 @@ export function AppLayout() {
             <X size={20} />
           </button>
         </div>
-        <nav className="flex flex-col gap-1 px-2">
+        <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2">
           {visibleNavItems.map((item) => {
             const Icon = item.icon
             return (
@@ -172,7 +172,7 @@ export function AppLayout() {
         </nav>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex min-h-14 items-center justify-between gap-2 border-b border-border bg-surface px-3 py-2 sm:px-6">
+        <header className="app-header flex min-h-14 items-center justify-between gap-2 border-b border-border bg-surface px-3 pb-2 sm:px-6">
           <button
             type="button"
             aria-label="開啟導覽選單"
@@ -194,7 +194,7 @@ export function AppLayout() {
             </button>
           </div>
         </header>
-        <main className="min-w-0 flex-1 p-4 sm:p-6">
+        <main className="app-main min-w-0 flex-1 px-4 pt-4 sm:px-6 sm:pt-6">
           <Outlet />
         </main>
       </div>
