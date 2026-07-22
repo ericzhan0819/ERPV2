@@ -9,7 +9,8 @@ import { ActiveFilterChip } from '../../components/ActiveFilterChip'
 import { DebouncedSearchInput } from '../../components/DebouncedSearchInput'
 import { MobileFilterDrawer } from '../../components/MobileFilterDrawer'
 import { useAuth } from '../../hooks/useAuth'
-import { canManageVehicles, canViewFinancials } from '../../utils/permissions'
+import { canManageVehicles } from '../../utils/permissions'
+import { vehicleCardVisibility } from '../../utils/vehicleCardPresentation'
 import {
   defaultVehicleStatuses,
   hasActiveVehicleListFilters,
@@ -250,7 +251,7 @@ function VehicleCardSkeleton() {
 export function VehicleList() {
   const { user } = useAuth()
   const canManage = canManageVehicles(user?.role)
-  const showFloorPrice = canViewFinancials(user?.role)
+  const showFloorPrice = vehicleCardVisibility(user?.role).floorPrice
   const [searchParams, setSearchParams] = useSearchParams()
   const filters = parseVehicleListFilters(searchParams)
   const filterUrlKey = searchParams.toString()

@@ -18,11 +18,12 @@ import { DashboardTrendChart } from '../components/DashboardTrendChart'
 import type { DashboardSummary } from '../types/dashboard'
 import { useAuth } from '../hooks/useAuth'
 import {
-  canApproveMoneyEntries,
-  canManageVehicles,
-  canRunSalesFlow,
-  canViewFinancials,
-} from '../utils/permissions'
+  dashboardActions,
+  dashboardMoneyEntriesLink,
+  dashboardSoldVehiclesLink,
+  dashboardVisibility,
+  type DashboardActionId,
+} from '../utils/dashboardPresentation'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', {
   style: 'currency',
@@ -31,19 +32,11 @@ const currencyFormatter = new Intl.NumberFormat('zh-TW', {
 })
 const numberFormatter = new Intl.NumberFormat('zh-TW')
 
-function monthRange(yearMonth: string): { dateFrom: string; dateTo: string } {
-  const [year, month] = yearMonth.split('-').map(Number)
-  const finalDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
-  return { dateFrom: `${yearMonth}-01`, dateTo: `${yearMonth}-${String(finalDay).padStart(2, '0')}` }
-}
-
-function moneyEntriesLink(direction: 'income' | 'expense', yearMonth: string): string {
-  const { dateFrom, dateTo } = monthRange(yearMonth)
-  return `/money-entries?direction=${direction}&date_from=${dateFrom}&date_to=${dateTo}&approval=approved`
-}
-
-function soldVehiclesLink(yearMonth: string): string {
-  return `/vehicles?status=sold&sold_month=${yearMonth}`
+const actionIcons: Record<DashboardActionId, ComponentType<{ className?: string; 'aria-hidden'?: boolean }>> = {
+  create_vehicle: CarFront,
+  report_money_entry: ReceiptText,
+  create_customer: UserPlus,
+  report_preparation_expense: Wrench,
 }
 
 interface ActionLinkProps {
@@ -102,10 +95,11 @@ function SectionState({ message }: { message: string }) {
 
 export function Dashboard() {
   const { user } = useAuth()
-  const canViewFinance = canViewFinancials(user?.role)
-  const canManage = canManageVehicles(user?.role)
-  const canRunSales = canRunSalesFlow(user?.role)
-  const canApproveMoney = canApproveMoneyEntries(user?.role)
+  const visibility = dashboardVisibility(user?.role)
+  const actions = dashboardActions(user?.role)
+  const canViewFinance = visibility.canViewFinancials
+  const canManage = visibility.canManageVehicles
+  const canApproveMoney = visibility.canApproveMoneyEntries
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
@@ -143,12 +137,17 @@ export function Dashboard() {
           <h1 className="text-2xl font-semibold tracking-tight text-fg">營運總覽</h1>
           <p className="mt-1 text-sm text-fg-muted">掌握今日工作、本月經營與近 30 天趨勢</p>
         </div>
-        {canRunSales && (
+        {actions.length > 0 && (
           <nav aria-label="快捷操作" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {canManage && <ActionLink to="/vehicles/create" label="建立收車" icon={CarFront} primary />}
-            <ActionLink to="/money-entries/create" label="回報收支" icon={ReceiptText} primary={!canManage} />
-            <ActionLink to="/customers/create" label="建立客戶" icon={UserPlus} />
-            <ActionLink to="/vehicles?status=preparing" label="回報整備支出" icon={Wrench} />
+            {actions.map((action) => (
+              <ActionLink
+                key={action.id}
+                to={action.to}
+                label={action.label}
+                icon={actionIcons[action.id]}
+                primary={action.id === 'create_vehicle' || (!canManage && action.id === 'report_money_entry')}
+              />
+            ))}
           </nav>
         )}
       </header>
@@ -202,16 +201,16 @@ export function Dashboard() {
               <KpiCard to="/cash-accounts" label="現金帳面餘額" value={currencyFormatter.format(business.cash_balance)} description="所有已核准現金收支" icon={Banknote} />
             )}
             {canViewFinance && business.sold_month && business.monthly_income !== undefined && (
-              <KpiCard to={moneyEntriesLink('income', business.sold_month)} label="本月收入" value={currencyFormatter.format(business.monthly_income)} description="完整當月・僅計已核准" icon={ArrowDownToLine} />
+              <KpiCard to={dashboardMoneyEntriesLink('income', business.sold_month)} label="本月收入" value={currencyFormatter.format(business.monthly_income)} description="完整當月・僅計已核准" icon={ArrowDownToLine} />
             )}
             {canViewFinance && business.sold_month && business.monthly_expense !== undefined && (
-              <KpiCard to={moneyEntriesLink('expense', business.sold_month)} label="本月支出" value={currencyFormatter.format(business.monthly_expense)} description="完整當月・僅計已核准" icon={HandCoins} />
+              <KpiCard to={dashboardMoneyEntriesLink('expense', business.sold_month)} label="本月支出" value={currencyFormatter.format(business.monthly_expense)} description="完整當月・僅計已核准" icon={HandCoins} />
             )}
             {canViewFinance && business.sold_month && business.monthly_gross_profit !== undefined && (
-              <KpiCard to={soldVehiclesLink(business.sold_month)} label="本月毛利" value={currencyFormatter.format(business.monthly_gross_profit)} description="完整當月成交・僅計已核准收支" icon={TrendingUp} />
+              <KpiCard to={dashboardSoldVehiclesLink(business.sold_month)} label="本月毛利" value={currencyFormatter.format(business.monthly_gross_profit)} description="完整當月成交・僅計已核准收支" icon={TrendingUp} />
             )}
             {canViewFinance && business.sold_month && business.monthly_sold_count !== undefined && (
-              <KpiCard to={soldVehiclesLink(business.sold_month)} label="本月成交" value={`${numberFormatter.format(business.monthly_sold_count)} 台`} description="依完整當月成交日期統計" icon={CircleDollarSign} />
+              <KpiCard to={dashboardSoldVehiclesLink(business.sold_month)} label="本月成交" value={`${numberFormatter.format(business.monthly_sold_count)} 台`} description="依完整當月成交日期統計" icon={CircleDollarSign} />
             )}
           </div>
         )}
