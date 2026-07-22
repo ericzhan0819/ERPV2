@@ -102,12 +102,26 @@ html.dark {
 }
 
 .app-sidebar {
+  height: 100vh;
+  height: 100dvh;
   padding-bottom: env(safe-area-inset-bottom, 0px);
   padding-left: env(safe-area-inset-left, 0px);
 }
 
 .app-sidebar-brand {
   padding-top: env(safe-area-inset-top, 0px);
+}
+
+.app-sidebar-overlay {
+  height: 100vh;
+  height: 100dvh;
+  background-color: rgb(0 0 0 / 0.5);
+}
+
+@media (min-width: 64rem) {
+  .app-sidebar {
+    height: auto;
+  }
 }
 
 .app-main {

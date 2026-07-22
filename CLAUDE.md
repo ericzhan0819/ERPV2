@@ -628,6 +628,8 @@ UI 風格遵守 `UI.md`：
 
 本專案由 Codex 負責主要實作，Claude 負責 adversarial review。
 
+目前 v1.4 已完成 PLAN 第 0～11 部分。第 11 部分 Firefox 獨立環境 Browser Manual Smoke 與使用者真實手機中文輸入法、iPhone Safari Safe Area／Sidebar／light-dark 複驗均通過；iOS 修正以 App Shell 內的 viewport-height absolute layer 取代 fixed Mobile Sidebar／overlay，並由 ThemeProvider 同步 Sidebar 開關及主題切換時的頁面與瀏覽器底色。下一階段為第 12 部分文件與交接，尚不得宣告 v1.4 全版封板完成。審查證據見 `docs/v1.4-smoke-report.md` 與 `docs/v1.4-phase11-handoff.md`。
+
 Claude 審查時必須特別檢查：
 
 * 權限是否只靠前端隱藏

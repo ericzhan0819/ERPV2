@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Car, Wallet, Banknote, Users, Contact, ScrollText, HandCoins, Menu, X } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import { useTheme } from '../hooks/useTheme'
 import { ThemeToggle } from '../components/ThemeToggle'
 
 const navItems = [
@@ -17,6 +18,7 @@ const navItems = [
 
 export function AppLayout() {
   const { user, logout } = useAuth()
+  const { setViewportDimmed } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -37,7 +39,7 @@ export function AppLayout() {
 
       // 刻意讀取 Tailwind lg:static 已套用的結果，避免 JS breakpoint 在非預設字級下失步；
       // 若變更 aside 的 lg:static 或 mobile position，必須同步調整此判斷。
-      const isMobile = window.getComputedStyle(sidebarRef.current).position === 'fixed'
+      const isMobile = window.getComputedStyle(sidebarRef.current).position === 'absolute'
       setIsMobileViewport(isMobile)
       if (!isMobile) setSidebarOpen(false)
     }
@@ -58,6 +60,12 @@ export function AppLayout() {
       if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame)
     }
   }, [])
+
+  useLayoutEffect(() => {
+    setViewportDimmed(sidebarOpen && isMobileViewport)
+
+    return () => setViewportDimmed(false)
+  }, [isMobileViewport, setViewportDimmed, sidebarOpen])
 
   useEffect(() => {
     if (!sidebarOpen || !isMobileViewport) return
@@ -119,11 +127,11 @@ export function AppLayout() {
   }
 
   return (
-    <div className="app-shell flex min-w-0 bg-bg">
+    <div className="app-shell relative flex min-w-0 bg-bg">
       {sidebarOpen && isMobileViewport && (
         <div
           aria-hidden="true"
-          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          className="app-sidebar-overlay absolute top-0 right-0 left-0 z-30 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -133,7 +141,7 @@ export function AppLayout() {
         aria-label="主要導覽"
         aria-hidden={isMobileViewport && !sidebarOpen ? true : undefined}
         inert={isMobileViewport && !sidebarOpen ? true : undefined}
-        className={`app-sidebar fixed inset-y-0 left-0 z-40 flex w-56 shrink-0 flex-col bg-sidebar transition-transform duration-200 lg:static lg:translate-x-0 ${
+        className={`app-sidebar absolute top-0 left-0 z-40 flex w-56 shrink-0 flex-col bg-sidebar transition-transform duration-200 lg:static lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >

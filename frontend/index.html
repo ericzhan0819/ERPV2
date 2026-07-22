@@ -4,7 +4,31 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#F8FAFC" />
+    <meta id="app-theme-color" name="theme-color" content="#F8FAFC" />
+    <script>
+      (() => {
+        const storageKey = 'erp-theme'
+        let theme = null
+
+        try {
+          const storedTheme = window.localStorage.getItem(storageKey)
+          if (storedTheme === 'light' || storedTheme === 'dark') theme = storedTheme
+        } catch {
+          // Safari 限制儲存空間時仍依系統主題正常載入。
+        }
+
+        if (!theme) {
+          theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        }
+
+        const isDark = theme === 'dark'
+        const backgroundColor = isDark ? '#0B1120' : '#F8FAFC'
+        document.documentElement.classList.toggle('dark', isDark)
+        document.documentElement.style.colorScheme = theme
+        document.documentElement.style.backgroundColor = backgroundColor
+        document.getElementById('app-theme-color')?.setAttribute('content', backgroundColor)
+      })()
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
