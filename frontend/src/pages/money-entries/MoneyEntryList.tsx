@@ -231,6 +231,7 @@ export function MoneyEntryList() {
     const requestSequence = ++requestSequenceRef.current
     setLoading(true)
     setError(null)
+    setMeta(null)
     listMoneyEntries({
       search: filters.search || undefined,
       direction: filters.direction || undefined,
