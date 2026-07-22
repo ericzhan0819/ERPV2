@@ -72,7 +72,8 @@ export function CustomerSelect({
     }, 250)
 
     return () => window.clearTimeout(handle)
-  }, [open, trimmedQuery])
+  // 原始姓名也必須是依賴，讓只改變前後空白的輸入重新收斂 loading 狀態。
+  }, [name, open, trimmedQuery])
 
   useEffect(() => {
     if (!showListbox || loading || !activeCustomer) return
