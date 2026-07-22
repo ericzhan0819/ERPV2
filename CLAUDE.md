@@ -13,7 +13,7 @@
 v1.1：實務工作流補強已完成 smoke，並以 `v1.1-smoke-passed` tag 封版。
 v1.2：車輛圖片與官網公開車輛資料前置階段已完成 smoke，並以 `v1.2-smoke-passed` tag 封版。
 v1.3：薪資結算工程實作、自動回歸、RWD／dark mode 驗證與使用者 browser manual smoke 已通過，並以 `v1.3-smoke-passed` tag 封板。
-v1.4：資訊架構與 UI／UX 改版、自動回歸、三角色 browser manual smoke 與真實 iPhone Safari 複驗已完成；runtime 與封板前修正基準為 `a10dd0c`，完成文件已對齊，只剩 `v1.4-smoke-passed` tag 尚待建立。
+v1.4：資訊架構與 UI／UX 改版、自動回歸、三角色 browser manual smoke 與真實 iPhone Safari 複驗已完成，並以 `v1.4-smoke-passed` tag 封板；tag 指向 `d4ea978`，runtime 與封板前修正基準為 `a10dd0c`。
 ```
 
 核心目標不是擴張成完整 ERP，而是讓中古車行日常營運能穩定落地：車輛進來、建檔、整備、上架、保留、收款、成交、列印收支明細與查看營運摘要。
@@ -629,7 +629,7 @@ UI 風格遵守 `UI.md`：
 
 本專案由 Codex 負責主要實作，Claude 負責 adversarial review。
 
-目前 v1.4 已完成 PLAN 第 0～14 部分，工程、自動回歸、Browser Manual Smoke、文件與交接均已完成；runtime 與封板前 follow-up 基準為 `a10dd0c`，完成文件已對齊，只剩 `v1.4-smoke-passed` tag 尚未建立。Firefox 獨立環境與使用者真實手機中文輸入法、iPhone Safari Safe Area／Sidebar／light-dark 複驗均通過；iOS 修正以 App Shell 內的 viewport-height absolute layer 取代 fixed Mobile Sidebar／overlay，並由 ThemeProvider 同步 Sidebar 開關及主題切換時的頁面與瀏覽器底色。最終 follow-up 另包含 CustomerSelect 空白搜尋編輯狀態修正，以及 MoneyEntry 載入期間清除過期分頁 `meta`。審查證據見 `docs/v1.4-smoke-report.md` 與 `docs/v1.4-handoff.md`。
+目前 v1.4 已完成 PLAN 第 0～14 部分，工程、自動回歸、Browser Manual Smoke、文件與交接均已完成，並以 `v1.4-smoke-passed` tag 封板；tag 指向 `d4ea978`，runtime 與封板前 follow-up 基準為 `a10dd0c`。Firefox 獨立環境與使用者真實手機中文輸入法、iPhone Safari Safe Area／Sidebar／light-dark 複驗均通過；iOS 修正以 App Shell 內的 viewport-height absolute layer 取代 fixed Mobile Sidebar／overlay，並由 ThemeProvider 同步 Sidebar 開關及主題切換時的頁面與瀏覽器底色。最終 follow-up 另包含 CustomerSelect 空白搜尋編輯狀態修正，以及 MoneyEntry 載入期間清除過期分頁 `meta`。審查證據見 `docs/v1.4-smoke-report.md` 與 `docs/v1.4-handoff.md`。
 
 v1.4 對立性審查必須維持 Presentation Layer 邊界：不得新增 migration、schema、商業公式、Workflow、角色或權限；Dashboard 只能總覽與導流，不得加入 Table、車輛列表、展開明細、通知或薪資 KPI；Vehicle List 不得回傳收購價、毛利、完整相簿或其他敏感資料；sales 的 Dashboard 原始 JSON 必須真正移除財務欄位。Filter 的 URL 還原、`sold_month` 台北月份半開區間、approved-only 統計及 iOS Safe Area 行為不可在收尾時回歸。
 
