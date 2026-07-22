@@ -172,7 +172,7 @@ export function AppLayout() {
         </nav>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="app-header flex min-h-14 items-center justify-between gap-2 border-b border-border bg-surface px-3 pb-2 sm:px-6">
+        <header className="app-header flex min-h-14 items-center justify-between gap-2 border-b border-border bg-surface pb-2">
           <button
             type="button"
             aria-label="開啟導覽選單"
@@ -194,7 +194,7 @@ export function AppLayout() {
             </button>
           </div>
         </header>
-        <main className="app-main min-w-0 flex-1 px-4 pt-4 sm:px-6 sm:pt-6">
+        <main className="app-main min-w-0 flex-1 pt-4 sm:pt-6">
           <Outlet />
         </main>
       </div>

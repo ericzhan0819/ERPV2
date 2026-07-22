@@ -97,10 +97,13 @@ html.dark {
 
 .app-header {
   padding-top: calc(0.5rem + env(safe-area-inset-top, 0px));
+  padding-right: calc(0.75rem + env(safe-area-inset-right, 0px));
+  padding-left: calc(0.75rem + env(safe-area-inset-left, 0px));
 }
 
 .app-sidebar {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
 }
 
 .app-sidebar-brand {
@@ -108,7 +111,17 @@ html.dark {
 }
 
 .app-main {
+  padding-right: calc(1rem + env(safe-area-inset-right, 0px));
   padding-bottom: calc(2rem + env(safe-area-inset-bottom, 0px));
+  padding-left: calc(1rem + env(safe-area-inset-left, 0px));
+}
+
+@media (min-width: 40rem) {
+  .app-header,
+  .app-main {
+    padding-right: calc(1.5rem + env(safe-area-inset-right, 0px));
+    padding-left: calc(1.5rem + env(safe-area-inset-left, 0px));
+  }
 }
 
 .form-control-touch {
