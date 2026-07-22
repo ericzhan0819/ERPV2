@@ -1,10 +1,10 @@
-# ERPV2 current-state — v1.3 Smoke 已通過
+# ERPV2 current-state — v1.4 Smoke 已通過
 
-日期：2026-07-18
+日期：2026-07-22
 專案：ERPV2 / 中古車行內部營運系統
-目前穩定點：`d9c98b0 fix:補上以售車收購價修正入口與薪資鎖定保護`
-目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`
-狀態：v1.3「薪資結算」工程實作、自動回歸、真實 MariaDB 並發／時區測試、前端 lint／typecheck／production build、13.1 響應式與 dark mode 收尾，以及使用者 browser manual smoke 均已完成。功能與驗收已通過；尚未取得 commit／push／tag 授權，因此 Git 封板 commit／tag 尚未建立。
+目前程式基準：`9289f5f fix：修正客戶搜尋空白編輯卡住狀態`（本次第 12～14 部分文件尚未 commit）
+目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`、`v1.3-smoke-passed`
+狀態：v1.4「資訊架構與 UI／UX 改版」第 0～14 部分、完整自動回歸、Firefox Browser Manual Smoke、使用者真實手機中文輸入法與 iPhone Safari 複驗、文件及交接均已完成。尚未取得 commit／push／tag 授權，因此 v1.4 Git 封板尚未建立。
 
 ---
 
@@ -423,11 +423,11 @@ v1.3 第 1～10 部分已補齊：
 
 v1.3 使用者驗收已完成。Smoke 過程修正稽核類型映射、薪資勞健保項目中文標籤、已售車補登／修正收購價入口，以及 confirmed／paid 月份收購價鎖定；完整結果見 `docs/v1.3-smoke-report.md`。驗收所用的 2026-07 paid 月份與薪資支出已依使用者授權受控清除並恢復保護 triggers，目前開發資料庫沒有薪資月份；這是測試資料清理，不改變已通過的功能驗收。
 
-後續只剩建立封板 commit／tag；在取得使用者明確授權前不自動 commit、push 或建立 tag。
+v1.3 已以 `v1.3-smoke-passed` tag 封板；後續版本不得回開其薪資結算範圍。
 
-Website MVP 可在 v1.3 Git 封板或正式部署準備時另立企劃與 PLAN，不得混入薪資結算。
+Website MVP 或正式部署準備必須另立企劃與 PLAN，不得混入薪資結算或 v1.4 Presentation Layer 收尾。
 
-v1.4 目前已完成第 0～11 部分：UX Design System／共用元件盤點、Vehicle／MoneyEntry Filter URL 契約、Dashboard API、Dashboard 前端、Vehicle List API／Resource、Vehicle Card Grid、Filter UI／Mobile Drawer、App Layout／Header／Safe Area、Frontend 品質與契約測試、完整自動回歸，以及 Browser Manual Smoke。Dashboard 已改為 Action Bar、工作概況、經營概況、趨勢分析四區塊；KPI 只負責 URL Filter 導流，三項 30 天趨勢使用無額外 runtime dependency 的響應式 SVG 圖表。`DashboardSummaryResource` 對 sales／未知角色移除財務欄位，API 舊版頂層相容欄位亦已移除。MoneyEntry 核准／駁回後改由 refresh token 依目前 URL Filter 重查，Vehicle／MoneyEntry 超出分頁時可保留 Filter 回到第 1 頁。後台 Vehicle List 使用獨立 `VehicleListResource`，每頁以單一受限 eager-load query 取得已提交封面的 `id`／`disk`／`thumbnail_path`，只回傳 `id` 與 `thumbnail_url`；Card Grid 直接使用該縮圖，無正式封面或圖片載入失敗時顯示一致的「尚無照片」空圖。車輛工作區已移除 Table／橫向捲動依賴，Mobile 固定 1 欄、Tablet 固定 2 欄、Desktop 多欄；admin／manager 卡片顯示底價，sales 不顯示，所有角色卡片都不顯示收購價、成交價或毛利，既有詳細頁 Workflow 與後端角色遮蔽不變。Vehicle／MoneyEntry 在 Desktop／Tablet 顯示 inline Filter、Mobile 使用共用 Drawer；Drawer 具備 draft 套用、清除、focus trap、Escape、背景捲動鎖定與 focus 歸還。App Shell 已改用 `100dvh`（含 `100vh` fallback），viewport 啟用 `viewport-fit=cover`，Header、Mobile Sidebar 與主內容承接四向 safe-area inset，light／dark 切換同步瀏覽器 `theme-color`；Mobile Sidebar 與 overlay 使用 App Shell 內的 viewport-height absolute layer，並在開關時同步頁面與瀏覽器底色，避開 iPhone Safari fixed overlay tint 殘留。第 9 部分以最小 Vitest runner 補上 14 項純契約測試，涵蓋 Filter parse／serialize 與白名單、Dashboard 角色／Action／KPI URL，以及 Vehicle Card 角色欄位；API endpoint 仍集中在 `frontend/src/api`，沒有加入 DOM／E2E 測試框架或 runtime dependency。第 10 部分 backend 完整回歸為 519 tests（504 passed、15 environment-gated skipped）／2516 assertions；可拋棄 MariaDB 10.11 schema 的 3 個時區邊界測試／35 assertions、frontend test／lint／typecheck／production build、Pint 與靜態稽核均通過，並確認 v1.4 沒有 migration／schema 變更。第 11 部分 Firefox 獨立環境角色、導流、Filter、RWD、主題及操作回歸通過；使用者於 2026-07-22 以真實手機確認中文輸入法與 iPhone Safari Safe Area、Sidebar 開合及 light／dark 切換均正常。Header 職責不變且沒有新增通知、快捷功能或 Footer。完整階段紀錄見 `docs/v1.4-phase1-handoff.md` 至 `docs/v1.4-phase11-handoff.md`；下一階段為第 12 部分文件與交接。
+v1.4 已完成第 0～14 部分：UX Design System／共用元件盤點、Vehicle／MoneyEntry Filter URL 契約、Dashboard API、Dashboard 前端、Vehicle List API／Resource、Vehicle Card Grid、Filter UI／Mobile Drawer、App Layout／Header／Safe Area、Frontend 品質與契約測試、完整自動回歸、Browser Manual Smoke，以及最終文件與交接。Dashboard 已改為 Action Bar、工作概況、經營概況、趨勢分析四區塊；KPI 只負責 URL Filter 導流，三項 30 天趨勢使用無額外 runtime dependency 的響應式 SVG 圖表。`DashboardSummaryResource` 對 sales／未知角色移除財務欄位，API 舊版頂層相容欄位亦已移除。MoneyEntry 核准／駁回後改由 refresh token 依目前 URL Filter 重查，Vehicle／MoneyEntry 超出分頁時可保留 Filter 回到第 1 頁。後台 Vehicle List 使用獨立 `VehicleListResource`，每頁以單一受限 eager-load query 取得已提交封面的 `id`／`disk`／`thumbnail_path`，只回傳 `id` 與 `thumbnail_url`；Card Grid 直接使用該縮圖，無正式封面或圖片載入失敗時顯示一致的「尚無照片」空圖。車輛工作區已移除 Table／橫向捲動依賴，Mobile 固定 1 欄、Tablet 固定 2 欄、Desktop 多欄；admin／manager 卡片顯示底價，sales 不顯示，所有角色卡片都不顯示收購價、成交價或毛利，既有詳細頁 Workflow 與後端角色遮蔽不變。Vehicle／MoneyEntry 在 Desktop／Tablet 顯示 inline Filter、Mobile 使用共用 Drawer；Drawer 具備 draft 套用、清除、focus trap、Escape、背景捲動鎖定與 focus 歸還。App Shell 已改用 `100dvh`（含 `100vh` fallback），viewport 啟用 `viewport-fit=cover`，Header、Mobile Sidebar 與主內容承接四向 safe-area inset，light／dark 切換同步瀏覽器 `theme-color`；Mobile Sidebar 與 overlay 使用 App Shell 內的 viewport-height absolute layer，並在開關時同步頁面與瀏覽器底色，避開 iPhone Safari fixed overlay tint 殘留。第 9 部分以最小 Vitest runner 補上 14 項純契約測試，涵蓋 Filter parse／serialize 與白名單、Dashboard 角色／Action／KPI URL，以及 Vehicle Card 角色欄位；API endpoint 仍集中在 `frontend/src/api`，沒有加入 DOM／E2E 測試框架或 runtime dependency。最終 backend 完整回歸為 519 tests（504 passed、15 environment-gated skipped）／2516 assertions；第 10 部分可拋棄 MariaDB 10.11 schema 的 3 個時區邊界測試／35 assertions、frontend test／lint／typecheck／production build、Pint 與靜態稽核均通過，並確認 v1.4 沒有 migration／schema 變更。Firefox 獨立環境角色、導流、Filter、RWD、主題及操作回歸通過；使用者於 2026-07-22 以真實手機確認中文輸入法與 iPhone Safari Safe Area、Sidebar 開合及 light／dark 切換均正常。Header 職責不變且沒有新增通知、快捷功能或 Footer。完整階段紀錄見 `docs/v1.4-phase1-handoff.md` 至 `docs/v1.4-phase11-handoff.md`，最終證據與部署邊界見 `docs/v1.4-smoke-report.md`、`docs/v1.4-handoff.md`。本次未重跑真實 MariaDB，沿用第 10 部分專用 schema 證據；後續只剩使用者授權後的封板 commit／tag／push。
 
 第 4 部分 adversarial review 後，本月收入／支出導流已補 `approval=approved`，常數／空趨勢、權限 helper 與圖表欄數亦已修正。使用者正式採用單月 `sold_month=YYYY-MM` Vehicle Filter：Dashboard 後端回傳台北正式月份，本月成交／毛利固定導向 `status=sold&sold_month=<正式月份>`。Dashboard 與 Vehicle 查詢共用 `TaipeiMonthRange` 半開區間；Filter 與 `status` 獨立，只依 `sold_at`，非法月份回傳 422。前端收到 `sold_month` 的 422 時顯示具體格式錯誤與清除入口，不會把非法值注入原生 month input，也不會靜默忽略 URL Filter。Desktop 與 Mobile Drawer 共用 URL state，支援月份顯示、單獨清除、分頁、reload 與瀏覽器上一頁／下一頁。此修正不包含任意成交日期區間、跨月報表、匯出或以 MoneyEntry 日期代替成交月份。
 

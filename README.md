@@ -1,10 +1,10 @@
-# 中古車行內部營運系統（1.0 + v1.1 + v1.2 + v1.3 + v1.4 開發中）
+# 中古車行內部營運系統（1.0 + v1.1 + v1.2 + v1.3 + v1.4）
 
-小型中古車行內部使用的前後端分離營運管理系統。v1.1 新增角色（`admin`／`manager`／`sales`）、敏感金額遮蔽、一般收支審核、客戶模組與建車入庫欄位補強，並以 `v1.1-smoke-passed` 封版。v1.2 新增車輛照片管理與官網公開唯讀車輛 API，已完成自動測試、瀏覽器 manual smoke，並以 `v1.2-smoke-passed` 封版。v1.3 新增薪資結算與發薪流程，功能與 Smoke 已通過。另完成獨立的 v1.1 Customer Workflow hotfix：買賣表單改為單一姓名搜尋、自動建立／關聯客戶，並以資料庫 unique 與真實 MariaDB 競態測試防止並發重複。完整穩定狀態見 `docs/current-state.md`、`docs/customer-workflow-hotfix.md`、`docs/v1.3-smoke-report.md` 與 `docs/v1.3-handoff.md`。
+小型中古車行內部使用的前後端分離營運管理系統。v1.1 完成角色、敏感資料遮蔽、收支審核與客戶流程；v1.2 完成車輛照片與官網公開唯讀 API；v1.3 完成薪資結算與發薪；v1.4 完成 Dashboard 資訊架構、Vehicle Card Grid、URL Filter、Mobile Drawer、RWD 與 UX Design System。完整穩定狀態見 `docs/current-state.md`、`docs/v1.4-smoke-report.md` 與 `docs/v1.4-handoff.md`。
 
-v1.3 薪資結算的功能實作、自動測試、真實 MariaDB 並發／時區測試、前端 lint／typecheck／production build、RWD／dark mode 驗證與使用者 browser manual smoke 已完成。範圍包含 admin-only 員工薪資設定、版本化獎金方案、正式收／賣車歸屬、approved-only 整月跨級獎金、異常與非阻擋提示、月份草稿／重算／確認，以及具備 transaction、idempotency 與 paid 歷史保護的整批發薪。當月只能建立與重算草稿，必須等月份結束後才能確認，避免中途鎖定後漏掉後續成交。2026-07-18 納入 Customer hotfix 後的完整回歸為 485 passed、14 environment-gated skipped、2293 assertions；所有受保護的 MariaDB 10.11.18 並發／時區測試於專用 schema 共 14 tests／176 assertions 全數通過。完整規格與驗收證據見 `企劃書_v1.3.md`、`PLAN_v1.3.md`、`PLAN_customer_workflow_hotfix.md`、`docs/current-state.md`、`docs/customer-workflow-hotfix.md`、`docs/v1.3-smoke-report.md`、`docs/v1.3-handoff.md`。Git 封板 commit／tag 尚待使用者授權建立。
+v1.3 薪資結算的功能實作、自動測試、真實 MariaDB 並發／時區測試、前端 lint／typecheck／production build、RWD／dark mode 驗證與使用者 browser manual smoke 已完成。範圍包含 admin-only 員工薪資設定、版本化獎金方案、正式收／賣車歸屬、approved-only 整月跨級獎金、異常與非阻擋提示、月份草稿／重算／確認，以及具備 transaction、idempotency 與 paid 歷史保護的整批發薪。當月只能建立與重算草稿，必須等月份結束後才能確認，避免中途鎖定後漏掉後續成交。2026-07-18 納入 Customer hotfix 後的完整回歸為 485 passed、14 environment-gated skipped、2293 assertions；所有受保護的 MariaDB 10.11.18 並發／時區測試於專用 schema 共 14 tests／176 assertions 全數通過。完整規格與驗收證據見 `企劃書_v1.3.md`、`PLAN_v1.3.md`、`PLAN_customer_workflow_hotfix.md`、`docs/current-state.md`、`docs/customer-workflow-hotfix.md`、`docs/v1.3-smoke-report.md`、`docs/v1.3-handoff.md`；已以 `v1.3-smoke-passed` tag 封版。
 
-v1.4 資訊架構與 UI／UX 改版目前完成第 0～11 部分。Dashboard、Vehicle Card Grid、URL Filter、Mobile Drawer、RWD、light／dark mode 與 Safe Area 均已完成工程實作、自動回歸及 Browser Manual Smoke。第 10 部分完整 backend regression 為 519 tests（504 passed、15 environment-gated skipped）／2516 assertions；另於可拋棄 MariaDB 10.11 schema 執行 3 個時區邊界測試／35 assertions，frontend test／lint／typecheck／production build 與靜態稽核均通過。第 11 部分以 Firefox 獨立環境驗證 admin／manager／sales 角色、Action／KPI 導流、Filter、320／375／390／768／Desktop 版面與鍵盤操作；使用者另以真實手機確認中文輸入法組字及 iPhone Safari Sidebar 開合、Safe Area 與主題切換。iOS 修正以 App Shell 內的 viewport-height absolute layer 避開 fixed overlay tint，並在 Sidebar 開關與主題切換時同步頁面及瀏覽器底色。完整紀錄見 `docs/v1.4-smoke-report.md` 與 `docs/v1.4-phase11-handoff.md`；下一階段為第 12 部分文件與交接。
+v1.4 資訊架構與 UI／UX 改版第 0～14 部分已完成。Dashboard、Vehicle Card Grid、URL Filter、Mobile Drawer、RWD、light／dark mode 與 Safe Area 均通過工程驗證及 Browser Manual Smoke。最終 backend regression 為 519 tests（504 passed、15 environment-gated skipped）／2516 assertions；第 10 部分另於可拋棄 MariaDB 10.11 schema 完成 3 個時區邊界測試／35 assertions。Frontend 14 tests、lint、typecheck 與 production build 通過；Firefox 獨立環境完成三角色、Action／KPI 導流、Filter、320／375／390／768／Desktop 與鍵盤操作，使用者亦以真實手機確認中文輸入法及 iPhone Safari Sidebar、Safe Area、light／dark mode。完整證據與部署邊界見 `docs/v1.4-smoke-report.md` 與 `docs/v1.4-handoff.md`；Git commit／tag 仍待使用者明確授權。
 
 ### v1.3 薪資公式
 
@@ -127,12 +127,13 @@ php artisan test
 
 ```bash
 cd frontend
+npm test
 npm run lint
-npx tsc -b
+npx tsc -b --noEmit
 npm run build
 ```
 
-手動驗證（v1.2 已完成一次完整 browser smoke，結果見 `docs/v1.2-smoke-report.md`；重新部署或重大修改後依下列項目複查）：
+手動驗證（v1.4 最新完整結果見 `docs/v1.4-smoke-report.md`；重新部署或重大修改後依下列項目複查）：
 
 1. `php artisan serve` 啟動後端、`npm run dev` 啟動前端。
 2. 用預設管理員帳號登入，確認未登入無法進入後台頁面。
@@ -154,6 +155,9 @@ npm run build
 17. （v1.3）逐一製造缺收車人、缺賣車人、pending 收支及購車付款不一致，確認皆阻擋；虧損車不得產生負獎金。
 18. （v1.3）確認後頁面只讀；發薪後每位正數實發員工各有一筆 approved `salary_settlement` MoneyEntry，帳戶餘額正確下降，重試不重複建立支出。
 19. （v1.3）以 manager／sales 檢查 Sidebar、直接路由與 API 均無法取得薪資資料，並於 light／dark mode、桌機／手機寬度完成基本操作。
+20. （v1.4）以 admin／manager／sales 檢查 Dashboard 四區塊、角色差異與 KPI／Action 導流，確認 sales 原始 JSON 不含財務資料。
+21. （v1.4）確認 Vehicle Card Grid 在 320／375／390px 為 1 欄、768px 為 2 欄，`sold`／`cancelled` 預設隱藏但可由 Filter 顯示；URL、reload、上一頁／下一頁可還原 Filter。
+22. （v1.4）在 light／dark mode 操作 Mobile Filter Drawer 與 Sidebar，確認 focus／Escape／捲動鎖定、中文輸入法組字及 iPhone Safe Area 正常。
 
 ## 常見問題
 

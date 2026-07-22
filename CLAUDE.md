@@ -628,7 +628,9 @@ UI 風格遵守 `UI.md`：
 
 本專案由 Codex 負責主要實作，Claude 負責 adversarial review。
 
-目前 v1.4 已完成 PLAN 第 0～11 部分。第 11 部分 Firefox 獨立環境 Browser Manual Smoke 與使用者真實手機中文輸入法、iPhone Safari Safe Area／Sidebar／light-dark 複驗均通過；iOS 修正以 App Shell 內的 viewport-height absolute layer 取代 fixed Mobile Sidebar／overlay，並由 ThemeProvider 同步 Sidebar 開關及主題切換時的頁面與瀏覽器底色。下一階段為第 12 部分文件與交接，尚不得宣告 v1.4 全版封板完成。審查證據見 `docs/v1.4-smoke-report.md` 與 `docs/v1.4-phase11-handoff.md`。
+目前 v1.4 已完成 PLAN 第 0～14 部分，工程、自動回歸、Browser Manual Smoke、文件與交接均已完成；尚未建立封板 commit／tag。Firefox 獨立環境與使用者真實手機中文輸入法、iPhone Safari Safe Area／Sidebar／light-dark 複驗均通過；iOS 修正以 App Shell 內的 viewport-height absolute layer 取代 fixed Mobile Sidebar／overlay，並由 ThemeProvider 同步 Sidebar 開關及主題切換時的頁面與瀏覽器底色。審查證據見 `docs/v1.4-smoke-report.md` 與 `docs/v1.4-handoff.md`。
+
+v1.4 對立性審查必須維持 Presentation Layer 邊界：不得新增 migration、schema、商業公式、Workflow、角色或權限；Dashboard 只能總覽與導流，不得加入 Table、車輛列表、展開明細、通知或薪資 KPI；Vehicle List 不得回傳收購價、毛利、完整相簿或其他敏感資料；sales 的 Dashboard 原始 JSON 必須真正移除財務欄位。Filter 的 URL 還原、`sold_month` 台北月份半開區間、approved-only 統計及 iOS Safe Area 行為不可在收尾時回歸。
 
 Claude 審查時必須特別檢查：
 
