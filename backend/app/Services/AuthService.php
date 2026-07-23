@@ -30,9 +30,10 @@ class AuthService
      * @throws AuthenticationException
      * @throws TooManyLoginAttemptsException
      */
-    public function login(string $email, string $password): User
+    public function login(string $login, string $password): User
     {
-        $limiters = $this->limiters($email);
+        $normalizedLogin = $this->normalizeLogin($login);
+        $limiters = $this->limiters($normalizedLogin);
         [$ipKey, $maxIpAttempts, $ipDecaySeconds] = $limiters['ip'];
 
         // IP 的總限制只計登入失敗次數，所以這裡只讀取是否超限，不會先占用一次額度。
@@ -50,7 +51,10 @@ class AuthService
             }
         }
 
-        if (! Auth::attempt(['email' => $email, 'password' => $password])) {
+        if (! Auth::attempt([
+            ...$this->credentialsFor($normalizedLogin),
+            'password' => $password,
+        ])) {
             RateLimiter::hit($ipKey, $ipDecaySeconds);
 
             throw new AuthenticationException('帳號或密碼錯誤');
@@ -87,16 +91,42 @@ class AuthService
     /**
      * @return array<string, array{0: string, 1: int, 2: int}>
      */
-    private function limiters(string $email): array
+    private function limiters(string $login): array
     {
-        $normalizedEmail = Str::lower(trim($email));
         $ip = (string) request()->ip();
 
         return [
-            'email_ip' => ['login:email_ip:'.$normalizedEmail.'|'.$ip, self::MAX_EMAIL_IP_ATTEMPTS, self::EMAIL_IP_DECAY_SECONDS],
-            'account' => ['login:account:'.$normalizedEmail, self::MAX_ACCOUNT_ATTEMPTS, self::ACCOUNT_DECAY_SECONDS],
+            'email_ip' => ['login:email_ip:'.$login.'|'.$ip, self::MAX_EMAIL_IP_ATTEMPTS, self::EMAIL_IP_DECAY_SECONDS],
+            'account' => ['login:account:'.$login, self::MAX_ACCOUNT_ATTEMPTS, self::ACCOUNT_DECAY_SECONDS],
             'ip' => ['login:ip:'.$ip, self::MAX_IP_ATTEMPTS, self::IP_DECAY_SECONDS],
         ];
+    }
+
+    private function normalizeLogin(string $login): string
+    {
+        $trimmed = Str::trim($login);
+
+        return Str::contains($trimmed, '@')
+            ? Str::lower($trimmed)
+            : (User::normalizeUsername($trimmed) ?? '');
+    }
+
+    /**
+     * @return array{email: string}|array{username: string}
+     */
+    private function credentialsFor(string $login): array
+    {
+        if (! Str::contains($login, '@')) {
+            return ['username' => $login];
+        }
+
+        // SQLite 的字串比較預設區分大小寫；先取出正式 Email，讓測試與正式資料庫
+        // 都維持既有的 Email 大小寫不敏感登入行為。
+        $email = User::query()
+            ->whereRaw('LOWER(email) = ?', [$login])
+            ->value('email');
+
+        return ['email' => is_string($email) ? $email : $login];
     }
 
     /**

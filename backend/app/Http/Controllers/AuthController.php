@@ -18,7 +18,7 @@ class AuthController extends Controller
     {
         try {
             $user = $this->authService->login(
-                $request->validated('email'),
+                $request->validated('login'),
                 $request->validated('password'),
             );
         } catch (TooManyLoginAttemptsException $e) {

@@ -47,8 +47,15 @@ Request body：
 
 | 欄位 | 型別 | 必填 | 說明 |
 |---|---|---|---|
-| email | string | 是 | |
+| login | string | 是 | Email 或 username，前後空白會移除，大小寫不敏感，最長 255 字元 |
 | password | string | 是 | |
+
+```json
+{
+  "login": "eric 或 admin@example.com",
+  "password": "..."
+}
+```
 
 回傳：`UserResource`（見下方）。
 
@@ -74,6 +81,8 @@ Request body：
   "id": 1,
   "name": "系統管理員",
   "email": "admin@example.com",
+  "username": "owner",
+  "must_change_password": false,
   "is_admin": true,
   "is_active": true
 }

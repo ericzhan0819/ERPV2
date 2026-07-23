@@ -98,7 +98,7 @@ class AuditLogTest extends TestCase
         AuditLog::query()->delete();
 
         $this->withHeaders(['Referer' => 'http://localhost'])->postJson('/api/login', [
-            'email' => 'audit@example.com',
+            'login' => 'audit@example.com',
             'password' => 'password',
         ])->assertSuccessful();
 

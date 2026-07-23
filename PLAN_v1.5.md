@@ -125,34 +125,34 @@ Admin 建立員工 + 預設密碼
 
 ### 3.1 Request 契約
 
-- [ ] `LoginRequest` 由 `email` 改為 `login`
-- [ ] `login` required、string、合理最大長度
-- [ ] 不再要求 HTML／API Email 格式
-- [ ] Password 契約保持 required string
-- [ ] API 文件更新 request example
+- [x] `LoginRequest` 由 `email` 改為 `login`
+- [x] `login` required、string、合理最大長度
+- [x] 不再要求 HTML／API Email 格式
+- [x] Password 契約保持 required string
+- [x] API 文件更新 request example
 
 ### 3.2 AuthService
 
-- [ ] `login(string $login, string $password)` 命名對齊
-- [ ] identifier trim
-- [ ] identifier normalization
-- [ ] 含 `@` 使用 Email 路徑
-- [ ] 不含 `@` 使用 username 路徑
-- [ ] username 登入不分大小寫
-- [ ] Email 登入維持既有相容性
-- [ ] 認證失敗維持通用 `帳號或密碼錯誤`
-- [ ] 不洩漏 username／Email 是否存在
-- [ ] 停用帳號仍登出並回既有停用訊息
-- [ ] 成功登入 regenerate session
-- [ ] 成功登入 Authentication Audit 保留
-- [ ] Audit failure 時既有 fail-closed logout 行為保留
+- [x] `login(string $login, string $password)` 命名對齊
+- [x] identifier trim
+- [x] identifier normalization
+- [x] 含 `@` 使用 Email 路徑
+- [x] 不含 `@` 使用 username 路徑
+- [x] username 登入不分大小寫
+- [x] Email 登入維持既有相容性
+- [x] 認證失敗維持通用 `帳號或密碼錯誤`
+- [x] 不洩漏 username／Email 是否存在
+- [x] 停用帳號仍登出並回既有停用訊息
+- [x] 成功登入 regenerate session
+- [x] 成功登入 Authentication Audit 保留
+- [x] Audit failure 時既有 fail-closed logout 行為保留
 
 ### 3.3 AuthController
 
-- [ ] Controller 改讀 `login`
-- [ ] 422／429／Retry-After 契約保留
-- [ ] `UserResource` 回傳 username／must_change_password
-- [ ] Controller 保持薄
+- [x] Controller 改讀 `login`
+- [x] 422／429／Retry-After 契約保留
+- [x] `UserResource` 回傳 username／must_change_password
+- [x] Controller 保持薄
 
 **Migration：否。**
 

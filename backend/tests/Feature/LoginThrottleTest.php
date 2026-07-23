@@ -34,7 +34,9 @@ class LoginThrottleTest extends TestCase
             $this->loginAs('admin@example.com', 'wrong-password')->assertStatus(422);
         }
 
-        $this->loginAs('admin@example.com', 'wrong-password')->assertStatus(429);
+        $this->loginAs('admin@example.com', 'wrong-password')
+            ->assertStatus(429)
+            ->assertHeader('Retry-After');
     }
 
     public function test_login_still_returns_normal_failure_response_below_limit(): void
@@ -122,12 +124,12 @@ class LoginThrottleTest extends TestCase
         $this->loginAs('admin@example.com', 'wrong-password')->assertStatus(422);
     }
 
-    private function loginAs(string $email, string $password, string $ip = '127.0.0.1'): TestResponse
+    private function loginAs(string $login, string $password, string $ip = '127.0.0.1'): TestResponse
     {
         return $this->withServerVariables(['REMOTE_ADDR' => $ip])
             ->withHeaders(['Referer' => 'http://localhost'])
             ->postJson('/api/login', [
-                'email' => $email,
+                'login' => $login,
                 'password' => $password,
             ]);
     }
