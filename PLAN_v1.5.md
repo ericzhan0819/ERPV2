@@ -106,6 +106,8 @@ Admin 建立員工 + 預設密碼
 - [x] Validation message 使用繁體中文
 - [x] Username 未設定不影響 Email 登入
 
+**Self profile Request 契約：** `name` 與 `username` 採完整表單提交；`username` 鍵必須存在，`null` 或空字串表示明確清空。缺少該鍵固定回 422，避免下游誤用 `$data['username'] ?? null` 靜默刪除既有帳號名稱。
+
 ### 2.3 競態
 
 - [x] 兩位使用者同時搶同一 username 時，只有一方成功

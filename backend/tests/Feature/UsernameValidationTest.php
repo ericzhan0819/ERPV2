@@ -140,6 +140,81 @@ class UsernameValidationTest extends TestCase
             ->assertJsonPath('errors.username.0', '此帳號名稱已被使用');
     }
 
+    public function test_self_profile_request_requires_explicit_username_key(): void
+    {
+        $user = User::factory()->withUsername('keep.me')->create();
+        $this->registerProfileTestRoute('/api/_test/current-user-profile-present');
+
+        $this->actingAs($user)
+            ->patchJson('/api/_test/current-user-profile-present', [
+                'name' => '只修改名字',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['username'])
+            ->assertJsonPath('errors.username.0', '請提供帳號名稱；若不設定請傳 null');
+
+        $this->assertSame('keep.me', $user->fresh()->username);
+    }
+
+    #[DataProvider('emptyUsernameProvider')]
+    public function test_self_profile_request_treats_null_or_empty_username_as_explicit_clear(mixed $username): void
+    {
+        $user = User::factory()->withUsername('clear.me')->create();
+        $this->registerProfileTestRoute('/api/_test/current-user-profile-clear');
+
+        $this->actingAs($user)
+            ->patchJson('/api/_test/current-user-profile-clear', [
+                'name' => '明確清空帳號',
+                'username' => $username,
+            ])
+            ->assertOk()
+            ->assertJsonPath('username', null);
+    }
+
+    public static function emptyUsernameProvider(): array
+    {
+        return [
+            'null' => [null],
+            'empty string' => [''],
+        ];
+    }
+
+    public function test_self_profile_request_rejects_all_read_only_fields_instead_of_silently_ignoring_them(): void
+    {
+        $user = User::factory()->create();
+        $this->registerProfileTestRoute('/api/_test/current-user-profile-read-only');
+        $readOnlyPayload = [
+            'email' => 'attacker@example.com',
+            'role' => User::ROLE_ADMIN,
+            'is_admin' => true,
+            'is_active' => false,
+            'phone' => '0900000000',
+            'job_title' => '老闆',
+            'hire_date' => '2026-07-23',
+            'notes' => '不應接受',
+            'must_change_password' => false,
+            'password' => 'should-not-be-accepted',
+        ];
+
+        $response = $this->actingAs($user)
+            ->patchJson('/api/_test/current-user-profile-read-only', [
+                'name' => '測試使用者',
+                'username' => null,
+                ...$readOnlyPayload,
+            ]);
+
+        $response
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(array_keys($readOnlyPayload));
+
+        foreach (array_keys($readOnlyPayload) as $field) {
+            $this->assertStringContainsString(
+                '不可由我的帳號修改',
+                $response->json('errors.'.$field.'.0'),
+            );
+        }
+    }
+
     public function test_service_converts_a_stale_unique_check_into_username_validation_error(): void
     {
         $winner = User::factory()->withUsername('winner')->create();
@@ -154,5 +229,15 @@ class UsernameValidationTest extends TestCase
 
         $this->assertSame('winner', $winner->fresh()->username);
         $this->assertNull($loser->fresh()->username);
+    }
+
+    private function registerProfileTestRoute(string $uri): void
+    {
+        Route::middleware('api')->patch(
+            $uri,
+            function (UpdateCurrentUserProfileRequest $request) {
+                return response()->json($request->validated());
+            },
+        );
     }
 }
