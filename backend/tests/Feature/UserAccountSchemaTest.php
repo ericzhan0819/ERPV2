@@ -8,6 +8,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class UserAccountSchemaTest extends TestCase
@@ -47,13 +48,35 @@ class UserAccountSchemaTest extends TestCase
         $this->assertSame(2, User::query()->whereNull('username')->count());
     }
 
-    public function test_duplicate_non_null_username_is_rejected_by_database(): void
+    public function test_model_boundary_normalizes_case_variants_before_database_uniqueness_check(): void
     {
-        User::factory()->withUsername('eric')->create();
+        $first = User::factory()->withUsername('Eric')->create();
+
+        $this->assertSame('eric', $first->username);
 
         $this->expectException(QueryException::class);
 
-        User::factory()->withUsername('eric')->create();
+        User::factory()->create(['username' => 'ERIC']);
+    }
+
+    #[DataProvider('usernameNormalizationProvider')]
+    public function test_username_normalization_handles_unicode_whitespace(?string $input, ?string $expected): void
+    {
+        $this->assertSame($expected, User::normalizeUsername($input));
+    }
+
+    public static function usernameNormalizationProvider(): array
+    {
+        return [
+            'null' => [null, null],
+            'empty string' => ['', null],
+            'ASCII whitespace only' => [" \t\n", null],
+            'full-width whitespace only' => ['　', null],
+            'non-breaking whitespace only' => ["\u{00A0}", null],
+            'trim and lowercase ASCII' => ['  Sales01 ', 'sales01'],
+            'trim full-width whitespace' => ['　Eric　', 'eric'],
+            'trim non-breaking whitespace' => ["\u{00A0}Eric\u{00A0}", 'eric'],
+        ];
     }
 
     public function test_factory_defaults_and_named_states_are_explicit(): void
@@ -87,6 +110,10 @@ class UserAccountSchemaTest extends TestCase
 
     public function test_migration_can_roll_back_and_run_again(): void
     {
+        if (DB::connection()->getDriverName() !== 'sqlite') {
+            $this->markTestSkipped('此測試只驗證 SQLite 交易式 DDL；MySQL up/down 由 gated integration test 驗證。');
+        }
+
         $migration = require database_path(
             'migrations/2026_07_23_000000_add_username_and_password_change_state_to_users_table.php'
         );

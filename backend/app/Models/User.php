@@ -6,6 +6,7 @@ namespace App\Models;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -31,9 +32,16 @@ class User extends Authenticatable
 
     public static function normalizeUsername(?string $username): ?string
     {
-        $normalized = Str::lower(trim((string) $username));
+        $normalized = Str::lower(Str::trim((string) $username));
 
         return $normalized === '' ? null : $normalized;
+    }
+
+    protected function username(): Attribute
+    {
+        return Attribute::make(
+            set: fn (?string $value): ?string => self::normalizeUsername($value),
+        );
     }
 
     /**
