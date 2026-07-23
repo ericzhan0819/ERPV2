@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
@@ -199,6 +200,26 @@ class LoginThrottleTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_ip_blocked_request_does_not_query_the_database(): void
+    {
+        $ip = '203.0.113.99';
+        $ipKey = 'login:ip:'.$ip;
+
+        for ($i = 0; $i < 30; $i++) {
+            RateLimiter::hit($ipKey, 60);
+        }
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $this->loginAs('blocked@example.com', 'wrong-password', $ip)
+            ->assertStatus(429)
+            ->assertHeader('Retry-After');
+
+        $this->assertCount(0, DB::getQueryLog());
+        DB::disableQueryLog();
+    }
+
     public function test_successful_login_clears_identifier_ip_and_account_limiters(): void
     {
         User::factory()->create([
@@ -255,6 +276,7 @@ class LoginThrottleTest extends TestCase
         RateLimiter::clear('login:identifier_ip:uid:1|127.0.0.1');
         RateLimiter::clear('login:ip:127.0.0.1');
         RateLimiter::clear('login:ip:203.0.113.5');
+        RateLimiter::clear('login:ip:203.0.113.99');
         RateLimiter::clear('login:ip:198.51.100.10');
 
         for ($i = 0; $i < 10; $i++) {

@@ -33,14 +33,17 @@ class AuthService
     public function login(string $login, string $password): User
     {
         $normalizedLogin = $this->normalizeLogin($login);
-        $loginUser = $this->resolveLoginUser($normalizedLogin);
-        $limiters = $this->limiters($normalizedLogin, $loginUser);
-        [$ipKey, $maxIpAttempts, $ipDecaySeconds] = $limiters['ip'];
+        $ip = (string) request()->ip();
+        $ipKey = 'login:ip:'.$ip;
 
         // IP 的總限制只計登入失敗次數，所以這裡只讀取是否超限，不會先占用一次額度。
-        if (RateLimiter::tooManyAttempts($ipKey, $maxIpAttempts)) {
+        // 此檢查必須在解析 User 之前，避免已封鎖的請求仍觸發資料庫查詢。
+        if (RateLimiter::tooManyAttempts($ipKey, self::MAX_IP_ATTEMPTS)) {
             throw new TooManyLoginAttemptsException(RateLimiter::availableIn($ipKey));
         }
+
+        $loginUser = $this->resolveLoginUser($normalizedLogin);
+        $limiters = $this->limiters($normalizedLogin, $loginUser, $ip);
 
         // 呼叫 Auth::attempt 前，先把帳號加 IP 與帳號本身的額度各記一次。
         // 這樣多個請求同時進來時，不會都先看到「尚未超限」而一起通過。
@@ -56,7 +59,7 @@ class AuthService
             'id' => $loginUser?->id ?? 0,
             'password' => $password,
         ])) {
-            RateLimiter::hit($ipKey, $ipDecaySeconds);
+            RateLimiter::hit($ipKey, self::IP_DECAY_SECONDS);
 
             throw new AuthenticationException('帳號或密碼錯誤');
         }
@@ -92,9 +95,8 @@ class AuthService
     /**
      * @return array<string, array{0: string, 1: int, 2: int}>
      */
-    private function limiters(string $login, ?User $user): array
+    private function limiters(string $login, ?User $user, string $ip): array
     {
-        $ip = (string) request()->ip();
         $canonicalIdentity = $user instanceof User
             ? 'uid:'.$user->id
             : 'raw:'.hash('sha256', $login);
@@ -102,7 +104,6 @@ class AuthService
         return [
             'identifier_ip' => ['login:identifier_ip:'.$canonicalIdentity.'|'.$ip, self::MAX_IDENTIFIER_IP_ATTEMPTS, self::IDENTIFIER_IP_DECAY_SECONDS],
             'account' => ['login:account:'.$canonicalIdentity, self::MAX_ACCOUNT_ATTEMPTS, self::ACCOUNT_DECAY_SECONDS],
-            'ip' => ['login:ip:'.$ip, self::MAX_IP_ATTEMPTS, self::IP_DECAY_SECONDS],
         ];
     }
 
