@@ -127,6 +127,8 @@ class AuthService
                 ->first();
         }
 
+        // Canonical limiter 必須先解析 User，因此 identifier+IP 已封鎖的 Email 請求仍會查詢一次。
+        // 本系統使用者數量很小，Phase 3 接受此成本；若要消除需另做 Email 小寫回填與索引調整。
         $users = User::query()
             ->whereRaw('LOWER(email) = ?', [$login])
             ->orderBy('id')
