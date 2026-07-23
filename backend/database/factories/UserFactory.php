@@ -21,8 +21,10 @@ class UserFactory extends Factory
         return [
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
+            'username' => null,
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
+            'must_change_password' => false,
             'remember_token' => Str::random(10),
             'role' => User::ROLE_MANAGER,
             'is_admin' => false,
@@ -59,6 +61,20 @@ class UserFactory extends Factory
         return $this->state(fn (array $attributes) => [
             'role' => User::ROLE_SALES,
             'is_admin' => false,
+        ]);
+    }
+
+    public function mustChangePassword(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'must_change_password' => true,
+        ]);
+    }
+
+    public function withUsername(?string $username = null): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'username' => User::normalizeUsername($username ?? 'user_'.Str::random(12)),
         ]);
     }
 }

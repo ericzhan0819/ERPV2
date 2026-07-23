@@ -19,17 +19,17 @@ Admin 建立員工 + 預設密碼
 
 ## 0. 前置盤點與範圍確認
 
-- [ ] 閱讀 `AGENTS.md`、`CLAUDE.md`、`README.md`、`UI.md`、`docs/current-state.md`、`backend/API.md`
-- [ ] 閱讀 `企劃書_v1.5.md` 與本 PLAN
-- [ ] 檢查 Git branch、tag 與工作樹，保留無關 untracked／modified files
-- [ ] 確認 `v1.4-smoke-passed` 封板基準
-- [ ] 盤點 User migration、Model、Factory、Seeder、Request、Controller、Service、Resource、Policy 與 tests
-- [ ] 盤點 Auth Login Request、Controller、Service、Rate Limiter、Session 與 Authentication Audit
-- [ ] 盤點 `/api/me`、`auth:sanctum`、`active` middleware 與 protected routes
-- [ ] 盤點 Frontend Login、Auth Context、ProtectedRoute、AppLayout、User List、Theme Provider 與 API types
-- [ ] 搜尋所有「中古車行系統」「中古車行內部營運系統」與 document title 硬編碼
-- [ ] 記錄實作前 backend／frontend 基準測試結果
-- [ ] 確認 v1.5 不建立線上 Settings、MFA、Email reset、SSO 或 Website 功能
+- [x] 閱讀 `AGENTS.md`、`CLAUDE.md`、`README.md`、`UI.md`、`docs/current-state.md`、`backend/API.md`
+- [x] 閱讀 `企劃書_v1.5.md` 與本 PLAN
+- [x] 檢查 Git branch、tag 與工作樹，保留無關 untracked／modified files
+- [x] 確認 `v1.4-smoke-passed` 封板基準
+- [x] 盤點 User migration、Model、Factory、Seeder、Request、Controller、Service、Resource、Policy 與 tests
+- [x] 盤點 Auth Login Request、Controller、Service、Rate Limiter、Session 與 Authentication Audit
+- [x] 盤點 `/api/me`、`auth:sanctum`、`active` middleware 與 protected routes
+- [x] 盤點 Frontend Login、Auth Context、ProtectedRoute、AppLayout、User List、Theme Provider 與 API types
+- [x] 搜尋所有「中古車行系統」「中古車行內部營運系統」與 document title 硬編碼
+- [x] 記錄實作前 backend／frontend 基準測試結果
+- [x] 確認 v1.5 不建立線上 Settings、MFA、Email reset、SSO 或 Website 功能
 
 **Migration：否。**
 
@@ -41,33 +41,33 @@ Admin 建立員工 + 預設密碼
 
 ### 1.1 Migration
 
-- [ ] 新增一筆 v1.5 migration
-- [ ] `users.username`：nullable string
-- [ ] 建立 username unique index
-- [ ] `users.must_change_password`：boolean default false
-- [ ] 欄位順序與現有 schema 清楚
-- [ ] 不回填 username
-- [ ] 不從 Email、姓名或其他欄位推測 username
-- [ ] 不將既有 User 全部設為 `must_change_password=true`
-- [ ] down migration 先移除 unique index，再移除欄位
-- [ ] SQLite 與 MySQL／MariaDB migration 行為一致
+- [x] 新增一筆 v1.5 migration
+- [x] `users.username`：nullable string
+- [x] 建立 username unique index
+- [x] `users.must_change_password`：boolean default false
+- [x] 欄位順序與現有 schema 清楚
+- [x] 不回填 username
+- [x] 不從 Email、姓名或其他欄位推測 username
+- [x] 不將既有 User 全部設為 `must_change_password=true`
+- [x] down migration 先移除 unique index，再移除欄位
+- [x] SQLite 與 MySQL／MariaDB migration 行為一致
 
 ### 1.2 Model
 
-- [ ] `User` fillable 加入 `username`、`must_change_password`
-- [ ] `must_change_password` cast 為 boolean
-- [ ] username normalization 集中於 Request／Service 或明確 model boundary，不散落各 Controller
-- [ ] Password 仍維持 hidden 與 hashed cast
-- [ ] 不新增與角色或財務權限無關的方法
+- [x] `User` fillable 加入 `username`、`must_change_password`
+- [x] `must_change_password` cast 為 boolean
+- [x] username normalization 集中於 Request／Service 或明確 model boundary，不散落各 Controller
+- [x] Password 仍維持 hidden 與 hashed cast
+- [x] 不新增與角色或財務權限無關的方法
 
 ### 1.3 Factory／Seeder
 
-- [ ] Factory 預設建立 `username=null`
-- [ ] Factory 預設 `must_change_password=false`，避免大量既有測試改變語意
-- [ ] 增加可讀的 factory state：待首次改密碼
-- [ ] 增加可讀的 factory state：具有 username
-- [ ] `AdminUserSeeder` 明確保持 `must_change_password=false`
-- [ ] Seeder 不替 admin 猜測 username，除非既有開發帳號需求明確指定
+- [x] Factory 預設建立 `username=null`
+- [x] Factory 預設 `must_change_password=false`，避免大量既有測試改變語意
+- [x] 增加可讀的 factory state：待首次改密碼
+- [x] 增加可讀的 factory state：具有 username
+- [x] `AdminUserSeeder` 明確保持 `must_change_password=false`
+- [x] Seeder 不替 admin 猜測 username，除非既有開發帳號需求明確指定
 
 **Migration：是。**
 

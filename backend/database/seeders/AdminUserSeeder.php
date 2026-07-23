@@ -15,6 +15,7 @@ class AdminUserSeeder extends Seeder
             [
                 'name' => '系統管理員',
                 'password' => Hash::make('password'),
+                'must_change_password' => false,
                 'role' => User::ROLE_ADMIN,
                 'is_admin' => true,
                 'is_active' => true,

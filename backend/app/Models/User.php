@@ -11,9 +11,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable(['name', 'email', 'password', 'is_admin', 'is_active', 'role', 'phone', 'job_title', 'hire_date', 'notes'])]
+#[Fillable(['name', 'email', 'username', 'password', 'must_change_password', 'is_admin', 'is_active', 'role', 'phone', 'job_title', 'hire_date', 'notes'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -28,6 +29,13 @@ class User extends Authenticatable
 
     public const ROLES = [self::ROLE_ADMIN, self::ROLE_MANAGER, self::ROLE_SALES];
 
+    public static function normalizeUsername(?string $username): ?string
+    {
+        $normalized = Str::lower(trim((string) $username));
+
+        return $normalized === '' ? null : $normalized;
+    }
+
     /**
      * 取得需要轉型的欄位。
      *
@@ -38,6 +46,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'must_change_password' => 'boolean',
             'is_admin' => 'boolean',
             'is_active' => 'boolean',
             'hire_date' => 'date',
