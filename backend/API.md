@@ -61,7 +61,7 @@ Request body：
 
 錯誤：
 - `422` 帳密錯誤或帳號不存在
-- `403` 帳號已被停用（見下方 `EnsureUserIsActive`）
+- `422` 帳號已被停用
 - `429` 短時間內登入失敗次數過多（`Retry-After` header 秒數）
 
 ### POST /api/logout
@@ -83,8 +83,13 @@ Request body：
   "email": "admin@example.com",
   "username": "owner",
   "must_change_password": false,
+  "role": "admin",
   "is_admin": true,
-  "is_active": true
+  "is_active": true,
+  "phone": null,
+  "job_title": null,
+  "hire_date": null,
+  "notes": null
 }
 ```
 

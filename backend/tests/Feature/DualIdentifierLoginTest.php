@@ -28,24 +28,35 @@ class DualIdentifierLoginTest extends TestCase
             'email' => 'admin@example.com',
             'password' => 'password',
         ])->assertUnprocessable()
-            ->assertJsonValidationErrors(['login']);
+            ->assertJsonValidationErrors(['login'])
+            ->assertJsonPath('errors.login.0', '請輸入帳號或 Email');
 
         $this->postJson('/api/login', [
             'login' => ['admin@example.com'],
             'password' => 'password',
         ])->assertUnprocessable()
-            ->assertJsonValidationErrors(['login']);
+            ->assertJsonValidationErrors(['login'])
+            ->assertJsonPath('errors.login.0', '帳號或 Email 格式不正確');
 
         $this->postJson('/api/login', [
             'login' => str_repeat('a', 256),
             'password' => 'password',
         ])->assertUnprocessable()
-            ->assertJsonValidationErrors(['login']);
+            ->assertJsonValidationErrors(['login'])
+            ->assertJsonPath('errors.login.0', '帳號或 Email 不得超過 255 個字元');
 
         $this->postJson('/api/login', [
             'login' => 'admin@example.com',
         ])->assertUnprocessable()
-            ->assertJsonValidationErrors(['password']);
+            ->assertJsonValidationErrors(['password'])
+            ->assertJsonPath('errors.password.0', '請輸入密碼');
+
+        $this->postJson('/api/login', [
+            'login' => 'admin@example.com',
+            'password' => ['password'],
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['password'])
+            ->assertJsonPath('errors.password.0', '密碼格式不正確');
     }
 
     public function test_email_login_is_trimmed_case_insensitive_and_returns_account_state(): void
@@ -103,6 +114,28 @@ class DualIdentifierLoginTest extends TestCase
         ])->assertSuccessful()
             ->assertJsonPath('data.id', $user->id)
             ->assertJsonPath('data.username', null);
+    }
+
+    public function test_case_variant_duplicate_emails_fail_closed_instead_of_authenticating_an_arbitrary_user(): void
+    {
+        User::factory()->create([
+            'email' => 'Dup@example.com',
+            'password' => Hash::make('password-a'),
+        ]);
+        User::factory()->create([
+            'email' => 'dup@example.com',
+            'password' => Hash::make('password-b'),
+        ]);
+
+        foreach (['password-a', 'password-b'] as $password) {
+            $this->postJson('/api/login', [
+                'login' => 'dup@example.com',
+                'password' => $password,
+            ])->assertUnprocessable()
+                ->assertExactJson(['message' => '帳號或密碼錯誤']);
+
+            $this->assertGuest();
+        }
     }
 
     public function test_unknown_identifiers_and_wrong_password_share_the_same_response(): void

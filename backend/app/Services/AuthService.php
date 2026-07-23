@@ -14,9 +14,9 @@ class AuthService
 {
     public function __construct(private readonly AuditLogService $auditLogService) {}
 
-    private const MAX_EMAIL_IP_ATTEMPTS = 5;
+    private const MAX_IDENTIFIER_IP_ATTEMPTS = 5;
 
-    private const EMAIL_IP_DECAY_SECONDS = 60;
+    private const IDENTIFIER_IP_DECAY_SECONDS = 60;
 
     private const MAX_ACCOUNT_ATTEMPTS = 10;
 
@@ -33,7 +33,8 @@ class AuthService
     public function login(string $login, string $password): User
     {
         $normalizedLogin = $this->normalizeLogin($login);
-        $limiters = $this->limiters($normalizedLogin);
+        $loginUser = $this->resolveLoginUser($normalizedLogin);
+        $limiters = $this->limiters($normalizedLogin, $loginUser);
         [$ipKey, $maxIpAttempts, $ipDecaySeconds] = $limiters['ip'];
 
         // IP 的總限制只計登入失敗次數，所以這裡只讀取是否超限，不會先占用一次額度。
@@ -43,7 +44,7 @@ class AuthService
 
         // 呼叫 Auth::attempt 前，先把帳號加 IP 與帳號本身的額度各記一次。
         // 這樣多個請求同時進來時，不會都先看到「尚未超限」而一起通過。
-        foreach (['email_ip', 'account'] as $name) {
+        foreach (['identifier_ip', 'account'] as $name) {
             [$key, $maxAttempts, $decaySeconds] = $limiters[$name];
 
             if (RateLimiter::hit($key, $decaySeconds) > $maxAttempts) {
@@ -52,7 +53,7 @@ class AuthService
         }
 
         if (! Auth::attempt([
-            ...$this->credentialsFor($normalizedLogin),
+            'id' => $loginUser?->id ?? 0,
             'password' => $password,
         ])) {
             RateLimiter::hit($ipKey, $ipDecaySeconds);
@@ -60,7 +61,7 @@ class AuthService
             throw new AuthenticationException('帳號或密碼錯誤');
         }
 
-        RateLimiter::clear($limiters['email_ip'][0]);
+        RateLimiter::clear($limiters['identifier_ip'][0]);
         RateLimiter::clear($limiters['account'][0]);
 
         /** @var User $user */
@@ -91,13 +92,16 @@ class AuthService
     /**
      * @return array<string, array{0: string, 1: int, 2: int}>
      */
-    private function limiters(string $login): array
+    private function limiters(string $login, ?User $user): array
     {
         $ip = (string) request()->ip();
+        $canonicalIdentity = $user instanceof User
+            ? 'uid:'.$user->id
+            : 'raw:'.hash('sha256', $login);
 
         return [
-            'email_ip' => ['login:email_ip:'.$login.'|'.$ip, self::MAX_EMAIL_IP_ATTEMPTS, self::EMAIL_IP_DECAY_SECONDS],
-            'account' => ['login:account:'.$login, self::MAX_ACCOUNT_ATTEMPTS, self::ACCOUNT_DECAY_SECONDS],
+            'identifier_ip' => ['login:identifier_ip:'.$canonicalIdentity.'|'.$ip, self::MAX_IDENTIFIER_IP_ATTEMPTS, self::IDENTIFIER_IP_DECAY_SECONDS],
+            'account' => ['login:account:'.$canonicalIdentity, self::MAX_ACCOUNT_ATTEMPTS, self::ACCOUNT_DECAY_SECONDS],
             'ip' => ['login:ip:'.$ip, self::MAX_IP_ATTEMPTS, self::IP_DECAY_SECONDS],
         ];
     }
@@ -112,21 +116,23 @@ class AuthService
     }
 
     /**
-     * @return array{email: string}|array{username: string}
+     * Email 大小寫相同的資料若不只一筆，不能任選其中一筆進行認證。
      */
-    private function credentialsFor(string $login): array
+    private function resolveLoginUser(string $login): ?User
     {
         if (! Str::contains($login, '@')) {
-            return ['username' => $login];
+            return User::query()
+                ->where('username', $login)
+                ->first();
         }
 
-        // SQLite 的字串比較預設區分大小寫；先取出正式 Email，讓測試與正式資料庫
-        // 都維持既有的 Email 大小寫不敏感登入行為。
-        $email = User::query()
+        $users = User::query()
             ->whereRaw('LOWER(email) = ?', [$login])
-            ->value('email');
+            ->orderBy('id')
+            ->limit(2)
+            ->get();
 
-        return ['email' => is_string($email) ? $email : $login];
+        return $users->count() === 1 ? $users->first() : null;
     }
 
     /**

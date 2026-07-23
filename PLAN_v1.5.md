@@ -174,31 +174,31 @@ Admin 建立員工 + 預設密碼
 
 ### 4.1 Key 設計
 
-- [ ] 保留 IP-wide limiter
-- [ ] identifier + IP limiter 改用 normalized login identifier
-- [ ] 可解析到 User 時，account limiter 使用 canonical User identity
-- [ ] username 與 Email 必須命中同一 canonical account limiter
-- [ ] 不存在 identifier 使用穩定、不互相污染的 account key
-- [ ] 成功登入清除正確 identifier + IP 與 canonical account limiter
-- [ ] 不清除其他 User 的 limiter
+- [x] 保留 IP-wide limiter
+- [x] identifier + IP limiter：可解析時使用 canonical User identity，否則使用 normalized login hash
+- [x] 可解析到 User 時，account limiter 使用 canonical User identity
+- [x] username 與 Email 必須命中同一 canonical account limiter
+- [x] 不存在 identifier 使用穩定、不互相污染的 account key
+- [x] 成功登入清除正確 identifier + IP 與 canonical account limiter
+- [x] 不清除其他 User 的 limiter
 
 ### 4.2 既有限制保留
 
-- [ ] 同 identifier + IP 限制
-- [ ] 同帳號 rotating IP 限制
-- [ ] 同 IP rotating identifier 限制
-- [ ] 成功登入不累積 IP-wide failure
-- [ ] 被阻擋請求不再執行 credential check
-- [ ] 429 回 `Retry-After`
+- [x] 同 identifier + IP 限制
+- [x] 同帳號 rotating IP 限制
+- [x] 同 IP rotating identifier 限制
+- [x] 成功登入不累積 IP-wide failure
+- [x] 被阻擋請求不再執行 credential check
+- [x] 429 回 `Retry-After`
 
 ### 4.3 Alias bypass tests
 
-- [ ] username 失敗數次後改用 Email，仍累計同一 account limiter
-- [ ] Email 失敗數次後改用 username，仍累計同一 account limiter
-- [ ] username／Email 不同大小寫不能取得新 limiter 額度
-- [ ] 同 IP 輪替不存在 username／Email 仍受 IP-wide limiter
-- [ ] 成功 username login 清除 canonical limiter
-- [ ] 成功 Email login 清除 canonical limiter
+- [x] username 失敗數次後改用 Email，仍累計同一 account limiter
+- [x] Email 失敗數次後改用 username，仍累計同一 account limiter
+- [x] username／Email 不同大小寫不能取得新 limiter 額度
+- [x] 同 IP 輪替不存在 username／Email 仍受 IP-wide limiter
+- [x] 成功 username login 清除 canonical limiter
+- [x] 成功 Email login 清除 canonical limiter
 
 **Migration：否。**
 

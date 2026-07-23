@@ -60,6 +60,98 @@ class LoginThrottleTest extends TestCase
         $this->loginAs('admin@example.com', 'wrong-password', '10.0.0.99')->assertStatus(429);
     }
 
+    public function test_email_and_username_share_one_canonical_account_limiter(): void
+    {
+        User::factory()->withUsername('victim')->create([
+            'email' => 'victim@example.com',
+        ]);
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->loginAs('victim@example.com', 'wrong-password', "10.1.0.$i")->assertStatus(422);
+        }
+
+        for ($i = 5; $i < 10; $i++) {
+            $this->loginAs('VICTIM', 'wrong-password', "10.1.0.$i")->assertStatus(422);
+        }
+
+        $this->loginAs('victim@example.com', 'wrong-password', '10.1.0.10')
+            ->assertStatus(429)
+            ->assertHeader('Retry-After');
+    }
+
+    public function test_username_and_email_reverse_order_share_one_canonical_account_limiter(): void
+    {
+        User::factory()->withUsername('victim')->create([
+            'email' => 'victim@example.com',
+        ]);
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->loginAs('VICTIM', 'wrong-password', "10.3.0.$i")->assertStatus(422);
+        }
+
+        for ($i = 5; $i < 10; $i++) {
+            $this->loginAs('VICTIM@EXAMPLE.COM', 'wrong-password', "10.3.0.$i")->assertStatus(422);
+        }
+
+        $this->loginAs('victim', 'wrong-password', '10.3.0.10')
+            ->assertStatus(429)
+            ->assertHeader('Retry-After');
+    }
+
+    public function test_email_and_username_share_one_identifier_ip_limiter(): void
+    {
+        User::factory()->withUsername('victim')->create([
+            'email' => 'victim@example.com',
+        ]);
+
+        for ($i = 0; $i < 3; $i++) {
+            $this->loginAs('victim@example.com', 'wrong-password')->assertStatus(422);
+        }
+
+        for ($i = 0; $i < 2; $i++) {
+            $this->loginAs('VICTIM', 'wrong-password')->assertStatus(422);
+        }
+
+        $this->loginAs('victim@example.com', 'wrong-password')
+            ->assertStatus(429)
+            ->assertHeader('Retry-After');
+    }
+
+    public function test_identifier_case_variants_do_not_get_new_limiter_allowance(): void
+    {
+        User::factory()->withUsername('victim')->create([
+            'email' => 'Victim@Example.com',
+        ]);
+
+        foreach (['victim@example.com', 'VICTIM@EXAMPLE.COM', 'Victim@Example.com', 'victim', 'VICTIM'] as $login) {
+            $this->loginAs($login, 'wrong-password')->assertStatus(422);
+        }
+
+        $this->loginAs('victim@example.com', 'wrong-password')
+            ->assertStatus(429)
+            ->assertHeader('Retry-After');
+    }
+
+    public function test_successful_alias_login_clears_the_canonical_account_limiter(): void
+    {
+        User::factory()->withUsername('victim')->create([
+            'email' => 'victim@example.com',
+            'password' => bcrypt('correct-password'),
+        ]);
+
+        for ($i = 0; $i < 9; $i++) {
+            $login = $i % 2 === 0 ? 'victim@example.com' : 'VICTIM';
+            $this->loginAs($login, 'wrong-password', "10.2.0.$i")->assertStatus(422);
+        }
+
+        $this->loginAs('VICTIM', 'correct-password', '10.2.0.9')->assertSuccessful();
+        $this->postJson('/api/logout')->assertSuccessful();
+
+        for ($i = 10; $i < 19; $i++) {
+            $this->loginAs('victim@example.com', 'wrong-password', "10.2.0.$i")->assertStatus(422);
+        }
+    }
+
     public function test_same_ip_rotating_email_failures_are_blocked_by_ip_wide_limiter(): void
     {
         User::factory()->create(['email' => 'victim@example.com']);
@@ -107,7 +199,7 @@ class LoginThrottleTest extends TestCase
         $this->assertGuest();
     }
 
-    public function test_successful_login_clears_email_ip_and_account_limiters(): void
+    public function test_successful_login_clears_identifier_ip_and_account_limiters(): void
     {
         User::factory()->create([
             'email' => 'admin@example.com',
@@ -124,6 +216,29 @@ class LoginThrottleTest extends TestCase
         $this->loginAs('admin@example.com', 'wrong-password')->assertStatus(422);
     }
 
+    public function test_successful_login_does_not_clear_another_users_account_limiter(): void
+    {
+        User::factory()->withUsername('first.user')->create([
+            'email' => 'first@example.com',
+            'password' => bcrypt('correct-password'),
+        ]);
+        User::factory()->withUsername('second.user')->create([
+            'email' => 'second@example.com',
+        ]);
+
+        for ($i = 0; $i < 9; $i++) {
+            $this->loginAs('second.user', 'wrong-password', "10.4.0.$i")->assertStatus(422);
+        }
+
+        $this->loginAs('first@example.com', 'correct-password', '10.4.0.9')->assertSuccessful();
+        $this->postJson('/api/logout')->assertSuccessful();
+
+        $this->loginAs('second@example.com', 'wrong-password', '10.4.0.10')->assertStatus(422);
+        $this->loginAs('SECOND.USER', 'wrong-password', '10.4.0.11')
+            ->assertStatus(429)
+            ->assertHeader('Retry-After');
+    }
+
     private function loginAs(string $login, string $password, string $ip = '127.0.0.1'): TestResponse
     {
         return $this->withServerVariables(['REMOTE_ADDR' => $ip])
@@ -136,21 +251,44 @@ class LoginThrottleTest extends TestCase
 
     private function clearAllLimiters(): void
     {
-        RateLimiter::clear('login:email_ip:admin@example.com|127.0.0.1');
-        RateLimiter::clear('login:account:admin@example.com');
+        RateLimiter::clear('login:account:uid:1');
+        RateLimiter::clear('login:identifier_ip:uid:1|127.0.0.1');
         RateLimiter::clear('login:ip:127.0.0.1');
         RateLimiter::clear('login:ip:203.0.113.5');
         RateLimiter::clear('login:ip:198.51.100.10');
-        RateLimiter::clear('login:account:victim@example.com');
 
         for ($i = 0; $i < 10; $i++) {
-            RateLimiter::clear("login:email_ip:admin@example.com|10.0.0.$i");
+            RateLimiter::clear("login:identifier_ip:uid:1|10.0.0.$i");
             RateLimiter::clear("login:ip:10.0.0.$i");
+            RateLimiter::clear("login:identifier_ip:uid:1|10.1.0.$i");
+            RateLimiter::clear("login:ip:10.1.0.$i");
+            RateLimiter::clear("login:identifier_ip:uid:1|10.2.0.$i");
+            RateLimiter::clear("login:ip:10.2.0.$i");
+            RateLimiter::clear("login:identifier_ip:uid:1|10.3.0.$i");
+            RateLimiter::clear("login:ip:10.3.0.$i");
+            RateLimiter::clear("login:identifier_ip:uid:2|10.4.0.$i");
+            RateLimiter::clear("login:ip:10.4.0.$i");
+        }
+
+        RateLimiter::clear('login:identifier_ip:uid:1|10.1.0.10');
+        RateLimiter::clear('login:ip:10.1.0.10');
+        RateLimiter::clear('login:identifier_ip:uid:1|10.3.0.10');
+        RateLimiter::clear('login:ip:10.3.0.10');
+        RateLimiter::clear('login:identifier_ip:uid:2|10.4.0.10');
+        RateLimiter::clear('login:ip:10.4.0.10');
+        RateLimiter::clear('login:identifier_ip:uid:2|10.4.0.11');
+        RateLimiter::clear('login:ip:10.4.0.11');
+        RateLimiter::clear('login:account:uid:2');
+
+        for ($i = 10; $i < 19; $i++) {
+            RateLimiter::clear("login:identifier_ip:uid:1|10.2.0.$i");
+            RateLimiter::clear("login:ip:10.2.0.$i");
         }
 
         for ($i = 0; $i < 30; $i++) {
-            RateLimiter::clear("login:email_ip:attacker{$i}@example.com|203.0.113.5");
-            RateLimiter::clear("login:account:attacker{$i}@example.com");
+            $rawIdentity = hash('sha256', "attacker{$i}@example.com");
+            RateLimiter::clear("login:identifier_ip:raw:{$rawIdentity}|203.0.113.5");
+            RateLimiter::clear("login:account:raw:{$rawIdentity}");
         }
     }
 }

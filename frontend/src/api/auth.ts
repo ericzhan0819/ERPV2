@@ -1,9 +1,9 @@
 import { apiClient, ensureCsrfCookie } from './client'
 import type { User } from '../types/auth'
 
-export async function login(email: string, password: string): Promise<User> {
+export async function login(login: string, password: string): Promise<User> {
   await ensureCsrfCookie()
-  const { data } = await apiClient.post<{ data: User }>('/api/login', { email, password })
+  const { data } = await apiClient.post<{ data: User }>('/api/login', { login, password })
   return data.data
 }
 
