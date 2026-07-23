@@ -20,6 +20,9 @@ use Illuminate\Validation\ValidationException;
 
 class UserService
 {
+    // MySQL 錯誤 1062：違反 unique constraint。
+    private const MYSQL_ERROR_DUPLICATE_ENTRY = 1062;
+
     // MySQL 錯誤 1451：無法刪除或更新父資料列，因為外鍵限制失敗。
     private const MYSQL_ERROR_FOREIGN_KEY_CONSTRAINT_FAILS = 1451;
 
@@ -145,6 +148,25 @@ class UserService
         return $user;
     }
 
+    public function setUsername(User $user, ?string $username): User
+    {
+        $user->username = $username;
+
+        try {
+            $user->save();
+        } catch (QueryException $e) {
+            if ($this->isUsernameUniqueConstraintViolation($e)) {
+                throw ValidationException::withMessages([
+                    'username' => ['此帳號名稱已被使用'],
+                ]);
+            }
+
+            throw $e;
+        }
+
+        return $user;
+    }
+
     public function deleteUser(User $actingUser, User $user): void
     {
         if ($actingUser->is($user)) {
@@ -216,6 +238,19 @@ class UserService
                 throw $e;
             }
         }, self::TRANSACTION_ATTEMPTS);
+    }
+
+    private function isUsernameUniqueConstraintViolation(QueryException $exception): bool
+    {
+        $driverError = (int) ($exception->errorInfo[1] ?? 0);
+        $message = strtolower($exception->getMessage());
+
+        if ($driverError === self::MYSQL_ERROR_DUPLICATE_ENTRY) {
+            return str_contains($message, 'users_username_unique');
+        }
+
+        // SQLite 測試環境的 unique 錯誤會指出欄位，不會包含 migration 的 index 名稱。
+        return $driverError === 19 && str_contains($message, 'users.username');
     }
 
     /**

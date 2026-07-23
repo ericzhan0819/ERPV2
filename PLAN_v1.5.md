@@ -88,30 +88,30 @@ Admin 建立員工 + 預設密碼
 
 ### 2.1 正式規則
 
-- [ ] nullable
-- [ ] 空字串轉為 null
-- [ ] trim
-- [ ] 轉為小寫後再驗證／儲存
-- [ ] 長度 3～30
-- [ ] 只允許 `a-z`、`0-9`、`.`、`_`、`-`
-- [ ] 禁止 `@`
-- [ ] Database 與 application 層都保證唯一
-- [ ] 大小寫視為同一帳號
+- [x] nullable
+- [x] 空字串轉為 null
+- [x] trim
+- [x] 轉為小寫後再驗證／儲存
+- [x] 長度 3～30
+- [x] 只允許 `a-z`、`0-9`、`.`、`_`、`-`
+- [x] 禁止 `@`
+- [x] Database 與 application 層都保證唯一
+- [x] 大小寫視為同一帳號
 
 ### 2.2 Validator
 
-- [ ] 建立可重用的 username rule／Request pattern
-- [ ] Self profile update 使用同一規則
-- [ ] Factory／test fixture 不繞過 normalization 契約
-- [ ] Validation message 使用繁體中文
-- [ ] Username 未設定不影響 Email 登入
+- [x] 建立可重用的 username rule／Request pattern
+- [x] Self profile update 使用同一規則
+- [x] Factory／test fixture 不繞過 normalization 契約
+- [x] Validation message 使用繁體中文
+- [x] Username 未設定不影響 Email 登入
 
 ### 2.3 競態
 
-- [ ] 兩位使用者同時搶同一 username 時，只有一方成功
-- [ ] unique constraint race 不得變成未處理 500
-- [ ] QueryException 轉為 username validation error
-- [ ] 不以先查再寫作為唯一唯一性保護
+- [x] 兩位使用者同時搶同一 username 時，只有一方成功
+- [x] unique constraint race 不得變成未處理 500
+- [x] QueryException 轉為 username validation error
+- [x] 不以先查再寫作為唯一唯一性保護
 
 **Migration：否。**
 
