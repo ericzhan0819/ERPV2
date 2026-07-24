@@ -43,7 +43,7 @@ class UpdateUserRequest extends FormRequest
             'is_admin.missing' => '角色請改用 PATCH /api/users/{id}/role 變更',
             'role.missing' => '角色請改用 PATCH /api/users/{id}/role 變更',
             'username.missing' => '管理員一般資料更新不可修改帳號名稱',
-            'must_change_password.missing' => '首次改密碼狀態請透過重設密碼或本人改密碼流程變更',
+            'must_change_password.missing' => '管理員一般資料更新不可修改首次改密碼狀態',
             'password.missing' => '密碼請改用 POST /api/users/{id}/reset-password 重設',
         ];
     }

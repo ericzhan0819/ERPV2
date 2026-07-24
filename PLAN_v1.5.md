@@ -209,7 +209,7 @@ Admin 建立員工 + 預設密碼
 ### Adversarial Review Follow-up（跨部分既有契約修正）
 
 - [x] Generic Update Request 明確拒絕 username／must_change_password／password，避免專用流程欄位被靜默忽略成假成功
-- [x] Generic Update 的 username 錯誤訊息與 API 文件採永久有效的中性契約，不綁版本階段或尚未存在的端點
+- [x] Generic Update 的 username／must_change_password 錯誤訊息與 API 文件採永久有效的中性契約，不綁版本階段或尚未存在的端點
 
 ---
 

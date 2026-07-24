@@ -380,12 +380,12 @@ class UserTest extends TestCase
             'must change password false' => [
                 'must_change_password',
                 false,
-                '首次改密碼狀態請透過重設密碼或本人改密碼流程變更',
+                '管理員一般資料更新不可修改首次改密碼狀態',
             ],
             'must change password null' => [
                 'must_change_password',
                 null,
-                '首次改密碼狀態請透過重設密碼或本人改密碼流程變更',
+                '管理員一般資料更新不可修改首次改密碼狀態',
             ],
             'password string' => [
                 'password',
