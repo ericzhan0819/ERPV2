@@ -204,6 +204,8 @@ Admin 建立員工 + 預設密碼
 
 **驗收：** 雙登入不能降低既有 brute-force 防護。
 
+**完成註記（2026-07-24）：** 核心實作已於第 3 部分 adversarial review 因安全阻斷而提前完成；本部分已重新逐項驗收，並補上「不存在 username／Email 混合輪替」與「Email 成功登入清除 alias 共用額度」的直接回歸測試。完整證據見 `docs/v1.5-phase4-handoff.md`。
+
 ---
 
 ## 5. 首次登入與重設密碼狀態

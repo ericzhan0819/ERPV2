@@ -153,13 +153,36 @@ class LoginThrottleTest extends TestCase
         }
     }
 
-    public function test_same_ip_rotating_email_failures_are_blocked_by_ip_wide_limiter(): void
+    public function test_successful_email_login_clears_the_canonical_alias_limiter(): void
+    {
+        User::factory()->withUsername('victim')->create([
+            'email' => 'victim@example.com',
+            'password' => bcrypt('correct-password'),
+        ]);
+
+        for ($i = 0; $i < 9; $i++) {
+            $login = $i % 2 === 0 ? 'victim' : 'VICTIM@EXAMPLE.COM';
+            $this->loginAs($login, 'wrong-password', "10.5.0.$i")->assertStatus(422);
+        }
+
+        $this->loginAs('VICTIM@EXAMPLE.COM', 'correct-password', '10.5.0.9')->assertSuccessful();
+        $this->postJson('/api/logout')->assertSuccessful();
+
+        for ($i = 10; $i < 19; $i++) {
+            $this->loginAs('VICTIM', 'wrong-password', "10.5.0.$i")->assertStatus(422);
+        }
+    }
+
+    public function test_same_ip_rotating_unknown_username_and_email_failures_are_blocked_by_ip_wide_limiter(): void
     {
         User::factory()->create(['email' => 'victim@example.com']);
 
-        // 此段說明相鄰程式碼的用途與預期行為。
         for ($i = 0; $i < 30; $i++) {
-            $this->loginAs("attacker{$i}@example.com", 'wrong-password', '203.0.113.5')->assertStatus(422);
+            $login = $i % 2 === 0
+                ? "unknown.user{$i}"
+                : "attacker{$i}@example.com";
+
+            $this->loginAs($login, 'wrong-password', '203.0.113.5')->assertStatus(422);
         }
 
         $this->loginAs('victim@example.com', 'wrong-password', '203.0.113.5')->assertStatus(429);
@@ -290,6 +313,8 @@ class LoginThrottleTest extends TestCase
             RateLimiter::clear("login:ip:10.3.0.$i");
             RateLimiter::clear("login:identifier_ip:uid:2|10.4.0.$i");
             RateLimiter::clear("login:ip:10.4.0.$i");
+            RateLimiter::clear("login:identifier_ip:uid:1|10.5.0.$i");
+            RateLimiter::clear("login:ip:10.5.0.$i");
         }
 
         RateLimiter::clear('login:identifier_ip:uid:1|10.1.0.10');
@@ -305,10 +330,16 @@ class LoginThrottleTest extends TestCase
         for ($i = 10; $i < 19; $i++) {
             RateLimiter::clear("login:identifier_ip:uid:1|10.2.0.$i");
             RateLimiter::clear("login:ip:10.2.0.$i");
+            RateLimiter::clear("login:identifier_ip:uid:1|10.5.0.$i");
+            RateLimiter::clear("login:ip:10.5.0.$i");
         }
 
         for ($i = 0; $i < 30; $i++) {
-            $rawIdentity = hash('sha256', "attacker{$i}@example.com");
+            $login = $i % 2 === 0
+                ? "unknown.user{$i}"
+                : "attacker{$i}@example.com";
+            $rawIdentity = hash('sha256', $login);
+
             RateLimiter::clear("login:identifier_ip:raw:{$rawIdentity}|203.0.113.5");
             RateLimiter::clear("login:account:raw:{$rawIdentity}");
         }
