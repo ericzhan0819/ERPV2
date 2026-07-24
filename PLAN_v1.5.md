@@ -216,6 +216,7 @@ Admin 建立員工 + 預設密碼
 - [ ] `UserService::createUser()` 明確設 `must_change_password=true`
 - [ ] 不接受 Admin create payload 偷帶 `must_change_password=false`
 - [ ] Store Request 明確拒絕 username／must_change_password，避免未授權覆寫
+- [x] Generic Update Request 明確拒絕 username／must_change_password，避免專用流程欄位被靜默忽略成假成功
 - [ ] 新帳號 Resource 回傳 flag
 
 ### 5.2 Admin Reset Password

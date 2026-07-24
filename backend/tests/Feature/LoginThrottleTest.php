@@ -61,6 +61,21 @@ class LoginThrottleTest extends TestCase
         $this->loginAs('admin@example.com', 'wrong-password', '10.0.0.99')->assertStatus(429);
     }
 
+    public function test_unknown_identifier_limiter_uses_keyed_digest_instead_of_plain_sha256(): void
+    {
+        $login = 'guessable.user';
+        $ip = '192.0.2.50';
+        $digest = hash_hmac('sha256', $login, (string) config('app.key'));
+
+        for ($i = 0; $i < 5; $i++) {
+            RateLimiter::hit("login:identifier_ip:raw:{$digest}|{$ip}", 60);
+        }
+
+        $this->loginAs($login, 'wrong-password', $ip)
+            ->assertStatus(429)
+            ->assertHeader('Retry-After');
+    }
+
     public function test_email_and_username_share_one_canonical_account_limiter(): void
     {
         User::factory()->withUsername('victim')->create([
@@ -301,6 +316,12 @@ class LoginThrottleTest extends TestCase
         RateLimiter::clear('login:ip:203.0.113.5');
         RateLimiter::clear('login:ip:203.0.113.99');
         RateLimiter::clear('login:ip:198.51.100.10');
+        RateLimiter::clear('login:ip:192.0.2.50');
+        RateLimiter::clear(
+            'login:identifier_ip:raw:'
+            .hash_hmac('sha256', 'guessable.user', (string) config('app.key'))
+            .'|192.0.2.50'
+        );
 
         for ($i = 0; $i < 10; $i++) {
             RateLimiter::clear("login:identifier_ip:uid:1|10.0.0.$i");
@@ -338,7 +359,7 @@ class LoginThrottleTest extends TestCase
             $login = $i % 2 === 0
                 ? "unknown.user{$i}"
                 : "attacker{$i}@example.com";
-            $rawIdentity = hash('sha256', $login);
+            $rawIdentity = hash_hmac('sha256', $login, (string) config('app.key'));
 
             RateLimiter::clear("login:identifier_ip:raw:{$rawIdentity}|203.0.113.5");
             RateLimiter::clear("login:account:raw:{$rawIdentity}");

@@ -327,4 +327,59 @@ class UserTest extends TestCase
             'empty array' => [[]],
         ];
     }
+
+    #[DataProvider('forbiddenAccountFieldProvider')]
+    public function test_generic_update_rejects_account_fields_managed_by_dedicated_flows(
+        string $field,
+        mixed $value,
+        string $message
+    ): void {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $other = User::factory()->manager()->withUsername('keep.me')->create([
+            'is_active' => true,
+            'name' => '原始名稱',
+            'must_change_password' => true,
+        ]);
+
+        $this->actingAs($admin, 'web')->patchJson("/api/users/{$other->id}", [
+            'name' => '被忽略的名稱',
+            'email' => $other->email,
+            $field => $value,
+        ])->assertStatus(422)
+            ->assertJsonValidationErrors($field)
+            ->assertJsonPath("errors.{$field}.0", $message);
+
+        $this->assertDatabaseHas('users', [
+            'id' => $other->id,
+            'name' => '原始名稱',
+            'username' => 'keep.me',
+            'must_change_password' => true,
+        ]);
+    }
+
+    public static function forbiddenAccountFieldProvider(): array
+    {
+        return [
+            'username string' => [
+                'username',
+                'new.username',
+                '帳號名稱請改用 PATCH /api/me/profile 由使用者本人變更',
+            ],
+            'username null' => [
+                'username',
+                null,
+                '帳號名稱請改用 PATCH /api/me/profile 由使用者本人變更',
+            ],
+            'must change password false' => [
+                'must_change_password',
+                false,
+                '首次改密碼狀態請透過重設密碼或本人改密碼流程變更',
+            ],
+            'must change password null' => [
+                'must_change_password',
+                null,
+                '首次改密碼狀態請透過重設密碼或本人改密碼流程變更',
+            ],
+        ];
+    }
 }

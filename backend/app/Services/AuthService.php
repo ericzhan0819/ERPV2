@@ -99,7 +99,7 @@ class AuthService
     {
         $canonicalIdentity = $user instanceof User
             ? 'uid:'.$user->id
-            : 'raw:'.hash('sha256', $login);
+            : 'raw:'.hash_hmac('sha256', $login, (string) config('app.key'));
 
         return [
             'identifier_ip' => ['login:identifier_ip:'.$canonicalIdentity.'|'.$ip, self::MAX_IDENTIFIER_IP_ATTEMPTS, self::IDENTIFIER_IP_DECAY_SECONDS],
@@ -118,6 +118,9 @@ class AuthService
 
     /**
      * Email 大小寫相同的資料若不只一筆，不能任選其中一筆進行認證。
+     *
+     * 多筆資料的 fail-closed 分支只會在大小寫敏感 unique index（例如 SQLite）下可達；
+     * 正式 MariaDB 的 utf8mb4_unicode_ci unique index 會先拒絕大小寫變體。
      */
     private function resolveLoginUser(string $login): ?User
     {
@@ -127,8 +130,8 @@ class AuthService
                 ->first();
         }
 
-        // Canonical limiter 必須先解析 User，因此 identifier+IP 已封鎖的 Email 請求仍會查詢一次。
-        // 本系統使用者數量很小，Phase 3 接受此成本；若要消除需另做 Email 小寫回填與索引調整。
+        // 每次 Email 登入都要先解析 User，且 LOWER(email) 無法使用既有 email unique index。
+        // 本系統使用者數量很小，目前接受此成本；若要消除需另做 Email 小寫回填與索引調整。
         $users = User::query()
             ->whereRaw('LOWER(email) = ?', [$login])
             ->orderBy('id')
