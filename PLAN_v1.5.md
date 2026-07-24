@@ -206,6 +206,11 @@ Admin 建立員工 + 預設密碼
 
 **完成註記（2026-07-24）：** 核心實作已於第 3 部分 adversarial review 因安全阻斷而提前完成；本部分已重新逐項驗收，並補上「不存在 username／Email 混合輪替」與「Email 成功登入清除 alias 共用額度」的直接回歸測試。完整證據見 `docs/v1.5-phase4-handoff.md`。
 
+### Adversarial Review Follow-up（跨部分既有契約修正）
+
+- [x] Generic Update Request 明確拒絕 username／must_change_password／password，避免專用流程欄位被靜默忽略成假成功
+- [x] 尚未實作的 username 自助修改端點明確標為 v1.5 第 7 部分範圍
+
 ---
 
 ## 5. 首次登入與重設密碼狀態
@@ -216,7 +221,6 @@ Admin 建立員工 + 預設密碼
 - [ ] `UserService::createUser()` 明確設 `must_change_password=true`
 - [ ] 不接受 Admin create payload 偷帶 `must_change_password=false`
 - [ ] Store Request 明確拒絕 username／must_change_password，避免未授權覆寫
-- [x] Generic Update Request 明確拒絕 username／must_change_password，避免專用流程欄位被靜默忽略成假成功
 - [ ] 新帳號 Resource 回傳 flag
 
 ### 5.2 Admin Reset Password

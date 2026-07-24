@@ -338,8 +338,10 @@ class UserTest extends TestCase
         $other = User::factory()->manager()->withUsername('keep.me')->create([
             'is_active' => true,
             'name' => '原始名稱',
+            'password' => Hash::make('original-password'),
             'must_change_password' => true,
         ]);
+        $originalPasswordHash = $other->password;
 
         $this->actingAs($admin, 'web')->patchJson("/api/users/{$other->id}", [
             'name' => '被忽略的名稱',
@@ -355,6 +357,11 @@ class UserTest extends TestCase
             'username' => 'keep.me',
             'must_change_password' => true,
         ]);
+
+        $other->refresh();
+        $this->assertSame($originalPasswordHash, $other->password);
+        $this->assertTrue(Hash::check('original-password', $other->password));
+        $this->assertFalse(Hash::check('attacker-chosen-password', $other->password));
     }
 
     public static function forbiddenAccountFieldProvider(): array
@@ -363,12 +370,12 @@ class UserTest extends TestCase
             'username string' => [
                 'username',
                 'new.username',
-                '帳號名稱請改用 PATCH /api/me/profile 由使用者本人變更',
+                '帳號名稱由使用者本人管理（v1.5 第 7 部分提供）',
             ],
             'username null' => [
                 'username',
                 null,
-                '帳號名稱請改用 PATCH /api/me/profile 由使用者本人變更',
+                '帳號名稱由使用者本人管理（v1.5 第 7 部分提供）',
             ],
             'must change password false' => [
                 'must_change_password',
@@ -379,6 +386,11 @@ class UserTest extends TestCase
                 'must_change_password',
                 null,
                 '首次改密碼狀態請透過重設密碼或本人改密碼流程變更',
+            ],
+            'password string' => [
+                'password',
+                'attacker-chosen-password',
+                '密碼請改用 POST /api/users/{id}/reset-password 重設',
             ],
         ];
     }
