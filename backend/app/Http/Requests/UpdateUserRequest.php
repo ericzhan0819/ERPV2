@@ -42,7 +42,7 @@ class UpdateUserRequest extends FormRequest
             'is_active.missing' => '啟用狀態請改用 PATCH /api/users/{id}/status 變更',
             'is_admin.missing' => '角色請改用 PATCH /api/users/{id}/role 變更',
             'role.missing' => '角色請改用 PATCH /api/users/{id}/role 變更',
-            'username.missing' => '帳號名稱由使用者本人管理（v1.5 第 7 部分提供）',
+            'username.missing' => '管理員一般資料更新不可修改帳號名稱',
             'must_change_password.missing' => '首次改密碼狀態請透過重設密碼或本人改密碼流程變更',
             'password.missing' => '密碼請改用 POST /api/users/{id}/reset-password 重設',
         ];

@@ -773,7 +773,7 @@ Request body（`StoreUserRequest`）：`name`(必填)、`email`(必填,唯一)�
 
 ### PATCH /api/users/{id}
 
-Request body（`UpdateUserRequest`）：`name`(必填)、`email`(必填,唯一，忽略自身)、`phone`／`job_title`／`hire_date`／`notes`(皆選填)。**不可**在此修改 `is_active`／`is_admin`／`role`／`username`／`must_change_password`／`password`（帶入會回傳 422）；status／role 須改用下方專用端點，password 須改用 `POST /api/users/{id}/reset-password`。username 自助修改預計由 v1.5 第 7 部分提供，目前尚無 `PATCH /api/me/profile` 路由。
+Request body（`UpdateUserRequest`）：`name`(必填)、`email`(必填,唯一，忽略自身)、`phone`／`job_title`／`hire_date`／`notes`(皆選填)。**不可**在此修改 `is_active`／`is_admin`／`role`／`username`／`must_change_password`／`password`（帶入會回傳 422）；status／role／password 須使用各自的專用端點，username 不屬於管理員一般資料更新契約。
 
 ### PATCH /api/users/{id}/status
 

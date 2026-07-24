@@ -370,12 +370,12 @@ class UserTest extends TestCase
             'username string' => [
                 'username',
                 'new.username',
-                '帳號名稱由使用者本人管理（v1.5 第 7 部分提供）',
+                '管理員一般資料更新不可修改帳號名稱',
             ],
             'username null' => [
                 'username',
                 null,
-                '帳號名稱由使用者本人管理（v1.5 第 7 部分提供）',
+                '管理員一般資料更新不可修改帳號名稱',
             ],
             'must change password false' => [
                 'must_change_password',

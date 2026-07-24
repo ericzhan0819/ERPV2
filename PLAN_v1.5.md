@@ -209,7 +209,7 @@ Admin 建立員工 + 預設密碼
 ### Adversarial Review Follow-up（跨部分既有契約修正）
 
 - [x] Generic Update Request 明確拒絕 username／must_change_password／password，避免專用流程欄位被靜默忽略成假成功
-- [x] 尚未實作的 username 自助修改端點明確標為 v1.5 第 7 部分範圍
+- [x] Generic Update 的 username 錯誤訊息與 API 文件採永久有效的中性契約，不綁版本階段或尚未存在的端點
 
 ---
 
@@ -227,6 +227,7 @@ Admin 建立員工 + 預設密碼
 
 - [ ] `UserService::resetPassword()` 更新 password
 - [ ] 同一操作設 `must_change_password=true`
+- [ ] `ResetUserPasswordRequest` 明確拒絕 payload 覆寫 `must_change_password`
 - [ ] 同一個 save／transaction boundary 留下正確 Audit
 - [ ] API response 不回傳 password 或 hash
 - [ ] 使用者已登入時，下個請求會讀到新 flag
