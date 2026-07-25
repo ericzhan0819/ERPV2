@@ -586,7 +586,12 @@ export function UserList() {
                         <button onClick={() => startEdit(user)} className="text-sm font-medium text-fg hover:underline">
                           編輯
                         </button>
-                        <button onClick={() => startReset(user)} className="text-sm font-medium text-fg-muted hover:underline">
+                        <button
+                          onClick={() => startReset(user)}
+                          disabled={isSelf}
+                          title={isSelf ? '不可從管理頁重設自己的密碼' : undefined}
+                          className="text-sm font-medium text-fg-muted hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline"
+                        >
                           重設密碼
                         </button>
                         <button

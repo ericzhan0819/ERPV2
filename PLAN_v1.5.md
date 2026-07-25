@@ -233,6 +233,9 @@ Admin 建立員工 + 預設密碼
 - [x] API response 不回傳 password 或 hash
 - [x] 既有 stateful Session 下個請求因密碼 hash 變更回 401 並清空；使用新密碼重新登入後讀到 flag=true
 - [x] User 管理 UI 顯示重設後需再次修改密碼
+- [x] User 管理 UI 禁止對自己使用 Admin Reset，避免重設成功後立即重新載入撞 401
+
+**產品決策（2026-07-25 使用者核准）：** Admin reset 後，每個既有 stateful Session 在各自下一個請求回 401 並清空；使用者以新密碼重新登入後，才依 `must_change_password=true` 進入強制修改密碼頁。
 
 ### 5.3 Existing Users
 

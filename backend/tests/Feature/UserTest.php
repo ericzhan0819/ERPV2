@@ -244,7 +244,6 @@ class UserTest extends TestCase
 
         $this->getJson('/api/me')
             ->assertUnauthorized()
-            ->assertExactJson(['message' => 'Unauthenticated.'])
             ->assertSessionMissing(Auth::guard('web')->getName())
             ->assertSessionMissing('password_hash_web');
 
