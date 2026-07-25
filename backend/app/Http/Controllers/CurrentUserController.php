@@ -26,7 +26,10 @@ class CurrentUserController extends Controller
             $request->user(),
             $request->validated('password'),
         );
-        $request->session()->regenerate();
+
+        if ($request->hasSession()) {
+            $request->session()->regenerate();
+        }
 
         return new UserResource($user);
     }

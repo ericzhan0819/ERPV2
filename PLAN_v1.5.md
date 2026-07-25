@@ -357,11 +357,13 @@ flag=true 時阻擋：
 - [x] current_password required
 - [x] 使用 Laravel current password rule 或等價 Hash check
 - [x] password required、string、min 8、confirmed
+- [x] 新密碼不可與目前密碼相同
 - [x] 新密碼 hash 儲存
 - [x] 成功後 `must_change_password=false`
 - [x] 成功後 regenerate session
 - [x] 成功後回更新後 UserResource 或明確 success payload
 - [x] current password 錯誤回 per-field 422
+- [x] 其他帳號流程欄位使用 `missing` fail-closed，不靜默忽略
 - [x] 不在 error／log／audit 暴露密碼
 
 ### 7.4 Audit

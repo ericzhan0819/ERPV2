@@ -105,7 +105,7 @@ Request body 採完整表單提交：
 | 欄位 | 型別 | 必填 | 說明 |
 |---|---|---|---|
 | current_password | string | 是 | 必須符合目前登入帳號的密碼 |
-| password | string | 是 | 新密碼，至少 8 字元 |
+| password | string | 是 | 新密碼，至少 8 字元，且不可與目前密碼相同 |
 | password_confirmation | string | 是 | 必須與新密碼一致 |
 
 ```json
@@ -116,7 +116,9 @@ Request body 採完整表單提交：
 }
 ```
 
-成功後密碼與 `must_change_password=false` 會在同一個 database transaction 保存，保留目前登入狀態並 regenerate Session ID，再回傳更新後 `UserResource`。目前密碼錯誤或 confirmation 不符時回對應欄位的 `422`。Request、response 與 Audit Log 均不會保存或回傳密碼值。
+成功後密碼與 `must_change_password=false` 會在同一個 database transaction 保存；若請求具有 Session，會保留目前登入狀態並 regenerate Session ID，再回傳更新後 `UserResource`。目前密碼錯誤、新舊密碼相同或 confirmation 不符時回對應欄位的 `422`。
+
+`name`、`username`、`email`、`role`、`is_admin`、`is_active`、`phone`、`job_title`、`hire_date`、`notes`、`must_change_password` 只要出現在 payload 就回 `422`，不會被靜默忽略。Request、response 與 Audit Log 均不會保存或回傳密碼值。
 
 ### UserResource
 

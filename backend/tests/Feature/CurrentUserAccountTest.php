@@ -214,6 +214,111 @@ class CurrentUserAccountTest extends TestCase
         $this->assertTrue($user->must_change_password);
     }
 
+    public function test_flagged_user_cannot_clear_required_state_by_reusing_current_password(): void
+    {
+        $user = User::factory()->mustChangePassword()->create([
+            'password' => Hash::make('default-pass-1'),
+        ]);
+
+        $this->actingAs($user, 'web')
+            ->patchJson('/api/me/password', [
+                'current_password' => 'default-pass-1',
+                'password' => 'default-pass-1',
+                'password_confirmation' => 'default-pass-1',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('password')
+            ->assertJsonPath('errors.password.0', '新密碼不可與目前密碼相同');
+
+        $user->refresh();
+        $this->assertTrue(Hash::check('default-pass-1', $user->password));
+        $this->assertTrue($user->must_change_password);
+    }
+
+    public function test_password_endpoint_rejects_fields_owned_by_other_account_workflows(): void
+    {
+        $user = User::factory()->mustChangePassword()->create([
+            'name' => '原始名稱',
+            'username' => null,
+            'password' => Hash::make('old-password'),
+        ]);
+        $separateWorkflowFields = [
+            'name' => '攻擊者名稱',
+            'username' => 'attacker',
+            'email' => 'attacker@example.com',
+            'role' => User::ROLE_ADMIN,
+            'is_admin' => true,
+            'is_active' => false,
+            'phone' => '0900000000',
+            'job_title' => '老闆',
+            'hire_date' => '2026-07-26',
+            'notes' => '不可代寫',
+            'must_change_password' => false,
+        ];
+
+        $this->actingAs($user, 'web')
+            ->patchJson('/api/me/password', [
+                'current_password' => 'old-password',
+                'password' => 'new-password-123',
+                'password_confirmation' => 'new-password-123',
+                ...$separateWorkflowFields,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(array_keys($separateWorkflowFields));
+
+        $user->refresh();
+        $this->assertSame('原始名稱', $user->name);
+        $this->assertNull($user->username);
+        $this->assertTrue(Hash::check('old-password', $user->password));
+        $this->assertTrue($user->must_change_password);
+    }
+
+    public function test_password_change_without_a_session_store_does_not_commit_then_return_500(): void
+    {
+        $user = User::factory()->mustChangePassword()->create([
+            'password' => Hash::make('old-password'),
+        ]);
+
+        $this->actingAs($user, 'web')
+            ->patchJson('/api/me/password', [
+                'current_password' => 'old-password',
+                'password' => 'new-password-123',
+                'password_confirmation' => 'new-password-123',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.must_change_password', false);
+
+        $user->refresh();
+        $this->assertTrue(Hash::check('new-password-123', $user->password));
+        $this->assertFalse($user->must_change_password);
+    }
+
+    public function test_regular_self_password_change_is_traceable_by_actor_time_and_request_path(): void
+    {
+        $user = User::factory()->create([
+            'password' => Hash::make('old-password'),
+            'must_change_password' => false,
+        ]);
+        AuditLog::query()->delete();
+
+        $this->actingAs($user, 'web')
+            ->patchJson('/api/me/password', [
+                'current_password' => 'old-password',
+                'password' => 'new-password-123',
+                'password_confirmation' => 'new-password-123',
+            ])
+            ->assertOk();
+
+        $audit = AuditLog::query()->where('subject_type', 'user')->where('action', 'updated')->sole();
+        $this->assertSame($user->id, $audit->actor_id);
+        $this->assertSame($user->id, $audit->subject_id);
+        $this->assertSame('PATCH', $audit->request_method);
+        $this->assertSame('api/me/password', $audit->request_path);
+        $this->assertNotNull($audit->created_at);
+        $this->assertNull($audit->before_values);
+        $this->assertNull($audit->after_values);
+    }
+
     public function test_password_change_rolls_back_when_audit_cannot_be_recorded(): void
     {
         $user = User::factory()->mustChangePassword()->create([
