@@ -222,6 +222,7 @@ Admin 建立員工 + 預設密碼
 - [x] 不接受 Admin create payload 偷帶 `must_change_password=false`
 - [x] Store Request 明確拒絕 username／must_change_password，避免未授權覆寫
 - [x] 新帳號 Resource 回傳 flag
+- [x] User 與 Audit 建立在同一個 transaction；Audit 失敗時不留下帳號
 
 ### 5.2 Admin Reset Password
 
@@ -230,7 +231,7 @@ Admin 建立員工 + 預設密碼
 - [x] `ResetUserPasswordRequest` 明確拒絕 payload 覆寫 `must_change_password`
 - [x] 同一個 save／transaction boundary 留下正確 Audit
 - [x] API response 不回傳 password 或 hash
-- [x] 使用者已登入時，下個請求會讀到新 flag
+- [x] 既有 stateful Session 下個請求因密碼 hash 變更回 401 並清空；使用新密碼重新登入後讀到 flag=true
 - [x] User 管理 UI 顯示重設後需再次修改密碼
 
 ### 5.3 Existing Users
@@ -247,11 +248,15 @@ Admin 建立員工 + 預設密碼
 - payload 無法關閉 flag
 - admin reset 後 flag=true
 - reset password hash 正確
+- create／reset 的 Audit 失敗皆 rollback
+- 真實 stateful login → reset → 下個請求 401 → 新密碼重新登入回 flag=true
 - 既有 User flag=false
 
 ---
 
 ## 6. Password Change Required Middleware
+
+**交付順序相依：** 第 6 部分與第 7 部分必須在同一輪完成、驗證並交付。不得先部署只會阻擋營運 API 的 Middleware，卻尚未提供可將 `must_change_password` 清為 `false` 的 self password endpoint；否則包含最後一位 admin 在內的待改密碼帳號會被鎖住。第 6 部分進行中的暫存 commit 也不得被視為可部署完成狀態。
 
 ### 6.1 Middleware
 
@@ -490,6 +495,7 @@ flag=true 時阻擋：
 - [ ] validation error 保留欄位
 - [ ] API 失敗不讓使用者進營運頁
 - [ ] Session 過期回 Login
+- [ ] Admin 重設密碼造成的 stateful 401 回 Login；使用新密碼登入後依 flag 進強制頁
 
 **Migration：否。**
 
@@ -722,7 +728,8 @@ flag=true 時阻擋：
 
 - [ ] Admin 重設員工密碼
 - [ ] User list 顯示待修改密碼
-- [ ] 員工既有 Session 下次操作被 gate
+- [ ] 員工每個既有 stateful Session 在各自下次操作回 401 並登出
+- [ ] 員工以新預設密碼重新登入後進強制修改密碼頁
 - [ ] 使用新預設密碼完成強制修改
 
 ### 15.6 Config／Regression

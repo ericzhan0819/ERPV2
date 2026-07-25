@@ -40,25 +40,27 @@ class UserService
      */
     public function createUser(array $data): User
     {
-        $role = $data['role'];
+        return DB::transaction(function () use ($data) {
+            $role = $data['role'];
 
-        $user = new User([
-            'name' => $data['name'],
-            'email' => $data['email'],
-            'username' => null,
-            'password' => Hash::make($data['password']),
-            'must_change_password' => true,
-            'role' => $role,
-            'is_admin' => $role === User::ROLE_ADMIN,
-            'is_active' => $data['is_active'] ?? true,
-            'phone' => $data['phone'] ?? null,
-            'job_title' => $data['job_title'] ?? null,
-            'hire_date' => $data['hire_date'] ?? null,
-            'notes' => $data['notes'] ?? null,
-        ]);
-        $user->save();
+            $user = new User([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'username' => null,
+                'password' => Hash::make($data['password']),
+                'must_change_password' => true,
+                'role' => $role,
+                'is_admin' => $role === User::ROLE_ADMIN,
+                'is_active' => $data['is_active'] ?? true,
+                'phone' => $data['phone'] ?? null,
+                'job_title' => $data['job_title'] ?? null,
+                'hire_date' => $data['hire_date'] ?? null,
+                'notes' => $data['notes'] ?? null,
+            ]);
+            $user->save();
 
-        return $user;
+            return $user;
+        });
     }
 
     /**

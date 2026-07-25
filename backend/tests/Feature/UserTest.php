@@ -127,6 +127,31 @@ class UserTest extends TestCase
         ];
     }
 
+    public function test_admin_create_user_rolls_back_when_audit_cannot_be_recorded(): void
+    {
+        $this->mock(AuditLogService::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('recordModelEvent')
+                ->once()
+                ->andThrow(new RuntimeException('audit unavailable'));
+        });
+
+        try {
+            app(UserService::class)->createUser([
+                'name' => '建立失敗使用者',
+                'email' => 'audit-failed-create@example.com',
+                'password' => 'password123',
+                'role' => User::ROLE_SALES,
+            ]);
+            $this->fail('稽核寫入失敗時，建立帳號不得被視為成功。');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('audit unavailable', $exception->getMessage());
+        }
+
+        $this->assertDatabaseMissing('users', [
+            'email' => 'audit-failed-create@example.com',
+        ]);
+    }
+
     public function test_admin_reset_password_sets_required_state_without_returning_sensitive_values(): void
     {
         $admin = User::factory()->admin()->create(['is_active' => true]);
@@ -193,7 +218,7 @@ class UserTest extends TestCase
         $this->assertFalse($target->must_change_password);
     }
 
-    public function test_logged_in_user_reads_new_required_state_on_the_next_request_after_admin_reset(): void
+    public function test_admin_reset_invalidates_existing_stateful_session_and_relogin_reads_required_state(): void
     {
         $target = User::factory()->manager()->create([
             'email' => 'logged-in-target@example.com',
@@ -201,9 +226,13 @@ class UserTest extends TestCase
             'must_change_password' => false,
         ]);
 
-        $sessionUserKey = Auth::guard('web')->getName();
-        $this->withSession([$sessionUserKey => $target->id])
-            ->getJson('/api/me')
+        $this->withHeaders(['Referer' => 'http://localhost:5173']);
+
+        $this->postJson('/api/login', [
+            'login' => $target->email,
+            'password' => 'original-password',
+        ])->assertOk();
+        $this->getJson('/api/me')
             ->assertJsonPath('data.must_change_password', false);
 
         app(UserService::class)->resetPassword(
@@ -213,7 +242,19 @@ class UserTest extends TestCase
 
         Auth::forgetGuards();
 
-        $this->withSession([$sessionUserKey => $target->id])->getJson('/api/me')
+        $this->getJson('/api/me')
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'Unauthenticated.'])
+            ->assertSessionMissing(Auth::guard('web')->getName())
+            ->assertSessionMissing('password_hash_web');
+
+        Auth::forgetGuards();
+        Auth::shouldUse('web');
+
+        $this->postJson('/api/login', [
+            'login' => $target->email,
+            'password' => 'new-password-123',
+        ])
             ->assertOk()
             ->assertJsonPath('data.must_change_password', true);
     }

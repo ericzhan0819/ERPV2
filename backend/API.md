@@ -789,6 +789,8 @@ Request body（`ResetUserPasswordRequest`）：`password`(必填,min:8)。不可
 
 回傳：`{ "message": "密碼已重設" }`，不回傳密碼或 hash。使用者管理頁會標示該帳號「需修改密碼」。
 
+因 Laravel Sanctum Session Authentication 會保存登入時的密碼 hash，該使用者的每個既有 stateful Session 會在各自下一個請求發現 hash 不符、清空 Session 並回 `401 Unauthenticated`；不是在舊 Session 內回 `PASSWORD_CHANGE_REQUIRED`。使用者需以新密碼重新登入，登入回應會帶 `must_change_password=true`，再由前端導向強制修改密碼頁。
+
 ### DELETE /api/users/{id}
 
 回傳：`{ "message": "使用者已刪除" }`
