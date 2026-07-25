@@ -75,10 +75,7 @@ export function UserList() {
     setError(null)
     listUsers()
       .then(setUsers)
-      .catch(() => {
-        setSuccessMessage(null)
-        setError('使用者載入失敗')
-      })
+      .catch(() => setError('使用者載入失敗'))
       .finally(() => setLoading(false))
   }
 
