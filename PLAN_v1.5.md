@@ -393,31 +393,31 @@ flag=true 時阻擋：
 
 ### 8.1 Resource
 
-- [ ] `UserResource` 新增 `username`
-- [ ] `UserResource` 新增 `must_change_password`
-- [ ] Password／remember token 仍不存在
-- [ ] `/api/me` 與 admin users list 契約一致
+- [x] `UserResource` 新增 `username`
+- [x] `UserResource` 新增 `must_change_password`
+- [x] Password／remember token 仍不存在
+- [x] `/api/me` 與 admin users list 契約一致
 
 ### 8.2 Admin User List
 
-- [ ] User types 新增 username／must_change_password
-- [ ] 列表顯示 username
-- [ ] null 顯示「尚未設定」
-- [ ] 顯示待修改密碼狀態
-- [ ] 建立表單仍不要求 username
-- [ ] 建立成功提示首次登入需改密碼
-- [ ] Reset password 成功提示下次操作需改密碼
-- [ ] Admin edit form 不新增 username 編輯欄位
-- [ ] 既有 name、Email、role、active、員工資料功能不回歸
+- [x] User types 新增 username／must_change_password
+- [x] 列表顯示 username
+- [x] null 顯示「尚未設定」
+- [x] 顯示待修改密碼狀態
+- [x] 建立表單仍不要求 username
+- [x] 建立成功提示首次登入需改密碼
+- [x] Reset password 成功提示下次操作需改密碼
+- [x] Admin edit form 不新增 username 編輯欄位
+- [x] 既有 name、Email、role、active、員工資料功能不回歸
 
 ### 8.3 API types
 
-- [ ] `frontend/src/types/auth.ts` 更新
-- [ ] `frontend/src/types/user.ts` 更新
-- [ ] 避免兩份 User type 契約失步，採最小可維護整理
-- [ ] `frontend/src/api/auth.ts` login payload 改為 `login`
-- [ ] 新增 self profile／password API client
-- [ ] API URL 仍集中於 `frontend/src/api`
+- [x] `frontend/src/types/auth.ts` 更新
+- [x] `frontend/src/types/user.ts` 更新
+- [x] 避免兩份 User type 契約失步，採最小可維護整理
+- [x] `frontend/src/api/auth.ts` login payload 改為 `login`
+- [x] 新增 self profile／password API client
+- [x] API URL 仍集中於 `frontend/src/api`
 
 **Migration：否。**
 

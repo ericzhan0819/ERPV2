@@ -55,6 +55,7 @@ export function UserList() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   const [creating, setCreating] = useState(false)
   const [createForm, setCreateForm] = useState<CreateFormState>(emptyCreateForm)
@@ -98,6 +99,7 @@ export function UserList() {
   async function handleCreateSubmit(event: FormEvent) {
     event.preventDefault()
     setCreateError(null)
+    setSuccessMessage(null)
 
     if (!createForm.name.trim()) {
       setCreateError('請輸入姓名')
@@ -128,6 +130,7 @@ export function UserList() {
       await createUser(payload)
       setCreating(false)
       setCreateForm(emptyCreateForm)
+      setSuccessMessage('員工已建立；首次登入需使用 Email 與預設密碼，並立即修改密碼。')
       loadUsers()
     } catch (err) {
       setCreateError(extractErrorMessage(err, '新增使用者失敗，請稍後再試'))
@@ -228,6 +231,7 @@ export function UserList() {
   async function handleResetSubmit(event: FormEvent, id: number) {
     event.preventDefault()
     setResetError(null)
+    setSuccessMessage(null)
 
     if (resetPassword.length < 8) {
       setResetError('密碼至少需要 8 個字元')
@@ -239,6 +243,7 @@ export function UserList() {
       await resetUserPassword(id, resetPassword)
       setResettingId(null)
       setResetPassword('')
+      setSuccessMessage('密碼已重設；員工既有登入會失效，需以新密碼重新登入並修改密碼。')
       loadUsers()
     } catch (err) {
       setResetError(extractErrorMessage(err, '重設密碼失敗'))
@@ -378,12 +383,18 @@ export function UserList() {
       )}
 
       {error && <p className="text-sm text-error">{error}</p>}
+      {successMessage && (
+        <p role="status" className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-fg">
+          {successMessage}
+        </p>
+      )}
 
       <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
         <table className="min-w-full divide-y divide-border text-sm">
           <thead className="bg-surface-2">
             <tr>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">姓名</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">帳號名稱</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">電子郵件</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">職稱</th>
               <th className="px-4 py-3 text-left font-medium text-fg-muted">角色</th>
@@ -394,14 +405,14 @@ export function UserList() {
           <tbody className="divide-y divide-border">
             {loading && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-fg-muted">
+                <td colSpan={7} className="px-4 py-6 text-center text-fg-muted">
                   載入中...
                 </td>
               </tr>
             )}
             {!loading && users.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-fg-muted">
+                <td colSpan={7} className="px-4 py-6 text-center text-fg-muted">
                   <div className="flex flex-col items-center gap-2">
                     <span>尚無使用者</span>
                     <button
@@ -422,7 +433,7 @@ export function UserList() {
                 if (editingId === user.id) {
                   return (
                     <tr key={user.id} className="bg-surface-2">
-                      <td colSpan={6} className="px-4 py-4">
+                      <td colSpan={7} className="px-4 py-4">
                         <form onSubmit={(e) => handleEditSubmit(e, user.id)} className="flex flex-col gap-4">
                           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
@@ -513,7 +524,7 @@ export function UserList() {
                 if (resettingId === user.id) {
                   return (
                     <tr key={user.id} className="bg-surface-2">
-                      <td colSpan={6} className="px-4 py-4">
+                      <td colSpan={7} className="px-4 py-4">
                         <form onSubmit={(e) => handleResetSubmit(e, user.id)} className="flex flex-col gap-4">
                           <div className="max-w-sm">
                             <label className="mb-1 block text-sm font-medium text-fg-muted">{user.name} 的新密碼</label>
@@ -554,6 +565,9 @@ export function UserList() {
                 return (
                   <tr key={user.id} className="hover:bg-surface-2">
                     <td className="px-4 py-3 font-medium text-fg">{user.name}</td>
+                    <td className="px-4 py-3">
+                      {user.username ?? <span className="text-fg-muted">尚未設定</span>}
+                    </td>
                     <td className="px-4 py-3">{user.email}</td>
                     <td className="px-4 py-3">{user.job_title || '-'}</td>
                     <td className="px-4 py-3">

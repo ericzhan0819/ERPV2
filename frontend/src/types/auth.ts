@@ -1,10 +1,16 @@
-import type { UserRole } from './user'
+import type { User } from './user'
 
-export interface User {
-  id: number
+export type { User } from './user'
+
+export interface CurrentUserProfilePayload {
   name: string
-  email: string
-  role: UserRole
-  is_admin: boolean
-  is_active: boolean
+  username: string | null
 }
+
+export interface CurrentUserPasswordPayload {
+  current_password: string
+  password: string
+  password_confirmation: string
+}
+
+export type CurrentUserResponse = User

@@ -35,7 +35,7 @@ interface AuthContextValue {
   user: User | null
   loading: boolean
   logoutStatus: LogoutStatus
-  login: (email: string, password: string) => Promise<void>
+  login: (login: string, password: string) => Promise<void>
   logout: () => Promise<void>
   retryLogout: () => Promise<void>
 }
@@ -122,8 +122,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', handleStorage)
   }, [])
 
-  const login = useCallback(async (email: string, password: string) => {
-    const loggedInUser = await authApi.login(email, password)
+  const login = useCallback(async (login: string, password: string) => {
+    const loggedInUser = await authApi.login(login, password)
     // 新登入取得的使用者資料最具權威性，先讓本次掛載期間較早的 /api/me 回應失效。
     meRequestValidRef.current = false
     localStorage.removeItem(LOGOUT_STATE_KEY)

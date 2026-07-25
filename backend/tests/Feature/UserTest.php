@@ -40,6 +40,30 @@ class UserTest extends TestCase
         $this->assertDatabaseMissing('users', ['email' => 'new-user@example.com']);
     }
 
+    public function test_me_and_admin_user_list_share_the_same_safe_resource_contract(): void
+    {
+        $admin = User::factory()->admin()->withUsername('owner')->create([
+            'must_change_password' => false,
+            'remember_token' => 'secret-token',
+        ]);
+
+        $me = $this->actingAs($admin, 'web')->getJson('/api/me')
+            ->assertOk()
+            ->assertJsonMissingPath('data.password')
+            ->assertJsonMissingPath('data.remember_token')
+            ->json('data');
+
+        $listed = $this->actingAs($admin, 'web')->getJson('/api/users')
+            ->assertOk()
+            ->assertJsonMissingPath('data.0.password')
+            ->assertJsonMissingPath('data.0.remember_token')
+            ->json('data.0');
+
+        $this->assertSame($me, $listed);
+        $this->assertSame('owner', $listed['username']);
+        $this->assertFalse($listed['must_change_password']);
+    }
+
     public function test_admin_can_create_update_reset_password_change_status_and_role(): void
     {
         $admin = User::factory()->admin()->create(['is_active' => true]);
