@@ -608,6 +608,11 @@ export function UserList() {
                         >
                           刪除
                         </button>
+                        {isSelf && (
+                          <span className="basis-full text-xs text-fg-muted">
+                            自己的密碼請至「我的帳號」修改
+                          </span>
+                        )}
                       </div>
                     </td>
                   </tr>

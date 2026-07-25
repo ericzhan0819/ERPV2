@@ -234,8 +234,11 @@ Admin 建立員工 + 預設密碼
 - [x] 既有 stateful Session 下個請求因密碼 hash 變更回 401 並清空；使用新密碼重新登入後讀到 flag=true
 - [x] User 管理 UI 顯示重設後需再次修改密碼
 - [x] User 管理 UI 禁止對自己使用 Admin Reset，避免重設成功後立即重新載入撞 401
+- [x] 自己的資料列顯示可見說明，不依賴 disabled button 的 `title`
 
 **產品決策（2026-07-25 使用者核准）：** Admin reset 後，每個既有 stateful Session 在各自下一個請求回 401 並清空；使用者以新密碼重新登入後，才依 `must_change_password=true` 進入強制修改密碼頁。
+
+**交付相依（不得單獨部署）：** 第 5 部分停用自我 Admin Reset 的前端限制，必須與第 11 部分「我的帳號」自助改密碼入口一起形成可部署版本；在第 11 部分完成前，目前工作樹只屬工程中間狀態，不得單獨部署到只有單一 admin 的環境。
 
 ### 5.3 Existing Users
 
@@ -513,6 +516,7 @@ flag=true 時阻擋：
 - [ ] 建立 `/account` 或企劃指定等價 route
 - [ ] 三角色皆可進入
 - [ ] Header 使用者名稱區提供入口
+- [ ] Admin 可由此入口修改自己的密碼，解除第 5 部分自我 Admin Reset 限制的交付相依
 - [ ] 不新增 Sidebar 主模組項目
 - [ ] Theme Toggle 留在 Header
 
