@@ -59,6 +59,20 @@ class UserTest extends TestCase
             ->assertJsonMissingPath('data.0.remember_token')
             ->json('data.0');
 
+        $this->assertSame([
+            'id',
+            'name',
+            'email',
+            'username',
+            'must_change_password',
+            'role',
+            'is_admin',
+            'is_active',
+            'phone',
+            'job_title',
+            'hire_date',
+            'notes',
+        ], array_keys($listed));
         $this->assertSame($me, $listed);
         $this->assertSame('owner', $listed['username']);
         $this->assertFalse($listed['must_change_password']);

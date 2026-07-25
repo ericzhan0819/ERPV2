@@ -75,7 +75,10 @@ export function UserList() {
     setError(null)
     listUsers()
       .then(setUsers)
-      .catch(() => setError('使用者載入失敗'))
+      .catch(() => {
+        setSuccessMessage(null)
+        setError('使用者載入失敗')
+      })
       .finally(() => setLoading(false))
   }
 
@@ -140,6 +143,7 @@ export function UserList() {
   }
 
   function startEdit(user: User) {
+    setSuccessMessage(null)
     setEditingId(user.id)
     setEditError(null)
     setEditForm({
@@ -155,6 +159,7 @@ export function UserList() {
   async function handleEditSubmit(event: FormEvent, id: number) {
     event.preventDefault()
     setEditError(null)
+    setSuccessMessage(null)
 
     if (!editForm.name.trim()) {
       setEditError('請輸入姓名')
@@ -187,6 +192,7 @@ export function UserList() {
   }
 
   async function handleDelete(user: User) {
+    setSuccessMessage(null)
     if (!window.confirm(`確定要刪除使用者「${user.name}」嗎？此操作無法復原。`)) {
       return
     }
@@ -201,6 +207,7 @@ export function UserList() {
 
   async function toggleActive(user: User) {
     setError(null)
+    setSuccessMessage(null)
     try {
       await setUserActive(user.id, !user.is_active)
       loadUsers()
@@ -210,6 +217,7 @@ export function UserList() {
   }
 
   async function handleRoleChange(user: User, role: UserRole) {
+    setSuccessMessage(null)
     if (role === user.role) {
       return
     }
@@ -223,6 +231,7 @@ export function UserList() {
   }
 
   function startReset(user: User) {
+    setSuccessMessage(null)
     setResettingId(user.id)
     setResetPassword('')
     setResetError(null)
@@ -272,6 +281,7 @@ export function UserList() {
         </div>
         <button
           onClick={() => {
+            setSuccessMessage(null)
             setCreating((v) => !v)
             setCreateError(null)
             setCreateForm(emptyCreateForm)
