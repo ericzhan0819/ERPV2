@@ -116,7 +116,7 @@ Request body 採完整表單提交：
 }
 ```
 
-成功後密碼與 `must_change_password=false` 會在同一個 database transaction 保存；若請求具有 Session，會保留目前登入狀態並 regenerate Session ID，再回傳更新後 `UserResource`。目前密碼錯誤、新舊密碼相同或 confirmation 不符時回對應欄位的 `422`。
+成功後密碼與 `must_change_password=false` 會在同一個 database transaction 保存；若請求具有 Session，會保留目前登入狀態並 regenerate Session ID，再回傳更新後 `UserResource`。目前密碼不是字串、目前密碼錯誤、新舊密碼相同或 confirmation 不符時回對應欄位的 `422`。
 
 `name`、`username`、`email`、`role`、`is_admin`、`is_active`、`phone`、`job_title`、`hire_date`、`notes`、`must_change_password` 只要出現在 payload 就回 `422`，不會被靜默忽略。Request、response 與 Audit Log 均不會保存或回傳密碼值。
 

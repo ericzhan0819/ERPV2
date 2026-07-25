@@ -214,6 +214,38 @@ class CurrentUserAccountTest extends TestCase
         $this->assertTrue($user->must_change_password);
     }
 
+    #[DataProvider('nonStringCurrentPasswordProvider')]
+    public function test_current_password_non_string_input_returns_validation_error_without_changing_account(mixed $currentPassword): void
+    {
+        $user = User::factory()->mustChangePassword()->create([
+            'password' => Hash::make('old-password'),
+        ]);
+
+        $this->actingAs($user, 'web')
+            ->patchJson('/api/me/password', [
+                'current_password' => $currentPassword,
+                'password' => 'new-password-123',
+                'password_confirmation' => 'new-password-123',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('current_password')
+            ->assertJsonPath('errors.current_password.0', '目前密碼格式不正確');
+
+        $user->refresh();
+        $this->assertTrue(Hash::check('old-password', $user->password));
+        $this->assertTrue($user->must_change_password);
+    }
+
+    public static function nonStringCurrentPasswordProvider(): array
+    {
+        return [
+            'list' => [['old-password']],
+            'nested object' => [['nested' => 'old-password']],
+            'boolean' => [true],
+            'integer' => [12345678],
+        ];
+    }
+
     public function test_flagged_user_cannot_clear_required_state_by_reusing_current_password(): void
     {
         $user = User::factory()->mustChangePassword()->create([

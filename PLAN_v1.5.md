@@ -355,6 +355,7 @@ flag=true 時阻擋：
 ### 7.3 `PATCH /api/me/password`
 
 - [x] current_password required
+- [x] current_password 非字串輸入以 `422` 拒絕，不進入 Hash check
 - [x] 使用 Laravel current password rule 或等價 Hash check
 - [x] password required、string、min 8、confirmed
 - [x] 新密碼不可與目前密碼相同

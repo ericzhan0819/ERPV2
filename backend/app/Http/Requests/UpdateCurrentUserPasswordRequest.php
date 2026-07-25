@@ -29,7 +29,7 @@ class UpdateCurrentUserPasswordRequest extends FormRequest
     public function rules(): array
     {
         $rules = [
-            'current_password' => ['required', 'string', 'current_password:web'],
+            'current_password' => ['bail', 'required', 'string', 'current_password:web'],
             'password' => ['required', 'string', 'min:8', 'confirmed', 'different:current_password'],
         ];
 
