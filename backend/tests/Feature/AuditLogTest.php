@@ -61,9 +61,12 @@ class AuditLogTest extends TestCase
         $log = AuditLog::query()->where('subject_type', 'user')->where('action', 'updated')->sole();
         $encoded = json_encode([$log->before_values, $log->after_values], JSON_THROW_ON_ERROR);
 
-        $this->assertStringNotContainsString('password', $encoded);
+        $this->assertFalse((bool) $log->before_values['must_change_password']);
+        $this->assertTrue((bool) $log->after_values['must_change_password']);
+        $this->assertArrayNotHasKey('password', $log->before_values);
+        $this->assertArrayNotHasKey('password', $log->after_values);
         $this->assertStringNotContainsString('NewSecret123!', $encoded);
-        $this->assertStringNotContainsString(Hash::make('NewSecret123!'), $encoded);
+        $this->assertStringNotContainsString($target->fresh()->password, $encoded);
     }
 
     public function test_admin_can_read_audit_logs(): void

@@ -4,11 +4,15 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Services\AuditLogService;
 use App\Services\UserService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
+use Mockery\MockInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
+use RuntimeException;
 use Tests\TestCase;
 
 class UserTest extends TestCase
@@ -49,7 +53,10 @@ class UserTest extends TestCase
             'job_title' => '業務專員',
             'hire_date' => '2026-01-15',
             'notes' => '備註',
-        ])->assertCreated();
+        ])->assertCreated()
+            ->assertJsonPath('data.username', null)
+            ->assertJsonPath('data.must_change_password', true)
+            ->assertJsonMissingPath('data.password');
 
         $userId = $createResponse->json('data.id');
         $this->assertDatabaseHas('users', [
@@ -57,6 +64,8 @@ class UserTest extends TestCase
             'email' => 'new-user@example.com',
             'role' => 'sales',
             'is_admin' => false,
+            'username' => null,
+            'must_change_password' => true,
             'phone' => '0912345678',
             'job_title' => '業務專員',
         ]);
@@ -78,6 +87,135 @@ class UserTest extends TestCase
 
         $updatedUser = User::find($userId);
         $this->assertTrue(Hash::check('newpassword456', $updatedUser->password));
+        $this->assertTrue($updatedUser->must_change_password);
+    }
+
+    #[DataProvider('forbiddenCreateAccountFieldProvider')]
+    public function test_admin_create_rejects_account_state_managed_by_the_employee_flow(
+        string $field,
+        mixed $value,
+        string $message
+    ): void {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+
+        $this->actingAs($admin, 'web')->postJson('/api/users', [
+            'name' => '新使用者',
+            'email' => 'forbidden-create@example.com',
+            'password' => 'password123',
+            'role' => 'sales',
+            $field => $value,
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors($field)
+            ->assertJsonPath("errors.{$field}.0", $message);
+
+        $this->assertDatabaseMissing('users', ['email' => 'forbidden-create@example.com']);
+    }
+
+    public static function forbiddenCreateAccountFieldProvider(): array
+    {
+        return [
+            'username' => [
+                'username',
+                'admin-chosen',
+                '新員工的帳號名稱由本人登入後設定',
+            ],
+            'must change password false' => [
+                'must_change_password',
+                false,
+                '新員工固定需要在首次登入後修改密碼',
+            ],
+        ];
+    }
+
+    public function test_admin_reset_password_sets_required_state_without_returning_sensitive_values(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $target = User::factory()->manager()->create([
+            'password' => Hash::make('original-password'),
+            'must_change_password' => false,
+        ]);
+
+        $this->actingAs($admin, 'web')->postJson("/api/users/{$target->id}/reset-password", [
+            'password' => 'new-password-123',
+        ])->assertOk()
+            ->assertExactJson(['message' => '密碼已重設']);
+
+        $target->refresh();
+        $this->assertTrue(Hash::check('new-password-123', $target->password));
+        $this->assertTrue($target->must_change_password);
+    }
+
+    public function test_admin_reset_password_rejects_attempt_to_override_required_state(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $target = User::factory()->manager()->create([
+            'password' => Hash::make('original-password'),
+            'must_change_password' => false,
+        ]);
+
+        $this->actingAs($admin, 'web')->postJson("/api/users/{$target->id}/reset-password", [
+            'password' => 'new-password-123',
+            'must_change_password' => false,
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('must_change_password')
+            ->assertJsonPath(
+                'errors.must_change_password.0',
+                '管理員重設密碼後固定需要使用者再次修改密碼',
+            );
+
+        $target->refresh();
+        $this->assertTrue(Hash::check('original-password', $target->password));
+        $this->assertFalse($target->must_change_password);
+    }
+
+    public function test_admin_reset_password_rolls_back_when_audit_cannot_be_recorded(): void
+    {
+        $target = User::factory()->manager()->create([
+            'password' => Hash::make('original-password'),
+            'must_change_password' => false,
+        ]);
+
+        $this->mock(AuditLogService::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('recordModelEvent')
+                ->once()
+                ->andThrow(new RuntimeException('audit unavailable'));
+        });
+
+        try {
+            app(UserService::class)->resetPassword($target, 'new-password-123');
+            $this->fail('稽核寫入失敗時，重設密碼不得被視為成功。');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('audit unavailable', $exception->getMessage());
+        }
+
+        $target->refresh();
+        $this->assertTrue(Hash::check('original-password', $target->password));
+        $this->assertFalse($target->must_change_password);
+    }
+
+    public function test_logged_in_user_reads_new_required_state_on_the_next_request_after_admin_reset(): void
+    {
+        $target = User::factory()->manager()->create([
+            'email' => 'logged-in-target@example.com',
+            'password' => Hash::make('original-password'),
+            'must_change_password' => false,
+        ]);
+
+        $sessionUserKey = Auth::guard('web')->getName();
+        $this->withSession([$sessionUserKey => $target->id])
+            ->getJson('/api/me')
+            ->assertJsonPath('data.must_change_password', false);
+
+        app(UserService::class)->resetPassword(
+            User::query()->findOrFail($target->id),
+            'new-password-123',
+        );
+
+        Auth::forgetGuards();
+
+        $this->withSession([$sessionUserKey => $target->id])->getJson('/api/me')
+            ->assertOk()
+            ->assertJsonPath('data.must_change_password', true);
     }
 
     public function test_role_created_user_has_synced_is_admin(): void

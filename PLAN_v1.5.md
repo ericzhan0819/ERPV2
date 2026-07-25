@@ -217,27 +217,27 @@ Admin 建立員工 + 預設密碼
 
 ### 5.1 Admin 建立 User
 
-- [ ] `UserService::createUser()` 明確設 `username=null`
-- [ ] `UserService::createUser()` 明確設 `must_change_password=true`
-- [ ] 不接受 Admin create payload 偷帶 `must_change_password=false`
-- [ ] Store Request 明確拒絕 username／must_change_password，避免未授權覆寫
-- [ ] 新帳號 Resource 回傳 flag
+- [x] `UserService::createUser()` 明確設 `username=null`
+- [x] `UserService::createUser()` 明確設 `must_change_password=true`
+- [x] 不接受 Admin create payload 偷帶 `must_change_password=false`
+- [x] Store Request 明確拒絕 username／must_change_password，避免未授權覆寫
+- [x] 新帳號 Resource 回傳 flag
 
 ### 5.2 Admin Reset Password
 
-- [ ] `UserService::resetPassword()` 更新 password
-- [ ] 同一操作設 `must_change_password=true`
-- [ ] `ResetUserPasswordRequest` 明確拒絕 payload 覆寫 `must_change_password`
-- [ ] 同一個 save／transaction boundary 留下正確 Audit
-- [ ] API response 不回傳 password 或 hash
-- [ ] 使用者已登入時，下個請求會讀到新 flag
-- [ ] User 管理 UI 顯示重設後需再次修改密碼
+- [x] `UserService::resetPassword()` 更新 password
+- [x] 同一操作設 `must_change_password=true`
+- [x] `ResetUserPasswordRequest` 明確拒絕 payload 覆寫 `must_change_password`
+- [x] 同一個 save／transaction boundary 留下正確 Audit
+- [x] API response 不回傳 password 或 hash
+- [x] 使用者已登入時，下個請求會讀到新 flag
+- [x] User 管理 UI 顯示重設後需再次修改密碼
 
 ### 5.3 Existing Users
 
-- [ ] migration 後既有 User flag=false
-- [ ] 不使用 `created_at`、Email 或角色猜測誰要改密碼
-- [ ] 開發 Seeder admin 不被強制鎖住
+- [x] migration 後既有 User flag=false
+- [x] 不使用 `created_at`、Email 或角色猜測誰要改密碼
+- [x] 開發 Seeder admin 不被強制鎖住
 
 **Migration：否（使用第 1 部分欄位）。**
 

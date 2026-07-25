@@ -759,13 +759,13 @@ v1.1 起 `users.role` 為正式權限來源，固定三種角色：`admin`／`ma
 
 ### GET /api/users
 
-回傳所有使用者的 `UserResource`（含 `role`、`phone`、`job_title`、`hire_date`、`notes`）。
+回傳所有使用者的 `UserResource`（含 `username`、`must_change_password`、`role`、`phone`、`job_title`、`hire_date`、`notes`）。
 
 ### POST /api/users
 
-Request body（`StoreUserRequest`）：`name`(必填)、`email`(必填,唯一)、`password`(必填,min:8)、`role`(必填,in:admin/manager/sales)、`is_active`(選填,bool)、`phone`(選填)、`job_title`(選填)、`hire_date`(選填,date)、`notes`(選填)。
+Request body（`StoreUserRequest`）：`name`(必填)、`email`(必填,唯一)、`password`(必填,min:8)、`role`(必填,in:admin/manager/sales)、`is_active`(選填,bool)、`phone`(選填)、`job_title`(選填)、`hire_date`(選填,date)、`notes`(選填)。不可帶入 `username` 或 `must_change_password`（帶入會回傳 422）；新帳號固定建立為 `username=null`、`must_change_password=true`。
 
-回傳：`UserResource`。
+回傳：`UserResource`，其中 `must_change_password=true`；不回傳密碼或 hash。
 
 ### GET /api/users/{id}
 
@@ -785,9 +785,9 @@ Request body（`UpdateUserRoleRequest`）：`role`(必填,in:admin/manager/sales
 
 ### POST /api/users/{id}/reset-password
 
-Request body（`ResetUserPasswordRequest`）：`password`(必填,min:8)。
+Request body（`ResetUserPasswordRequest`）：`password`(必填,min:8)。不可帶入 `must_change_password`（帶入會回傳 422）；重設成功會在同一個 transaction 內更新密碼並固定設為 `must_change_password=true`。
 
-回傳：`{ "message": "密碼已重設" }`
+回傳：`{ "message": "密碼已重設" }`，不回傳密碼或 hash。使用者管理頁會標示該帳號「需修改密碼」。
 
 ### DELETE /api/users/{id}
 

@@ -45,7 +45,9 @@ class UserService
         $user = new User([
             'name' => $data['name'],
             'email' => $data['email'],
+            'username' => null,
             'password' => Hash::make($data['password']),
+            'must_change_password' => true,
             'role' => $role,
             'is_admin' => $role === User::ROLE_ADMIN,
             'is_active' => $data['is_active'] ?? true,
@@ -142,10 +144,13 @@ class UserService
 
     public function resetPassword(User $user, string $password): User
     {
-        $user->password = Hash::make($password);
-        $user->save();
+        return DB::transaction(function () use ($user, $password) {
+            $user->password = Hash::make($password);
+            $user->must_change_password = true;
+            $user->save();
 
-        return $user;
+            return $user;
+        });
     }
 
     public function setUsername(User $user, ?string $username): User

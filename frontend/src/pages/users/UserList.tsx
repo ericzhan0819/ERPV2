@@ -239,6 +239,7 @@ export function UserList() {
       await resetUserPassword(id, resetPassword)
       setResettingId(null)
       setResetPassword('')
+      loadUsers()
     } catch (err) {
       setResetError(extractErrorMessage(err, '重設密碼失敗'))
     } finally {
@@ -571,7 +572,14 @@ export function UserList() {
                       </select>
                     </td>
                     <td className="px-4 py-3">
-                      <ActiveStatusBadge active={user.is_active} />
+                      <div className="flex flex-col items-start gap-1">
+                        <ActiveStatusBadge active={user.is_active} />
+                        {user.must_change_password && (
+                          <span className="rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs font-medium text-fg">
+                            需修改密碼
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-3">

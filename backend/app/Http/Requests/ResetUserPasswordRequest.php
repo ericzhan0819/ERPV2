@@ -15,6 +15,14 @@ class ResetUserPasswordRequest extends FormRequest
     {
         return [
             'password' => ['required', 'string', 'min:8'],
+            'must_change_password' => ['missing'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'must_change_password.missing' => '管理員重設密碼後固定需要使用者再次修改密碼',
         ];
     }
 }
