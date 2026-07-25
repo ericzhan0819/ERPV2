@@ -390,11 +390,13 @@ export function UserList() {
       )}
 
       {error && <p className="text-sm text-error">{error}</p>}
-      {successMessage && (
-        <p role="status" className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-fg">
-          {successMessage}
-        </p>
-      )}
+      <div role="status" aria-live="polite" className="empty:hidden">
+        {successMessage && (
+          <p className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-fg">
+            {successMessage}
+          </p>
+        )}
+      </div>
 
       <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
         <table className="min-w-full divide-y divide-border text-sm">
