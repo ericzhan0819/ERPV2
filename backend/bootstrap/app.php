@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsurePasswordHasBeenChanged;
 use App\Http\Middleware\EnsureUserHasRole;
 use App\Http\Middleware\EnsureUserIsActive;
 use Illuminate\Foundation\Application;
@@ -21,10 +22,14 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'active' => EnsureUserIsActive::class,
+            'password.changed' => EnsurePasswordHasBeenChanged::class,
             'role' => EnsureUserHasRole::class,
         ]);
-        // 先拒絕未授權角色，再做 route model binding，避免以 403／404 差異枚舉敏感資源 ID。
+        // 先檢查停用與待改密碼狀態，再拒絕未授權角色，最後才做 route model binding，
+        // 避免以 403／404 差異枚舉敏感資源 ID。
         $middleware->prependToPriorityList(SubstituteBindings::class, EnsureUserHasRole::class);
+        $middleware->prependToPriorityList(EnsureUserHasRole::class, EnsurePasswordHasBeenChanged::class);
+        $middleware->prependToPriorityList(EnsurePasswordHasBeenChanged::class, EnsureUserIsActive::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

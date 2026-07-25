@@ -155,6 +155,37 @@ class UserService
         });
     }
 
+    /**
+     * @param  array{name: string, username: ?string}  $data
+     */
+    public function updateCurrentProfile(User $user, array $data): User
+    {
+        try {
+            return DB::transaction(function () use ($user, $data) {
+                $user->name = $data['name'];
+                $user->username = $data['username'];
+                $user->save();
+
+                return $user;
+            });
+        } catch (QueryException $e) {
+            $this->throwUsernameValidationExceptionWhenDuplicated($e);
+
+            throw $e;
+        }
+    }
+
+    public function updateCurrentPassword(User $user, string $password): User
+    {
+        return DB::transaction(function () use ($user, $password) {
+            $user->password = Hash::make($password);
+            $user->must_change_password = false;
+            $user->save();
+
+            return $user;
+        });
+    }
+
     public function setUsername(User $user, ?string $username): User
     {
         $user->username = $username;
@@ -162,11 +193,7 @@ class UserService
         try {
             $user->save();
         } catch (QueryException $e) {
-            if ($this->isUsernameUniqueConstraintViolation($e)) {
-                throw ValidationException::withMessages([
-                    'username' => ['此帳號名稱已被使用'],
-                ]);
-            }
+            $this->throwUsernameValidationExceptionWhenDuplicated($e);
 
             throw $e;
         }
@@ -258,6 +285,15 @@ class UserService
 
         // SQLite 測試環境的 unique 錯誤會指出欄位，不會包含 migration 的 index 名稱。
         return $driverError === 19 && str_contains($message, 'users.username');
+    }
+
+    private function throwUsernameValidationExceptionWhenDuplicated(QueryException $exception): void
+    {
+        if ($this->isUsernameUniqueConstraintViolation($exception)) {
+            throw ValidationException::withMessages([
+                'username' => ['此帳號名稱已被使用'],
+            ]);
+        }
     }
 
     /**

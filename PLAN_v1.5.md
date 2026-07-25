@@ -266,41 +266,41 @@ Admin 建立員工 + 預設密碼
 
 ### 6.1 Middleware
 
-- [ ] 新增 `EnsurePasswordHasBeenChanged` 或語意等價 middleware
-- [ ] 登入者 flag=false 時正常通過
-- [ ] flag=true 時回 409
-- [ ] response code 固定 `PASSWORD_CHANGE_REQUIRED`
-- [ ] response message 固定且可顯示
-- [ ] 未登入仍由 auth:sanctum 處理
-- [ ] 停用帳號仍由 active middleware 優先處理
+- [x] 新增 `EnsurePasswordHasBeenChanged` 或語意等價 middleware
+- [x] 登入者 flag=false 時正常通過
+- [x] flag=true 時回 409
+- [x] response code 固定 `PASSWORD_CHANGE_REQUIRED`
+- [x] response message 固定且可顯示
+- [x] 未登入仍由 auth:sanctum 處理
+- [x] 停用帳號仍由 active middleware 優先處理
 
 ### 6.2 Route 邊界
 
 flag=true 時允許：
 
-- [ ] `GET /api/me`
-- [ ] `POST /api/logout`
-- [ ] `PATCH /api/me/profile`
-- [ ] `PATCH /api/me/password`
+- [x] `GET /api/me`
+- [x] `POST /api/logout`
+- [x] `PATCH /api/me/profile`
+- [x] `PATCH /api/me/password`
 
 flag=true 時阻擋：
 
-- [ ] Dashboard
-- [ ] Vehicle APIs
-- [ ] Customer APIs
-- [ ] Money Entry APIs
-- [ ] Cash Account APIs
-- [ ] Admin User APIs
-- [ ] Salary APIs
-- [ ] Audit Log APIs
-- [ ] 其他 authenticated 營運 API
+- [x] Dashboard
+- [x] Vehicle APIs
+- [x] Customer APIs
+- [x] Money Entry APIs
+- [x] Cash Account APIs
+- [x] Admin User APIs
+- [x] Salary APIs
+- [x] Audit Log APIs
+- [x] 其他 authenticated 營運 API
 
 ### 6.3 Middleware 結構
 
-- [ ] 不把 Public Vehicle API 納入
-- [ ] 不阻擋 Login／Logout 所需 CSRF 流程
-- [ ] Route group 結構可讀，不為四個例外散落大量 `withoutMiddleware`
-- [ ] 未知未來 authenticated route 預設被 gate 保護
+- [x] 不把 Public Vehicle API 納入
+- [x] 不阻擋 Login／Logout 所需 CSRF 流程
+- [x] Route group 結構可讀，不為四個例外散落大量 `withoutMiddleware`
+- [x] 未知未來 authenticated route 預設被 gate 保護
 
 **Migration：否。**
 
@@ -321,55 +321,55 @@ flag=true 時阻擋：
 
 ### 7.1 Controller／Service
 
-- [ ] 新增 CurrentUser／Account Controller 或沿用 AuthController 的最小清楚拆分
-- [ ] Controller 保持薄
-- [ ] Self profile 邏輯集中 Service
-- [ ] Self password 邏輯集中 Service
-- [ ] 只操作 `$request->user()`，不接受 target user id
+- [x] 新增 CurrentUser／Account Controller 或沿用 AuthController 的最小清楚拆分
+- [x] Controller 保持薄
+- [x] Self profile 邏輯集中 Service
+- [x] Self password 邏輯集中 Service
+- [x] 只操作 `$request->user()`，不接受 target user id
 
 ### 7.2 `PATCH /api/me/profile`
 
 允許：
 
-- [ ] name
-- [ ] username nullable
+- [x] name
+- [x] username nullable
 
 禁止：
 
-- [ ] email
-- [ ] role
-- [ ] is_admin
-- [ ] is_active
-- [ ] phone
-- [ ] job_title
-- [ ] hire_date
-- [ ] notes
-- [ ] must_change_password
-- [ ] password
+- [x] email
+- [x] role
+- [x] is_admin
+- [x] is_active
+- [x] phone
+- [x] job_title
+- [x] hire_date
+- [x] notes
+- [x] must_change_password
+- [x] password
 
-- [ ] 禁止欄位使用 `missing` 或等價 fail-closed validation
-- [ ] 更新後回完整 Self UserResource
-- [ ] username unique race 轉 422
-- [ ] 更新 name 後 Auth Context 可使用新值
+- [x] 禁止欄位使用 `missing` 或等價 fail-closed validation
+- [x] 更新後回完整 Self UserResource
+- [x] username unique race 轉 422
+- [x] 更新 name 後 Auth Context 可使用新值
 
 ### 7.3 `PATCH /api/me/password`
 
-- [ ] current_password required
-- [ ] 使用 Laravel current password rule 或等價 Hash check
-- [ ] password required、string、min 8、confirmed
-- [ ] 新密碼 hash 儲存
-- [ ] 成功後 `must_change_password=false`
-- [ ] 成功後 regenerate session
-- [ ] 成功後回更新後 UserResource 或明確 success payload
-- [ ] current password 錯誤回 per-field 422
-- [ ] 不在 error／log／audit 暴露密碼
+- [x] current_password required
+- [x] 使用 Laravel current password rule 或等價 Hash check
+- [x] password required、string、min 8、confirmed
+- [x] 新密碼 hash 儲存
+- [x] 成功後 `must_change_password=false`
+- [x] 成功後 regenerate session
+- [x] 成功後回更新後 UserResource 或明確 success payload
+- [x] current password 錯誤回 per-field 422
+- [x] 不在 error／log／audit 暴露密碼
 
 ### 7.4 Audit
 
-- [ ] Self profile update 產生 User updated audit
-- [ ] Password update 產生 audit 但不含 password values
-- [ ] Flag true→false 可追溯
-- [ ] Username before／after 可追溯
+- [x] Self profile update 產生 User updated audit
+- [x] Password update 產生 audit 但不含 password values
+- [x] Flag true→false 可追溯
+- [x] Username before／after 可追溯
 
 **Migration：否。**
 

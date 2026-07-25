@@ -4,6 +4,7 @@ use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CashAccountController;
 use App\Http\Controllers\CommissionPlanController;
+use App\Http\Controllers\CurrentUserController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MoneyEntryController;
@@ -29,8 +30,13 @@ Route::prefix('public')->middleware('throttle:60,1')->group(function () {
     Route::get('vehicles/{id}', [PublicVehicleController::class, 'show'])->whereNumber('id');
 });
 
-Route::middleware(['auth:sanctum', 'active'])->group(function () {
-    Route::get('/me', [AuthController::class, 'me']);
+Route::middleware(['auth:sanctum', 'active', 'password.changed'])->group(function () {
+    // 待改密碼狀態只放行這組自助帳號端點；其餘 authenticated route 預設受 gate 保護。
+    Route::withoutMiddleware('password.changed')->group(function () {
+        Route::get('/me', [AuthController::class, 'me']);
+        Route::patch('/me/profile', [CurrentUserController::class, 'updateProfile']);
+        Route::patch('/me/password', [CurrentUserController::class, 'updatePassword']);
+    });
 
     Route::get('/dashboard/summary', [DashboardController::class, 'summary']);
 

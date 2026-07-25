@@ -1,4 +1,4 @@
-# API 文件 — 中古車行內部營運系統（1.0 + v1.1 + v1.2 + v1.3 + v1.4）
+# API 文件 — 中古車行內部營運系統（1.0 + v1.1 + v1.2 + v1.3 + v1.4 + v1.5）
 
 Base URL：`http://localhost:8000`（依 `.env` `APP_URL` 而定）
 
@@ -9,6 +9,7 @@ Base URL：`http://localhost:8000`（依 `.env` `APP_URL` 而定）
 3. 除了 `POST /api/login`、`POST /api/logout`、`GET /api/public/*`（v1.2 官網公開唯讀 API）外，其餘 `/api/*` 都需要登入（`auth:sanctum` + `active` middleware）。
 4. 標註「僅限管理員」的路由另外掛 `admin` middleware，非管理員呼叫會回傳 `403`。
 5. v1.1 起部分路由改掛 `role:admin,manager` 或 `role:admin,manager,sales` middleware，依 `users.role` 判斷；不符合角色會回傳 `403 {"message": "權限不足"}`。
+6. v1.5 起，`must_change_password=true` 的登入者只能使用 `/api/me`、自助個人資料／密碼與登出；其他 authenticated 營運 API 固定回 `409 {"message":"請先修改密碼","code":"PASSWORD_CHANGE_REQUIRED"}`。停用帳號仍先由 `active` middleware 回 `403`，未登入仍回 `401`。
 
 金額欄位一律為整數（新台幣元，非分），對應資料庫 `decimal`/`integer` 欄位，前端不得自行用 float 計算正式金額。
 
@@ -34,6 +35,7 @@ v1.3 Phase 1 起，`source_type=salary_settlement` 的薪資支出只對 `admin`
 
 - 驗證錯誤（422）：Laravel 預設格式 `{ "message": "...", "errors": { "field": ["..."] } }`
 - 一般錯誤（403/404/429）：`{ "message": "..." }`
+- 待改密碼（409）：`{ "message": "請先修改密碼", "code": "PASSWORD_CHANGE_REQUIRED" }`
 
 ---
 
@@ -73,6 +75,48 @@ Request body：
 ### GET /api/me
 
 需登入。回傳目前登入者的 `UserResource`。
+
+待改密碼狀態仍可呼叫此端點。
+
+### PATCH /api/me/profile
+
+需登入；`admin`、`manager`、`sales` 與未知角色都只能修改自己的安全欄位。待改密碼狀態仍可呼叫。
+
+Request body 採完整表單提交：
+
+| 欄位 | 型別 | 必填 | 說明 |
+|---|---|---|---|
+| name | string | 是 | 顯示名稱，最長 255 字元 |
+| username | string 或 null | 是 | `null`／空字串代表清除；非 null 時正規化為小寫並套用 3～30 字元規則 |
+
+```json
+{
+  "name": "王小明",
+  "username": "xiaoming"
+}
+```
+
+`email`、`role`、`is_admin`、`is_active`、`phone`、`job_title`、`hire_date`、`notes`、`must_change_password`、`password` 只要出現在 payload 就回 `422`，不會靜默忽略。成功回傳更新後 `UserResource`。Username 在 validation 後發生 unique race 時仍轉為 `username` 欄位的 `422`。
+
+### PATCH /api/me/password
+
+需登入；待改密碼狀態仍可呼叫。只操作目前登入者。
+
+| 欄位 | 型別 | 必填 | 說明 |
+|---|---|---|---|
+| current_password | string | 是 | 必須符合目前登入帳號的密碼 |
+| password | string | 是 | 新密碼，至少 8 字元 |
+| password_confirmation | string | 是 | 必須與新密碼一致 |
+
+```json
+{
+  "current_password": "舊密碼",
+  "password": "新密碼",
+  "password_confirmation": "新密碼"
+}
+```
+
+成功後密碼與 `must_change_password=false` 會在同一個 database transaction 保存，保留目前登入狀態並 regenerate Session ID，再回傳更新後 `UserResource`。目前密碼錯誤或 confirmation 不符時回對應欄位的 `422`。Request、response 與 Audit Log 均不會保存或回傳密碼值。
 
 ### UserResource
 
