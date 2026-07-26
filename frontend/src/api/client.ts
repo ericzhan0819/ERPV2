@@ -4,7 +4,7 @@ import {
   trackAuthSessionRequest,
 } from '../auth/authSessionInvalidated'
 import { handlePasswordChangeRequiredError } from '../auth/passwordChangeRequired'
-import { readAuthSessionVersion } from '../auth/sessionState'
+import { readAuthRequestGeneration } from '../auth/sessionState'
 
 const configuredBaseURL = import.meta.env.VITE_API_BASE_URL as string | undefined
 const baseURL = configuredBaseURL || `${window.location.protocol}//${window.location.hostname}:8000`
@@ -19,7 +19,7 @@ export const apiClient = axios.create({
 })
 
 apiClient.interceptors.request.use((config) =>
-  trackAuthSessionRequest(config, readAuthSessionVersion()),
+  trackAuthSessionRequest(config, readAuthRequestGeneration()),
 )
 
 apiClient.interceptors.response.use(

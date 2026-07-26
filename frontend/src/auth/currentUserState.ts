@@ -1,7 +1,7 @@
 import type { User } from '../types/user'
 import {
   isCurrentAuthSessionRequest,
-  type AuthSessionVersion,
+  type AuthRequestGeneration,
   type LogoutStatus,
 } from './sessionState'
 
@@ -55,14 +55,14 @@ export function applyPasswordChangeRequired(
 export function applyAuthSessionInvalidated(
   currentUser: User | null,
   logoutStatus: LogoutStatus,
-  requestSessionVersion: AuthSessionVersion,
-  currentSessionVersion: AuthSessionVersion,
+  requestGeneration: AuthRequestGeneration,
+  currentGeneration: AuthRequestGeneration,
 ): CurrentUserUpdateResult {
   if (
     logoutStatus !== 'idle' ||
     !isCurrentAuthSessionRequest(
-      requestSessionVersion,
-      currentSessionVersion,
+      requestGeneration,
+      currentGeneration,
     )
   ) {
     return { accepted: false, user: currentUser }

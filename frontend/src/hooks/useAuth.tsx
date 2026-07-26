@@ -11,11 +11,12 @@ import {
   requireAcceptedCurrentUserResponse,
 } from '../auth/currentUserState'
 import {
-  AUTH_SESSION_VERSION_KEY,
+  AUTH_LOGIN_IDENTITY_VERSION_KEY,
+  AUTH_REQUEST_GENERATION_KEY,
   LOGOUT_STATE_KEY,
   decideExternalLoginStorageEvent,
   markAuthSessionCompleted,
-  readAuthSessionVersion,
+  readAuthRequestGeneration,
   type LogoutStatus,
 } from '../auth/sessionState'
 import type {
@@ -46,7 +47,7 @@ function migrateLegacyLogoutMarker(): LogoutMarker | null {
   return migrated
 }
 
-function createAuthSessionVersion(): string {
+function createAuthGeneration(): string {
   // 這只是讓 storage 值在每次登入時更新的版本，不是安全 token；不依賴僅限 secure context 的 randomUUID。
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
@@ -177,12 +178,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(
     () =>
-      onAuthSessionInvalidated((requestSessionVersion) => {
+      onAuthSessionInvalidated((requestGeneration) => {
         const result = applyAuthSessionInvalidated(
           userRef.current,
           logoutStatusRef.current,
-          requestSessionVersion,
-          readAuthSessionVersion(),
+          requestGeneration,
+          readAuthRequestGeneration(),
         )
         if (!result.accepted) {
           return
@@ -218,7 +219,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const loggedInUser = await authApi.login(login, password)
     // 新登入取得的使用者資料最具權威性，先讓本次掛載期間較早的 /api/me 回應失效。
     meRequestValidRef.current = false
-    localStorage.setItem(AUTH_SESSION_VERSION_KEY, createAuthSessionVersion())
+    const nextGeneration = createAuthGeneration()
+    // Request generation 先更新，identity 廣播才通知其他分頁清除可能屬於舊身分的 Context。
+    localStorage.setItem(AUTH_REQUEST_GENERATION_KEY, nextGeneration)
+    localStorage.setItem(
+      AUTH_LOGIN_IDENTITY_VERSION_KEY,
+      nextGeneration,
+    )
     localStorage.removeItem(LOGOUT_STATE_KEY)
     logoutStatusRef.current = 'idle'
     setLogoutStatus('idle')
@@ -260,8 +267,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       )
       // 後端成功後會 regenerate Session ID；同步更新 generation，讓修改前送出的舊 401 不得清除新 Session。
       localStorage.setItem(
-        AUTH_SESSION_VERSION_KEY,
-        createAuthSessionVersion(),
+        AUTH_REQUEST_GENERATION_KEY,
+        createAuthGeneration(),
       )
       return acceptedUser
     },

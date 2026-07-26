@@ -1,39 +1,39 @@
 import type { AxiosError, InternalAxiosRequestConfig } from 'axios'
-import type { AuthSessionVersion } from './sessionState'
+import type { AuthRequestGeneration } from './sessionState'
 
 const AUTH_SESSION_INVALIDATED_EVENT = 'erpv2:auth-session-invalidated'
 const authSessionInvalidatedEventTarget = new EventTarget()
-const AUTH_SESSION_VERSION_CONFIG_KEY = '__erpv2AuthSessionVersion'
+const AUTH_REQUEST_GENERATION_CONFIG_KEY = '__erpv2AuthRequestGeneration'
 
 type AuthTrackedRequestConfig = InternalAxiosRequestConfig & {
-  [AUTH_SESSION_VERSION_CONFIG_KEY]?: AuthSessionVersion
+  [AUTH_REQUEST_GENERATION_CONFIG_KEY]?: AuthRequestGeneration
 }
 
 class AuthSessionInvalidatedEvent extends Event {
-  readonly requestSessionVersion: AuthSessionVersion
+  readonly requestGeneration: AuthRequestGeneration
 
-  constructor(requestSessionVersion: AuthSessionVersion) {
+  constructor(requestGeneration: AuthRequestGeneration) {
     super(AUTH_SESSION_INVALIDATED_EVENT)
-    this.requestSessionVersion = requestSessionVersion
+    this.requestGeneration = requestGeneration
   }
 }
 
 export function trackAuthSessionRequest<T extends InternalAxiosRequestConfig>(
   config: T,
-  authSessionVersion: AuthSessionVersion,
+  requestGeneration: AuthRequestGeneration,
 ): T {
   const trackedConfig = config as AuthTrackedRequestConfig
-  trackedConfig[AUTH_SESSION_VERSION_CONFIG_KEY] = authSessionVersion
+  trackedConfig[AUTH_REQUEST_GENERATION_CONFIG_KEY] = requestGeneration
   return config
 }
 
-export function getRequestAuthSessionVersion(
+export function getRequestAuthGeneration(
   error: unknown,
-): AuthSessionVersion | undefined {
+): AuthRequestGeneration | undefined {
   const config = (error as AxiosError)?.config as
     | AuthTrackedRequestConfig
     | undefined
-  return config?.[AUTH_SESSION_VERSION_CONFIG_KEY]
+  return config?.[AUTH_REQUEST_GENERATION_CONFIG_KEY]
 }
 
 export function isAuthSessionInvalidatedError(error: unknown): boolean {
@@ -43,36 +43,36 @@ export function isAuthSessionInvalidatedError(error: unknown): boolean {
 export function handleAuthSessionInvalidatedError(
   error: unknown,
   notify: (
-    requestSessionVersion: AuthSessionVersion,
+    requestGeneration: AuthRequestGeneration,
   ) => void = notifyAuthSessionInvalidated,
 ): boolean {
   if (!isAuthSessionInvalidatedError(error)) {
     return false
   }
 
-  const requestSessionVersion = getRequestAuthSessionVersion(error)
-  if (requestSessionVersion === undefined) {
+  const requestGeneration = getRequestAuthGeneration(error)
+  if (requestGeneration === undefined) {
     return false
   }
 
-  notify(requestSessionVersion)
+  notify(requestGeneration)
   return true
 }
 
 export function notifyAuthSessionInvalidated(
-  requestSessionVersion: AuthSessionVersion,
+  requestGeneration: AuthRequestGeneration,
 ): void {
   authSessionInvalidatedEventTarget.dispatchEvent(
-    new AuthSessionInvalidatedEvent(requestSessionVersion),
+    new AuthSessionInvalidatedEvent(requestGeneration),
   )
 }
 
 export function onAuthSessionInvalidated(
-  listener: (requestSessionVersion: AuthSessionVersion) => void,
+  listener: (requestGeneration: AuthRequestGeneration) => void,
 ): () => void {
   const eventListener = (event: Event) => {
     listener(
-      (event as AuthSessionInvalidatedEvent).requestSessionVersion,
+      (event as AuthSessionInvalidatedEvent).requestGeneration,
     )
   }
 

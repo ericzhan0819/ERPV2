@@ -1,14 +1,17 @@
 export type LogoutStatus = 'idle' | 'pending' | 'blocked'
-export type AuthSessionVersion = string | null
+export type AuthRequestGeneration = string | null
 
 // 用三種登出狀態在分頁間同步；寫入的分頁收不到自己的 storage 事件，必須自行更新 React 狀態。
 export const LOGOUT_STATE_KEY = 'erpv2:logout-state'
-export const AUTH_SESSION_VERSION_KEY = 'erpv2:auth-session-version'
+// 這個既有 storage key 只廣播「其他分頁完成登入，身分可能已切換」，不可拿來廣播同一 User 的密碼更新。
+export const AUTH_LOGIN_IDENTITY_VERSION_KEY = 'erpv2:auth-session-version'
+// Request generation 只用來判斷 401 是否過期；更新此 key 不得清除其他分頁的 User。
+export const AUTH_REQUEST_GENERATION_KEY = 'erpv2:auth-request-generation'
 
-export function readAuthSessionVersion(
+export function readAuthRequestGeneration(
   storage: Pick<Storage, 'getItem'> = localStorage,
-): AuthSessionVersion {
-  return storage.getItem(AUTH_SESSION_VERSION_KEY)
+): AuthRequestGeneration {
+  return storage.getItem(AUTH_REQUEST_GENERATION_KEY)
 }
 
 export function markAuthSessionCompleted(
@@ -18,10 +21,10 @@ export function markAuthSessionCompleted(
 }
 
 export function isCurrentAuthSessionRequest(
-  requestVersion: AuthSessionVersion,
-  currentVersion: AuthSessionVersion,
+  requestGeneration: AuthRequestGeneration,
+  currentGeneration: AuthRequestGeneration,
 ): boolean {
-  return requestVersion === currentVersion
+  return requestGeneration === currentGeneration
 }
 
 export interface ExternalLoginStorageDecision {
@@ -35,7 +38,7 @@ export function isExternalLoginStorageEvent(
   newValue: string | null,
 ): boolean {
   return (
-    key === AUTH_SESSION_VERSION_KEY ||
+    key === AUTH_LOGIN_IDENTITY_VERSION_KEY ||
     (key === LOGOUT_STATE_KEY && newValue === null)
   )
 }
