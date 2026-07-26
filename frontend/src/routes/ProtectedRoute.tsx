@@ -2,21 +2,31 @@ import { Navigate } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import type { UserRole } from '../types/user'
 import { useAuth } from '../hooks/useAuth'
+import { decideProtectedRoute } from '../auth/protectedRouteDecision'
 
 export function ProtectedRoute({
   children,
   allowedRoles,
+  passwordChangeOnly = false,
 }: {
   children: ReactNode
   allowedRoles?: UserRole[]
+  passwordChangeOnly?: boolean
 }) {
   const { user, loading, logoutStatus, retryLogout } = useAuth()
+  const decision = decideProtectedRoute({
+    user,
+    loading,
+    logoutStatus,
+    allowedRoles,
+    passwordChangeOnly,
+  })
 
-  if (loading) {
+  if (decision.type === 'loading') {
     return <div className="flex min-h-screen items-center justify-center text-fg-muted">載入中...</div>
   }
 
-  if (logoutStatus === 'pending') {
+  if (decision.type === 'logout-pending') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg">
         <p className="text-sm text-fg-muted">登出中，請稍候...</p>
@@ -24,7 +34,7 @@ export function ProtectedRoute({
     )
   }
 
-  if (logoutStatus === 'blocked') {
+  if (decision.type === 'logout-blocked') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-bg">
         <div className="max-w-sm rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
@@ -44,12 +54,8 @@ export function ProtectedRoute({
     )
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace />
-  }
-
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/dashboard" replace />
+  if (decision.type === 'redirect') {
+    return <Navigate to={decision.to} replace />
   }
 
   return <>{children}</>

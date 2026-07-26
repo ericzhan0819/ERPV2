@@ -429,29 +429,29 @@ flag=true 時阻擋：
 
 ### 9.1 Auth Context
 
-- [ ] `login(login, password)` 命名更新
-- [ ] Login 回傳 username／flag
-- [ ] `/api/me` 回傳 username／flag
-- [ ] 新增安全的 `updateCurrentUser()` 或等價 context 更新能力
-- [ ] Self profile／password 成功後更新 Context
-- [ ] Header 名稱不需 reload 即更新
-- [ ] 既有多分頁 logout state 保護不回歸
+- [x] `login(login, password)` 命名更新
+- [x] Login 回傳 username／flag
+- [x] `/api/me` 回傳 username／flag
+- [x] 新增安全的 `updateCurrentUser()` 或等價 context 更新能力
+- [x] Self profile／password 成功後更新 Context
+- [x] Header 名稱不需 reload 即更新
+- [x] 既有多分頁 logout state 保護不回歸
 
 ### 9.2 Protected Route
 
-- [ ] 未登入導 `/login`
-- [ ] `must_change_password=true` 導向強制頁
-- [ ] 強制頁本身不產生 redirect loop
-- [ ] flag=false 才檢查一般 role route
-- [ ] backend 409 `PASSWORD_CHANGE_REQUIRED` 可讓前端同步導流
-- [ ] logout pending／blocked 狀態優先順序保持正確
+- [x] 未登入導 `/login`
+- [x] `must_change_password=true` 導向強制頁
+- [x] 強制頁本身不產生 redirect loop
+- [x] flag=false 才檢查一般 role route
+- [x] backend 409 `PASSWORD_CHANGE_REQUIRED` 可讓前端同步導流
+- [x] logout pending／blocked 狀態優先順序保持正確
 
 ### 9.3 API Error Handling
 
-- [ ] Axios interceptor 或集中 error handling 辨識 machine code
-- [ ] 不在每個頁面重複寫 409 判斷
-- [ ] 不能把一般 409 誤判成 password required
-- [ ] 導流時不遺失 logout 安全狀態
+- [x] Axios interceptor 或集中 error handling 辨識 machine code
+- [x] 不在每個頁面重複寫 409 判斷
+- [x] 不能把一般 409 誤判成 password required
+- [x] 導流時不遺失 logout 安全狀態
 
 **Migration：否。**
 

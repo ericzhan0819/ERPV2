@@ -2,9 +2,14 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { ReactNode } from 'react'
 import * as authApi from '../api/auth'
 import { ensureCsrfCookie } from '../api/client'
-import type { User } from '../types/auth'
-
-export type LogoutStatus = 'idle' | 'pending' | 'blocked'
+import { onPasswordChangeRequired } from '../auth/passwordChangeRequired'
+import { applyCurrentUserResponse } from '../auth/currentUserState'
+import type { LogoutStatus } from '../auth/sessionState'
+import type {
+  CurrentUserPasswordPayload,
+  CurrentUserProfilePayload,
+  User,
+} from '../types/auth'
 
 // 用三種登出狀態在分頁間同步；寫入的分頁收不到自己的 storage 事件，必須自行更新 React 狀態。
 const LOGOUT_STATE_KEY = 'erpv2:logout-state'
@@ -36,6 +41,8 @@ interface AuthContextValue {
   loading: boolean
   logoutStatus: LogoutStatus
   login: (login: string, password: string) => Promise<void>
+  updateProfile: (payload: CurrentUserProfilePayload) => Promise<User>
+  updatePassword: (payload: CurrentUserPasswordPayload) => Promise<User>
   logout: () => Promise<void>
   retryLogout: () => Promise<void>
 }
@@ -46,6 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [logoutStatus, setLogoutStatus] = useState<LogoutStatus>('idle')
+  const userRef = useRef<User | null>(null)
+  const logoutStatusRef = useRef<LogoutStatus>('idle')
 
   // 登出標記出現後，讓尚在執行的 /api/me 回應失效，避免它重新顯示受保護畫面。
   const meRequestValidRef = useRef(true)
@@ -56,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (marker === 'pending') {
       meRequestValidRef.current = false
+      logoutStatusRef.current = 'pending'
       setLogoutStatus('pending')
       setLoading(false)
       return
@@ -63,6 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (marker === 'failed') {
       meRequestValidRef.current = false
+      logoutStatusRef.current = 'blocked'
       setLogoutStatus('blocked')
       setLoading(false)
       return
@@ -71,7 +82,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (marker === 'completed') {
       // 登出已確認時不再呼叫 /api/me，避免舊 cookie 的回應短暫恢復登入畫面。
       meRequestValidRef.current = false
+      userRef.current = null
       setUser(null)
+      logoutStatusRef.current = 'idle'
       setLogoutStatus('idle')
       setLoading(false)
       return
@@ -84,10 +97,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // 請求期間收到登出標記，這份回應已過期，不可恢復登入畫面。
           return
         }
+        userRef.current = fetchedUser
         setUser(fetchedUser)
       })
       .catch(() => {
         if (meRequestValidRef.current) {
+          userRef.current = null
           setUser(null)
         }
       })
@@ -104,15 +119,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (marker === 'pending') {
         meRequestValidRef.current = false
+        userRef.current = null
         setUser(null)
+        logoutStatusRef.current = 'pending'
         setLogoutStatus('pending')
       } else if (marker === 'failed') {
         meRequestValidRef.current = false
+        userRef.current = null
         setUser(null)
+        logoutStatusRef.current = 'blocked'
         setLogoutStatus('blocked')
       } else if (marker === 'completed') {
         meRequestValidRef.current = false
+        userRef.current = null
         setUser(null)
+        logoutStatusRef.current = 'idle'
         setLogoutStatus('idle')
       }
       // 其他分頁剛登入而清除標記時，此分頁沒有可保護的工作階段，不需處理。
@@ -122,19 +143,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('storage', handleStorage)
   }, [])
 
+  useEffect(
+    () =>
+      onPasswordChangeRequired(() => {
+        // 登出保護優先；舊的營運請求即使稍後回 409，也不能重新顯示任何已登入狀態。
+        if (logoutStatusRef.current !== 'idle') {
+          return
+        }
+
+        const currentUser = userRef.current
+        if (!currentUser || currentUser.must_change_password) {
+          return
+        }
+
+        const requiredUser = { ...currentUser, must_change_password: true }
+        userRef.current = requiredUser
+        setUser(requiredUser)
+      }),
+    [],
+  )
+
   const login = useCallback(async (login: string, password: string) => {
     const loggedInUser = await authApi.login(login, password)
     // 新登入取得的使用者資料最具權威性，先讓本次掛載期間較早的 /api/me 回應失效。
     meRequestValidRef.current = false
     localStorage.removeItem(LOGOUT_STATE_KEY)
+    logoutStatusRef.current = 'idle'
     setLogoutStatus('idle')
+    userRef.current = loggedInUser
     setUser(loggedInUser)
   }, [])
+
+  const updateCurrentUser = useCallback((nextUser: User): boolean => {
+    const result = applyCurrentUserResponse(
+      userRef.current,
+      nextUser,
+      logoutStatusRef.current,
+    )
+    if (!result.accepted) {
+      return false
+    }
+
+    userRef.current = result.user
+    setUser(result.user)
+    return true
+  }, [])
+
+  const updateProfile = useCallback(
+    async (payload: CurrentUserProfilePayload) => {
+      const updatedUser = await authApi.updateCurrentUserProfile(payload)
+      updateCurrentUser(updatedUser)
+      return updatedUser
+    },
+    [updateCurrentUser],
+  )
+
+  const updatePassword = useCallback(
+    async (payload: CurrentUserPasswordPayload) => {
+      const updatedUser = await authApi.updateCurrentUserPassword(payload)
+      updateCurrentUser(updatedUser)
+      return updatedUser
+    },
+    [updateCurrentUser],
+  )
 
   const performLogout = useCallback(async () => {
     // 本分頁不會收到自己的 storage 事件，因此在此直接讓既有 /api/me 請求失效。
     meRequestValidRef.current = false
     localStorage.setItem(LOGOUT_STATE_KEY, 'pending' satisfies LogoutMarker)
+    logoutStatusRef.current = 'pending'
     setLogoutStatus('pending')
 
     try {
@@ -145,14 +222,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await ensureCsrfCookie()
         await authApi.logout()
       } catch (retryError) {
+        userRef.current = null
         setUser(null)
+        logoutStatusRef.current = 'blocked'
         setLogoutStatus('blocked')
         localStorage.setItem(LOGOUT_STATE_KEY, 'failed' satisfies LogoutMarker)
         throw retryError
       }
     }
 
+    userRef.current = null
     setUser(null)
+    logoutStatusRef.current = 'idle'
     setLogoutStatus('idle')
     // 保留完成標記到下次成功登入，讓之後開啟或重新整理的分頁也維持登出狀態。
     localStorage.setItem(LOGOUT_STATE_KEY, 'completed' satisfies LogoutMarker)
@@ -160,7 +241,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, logoutStatus, login, logout: performLogout, retryLogout: performLogout }}
+      value={{
+        user,
+        loading,
+        logoutStatus,
+        login,
+        updateProfile,
+        updatePassword,
+        logout: performLogout,
+        retryLogout: performLogout,
+      }}
     >
       {children}
     </AuthContext.Provider>
