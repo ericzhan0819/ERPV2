@@ -11,8 +11,7 @@ import {
 import {
   AUTH_SESSION_VERSION_KEY,
   LOGOUT_STATE_KEY,
-  isExternalLoginStorageEvent,
-  shouldInvalidateForExternalLogin,
+  decideExternalLoginStorageEvent,
   type LogoutStatus,
 } from '../auth/sessionState'
 import type {
@@ -21,7 +20,6 @@ import type {
   User,
 } from '../types/auth'
 
-// 用三種登出狀態在分頁間同步；寫入的分頁收不到自己的 storage 事件，必須自行更新 React 狀態。
 // 舊版留下未確認的登出標記時，先轉為新版狀態，避免 /api/me 意外恢復尚未確認登出的工作階段。
 const LEGACY_LOGOUT_PENDING_KEY = 'erpv2:logout-pending'
 
@@ -124,16 +122,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     function handleStorage(event: StorageEvent) {
-      if (
-        isExternalLoginStorageEvent(event.key, event.newValue) &&
-        shouldInvalidateForExternalLogin(
-          userRef.current !== null,
-          logoutStatusRef.current,
-        )
-      ) {
-        meRequestValidRef.current = false
-        userRef.current = null
-        setUser(null)
+      const externalLoginDecision = decideExternalLoginStorageEvent(
+        event.key,
+        event.newValue,
+        userRef.current !== null,
+        logoutStatusRef.current,
+      )
+
+      if (externalLoginDecision.handled) {
+        if (externalLoginDecision.invalidateMeRequest) {
+          meRequestValidRef.current = false
+        }
+        if (externalLoginDecision.clearCurrentUser) {
+          userRef.current = null
+          setUser(null)
+        }
         return
       }
 
