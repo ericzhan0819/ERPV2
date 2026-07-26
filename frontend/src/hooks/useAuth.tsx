@@ -8,7 +8,13 @@ import {
   applyPasswordChangeRequired,
   requireAcceptedCurrentUserResponse,
 } from '../auth/currentUserState'
-import type { LogoutStatus } from '../auth/sessionState'
+import {
+  AUTH_SESSION_VERSION_KEY,
+  LOGOUT_STATE_KEY,
+  isExternalLoginStorageEvent,
+  shouldInvalidateForExternalLogin,
+  type LogoutStatus,
+} from '../auth/sessionState'
 import type {
   CurrentUserPasswordPayload,
   CurrentUserProfilePayload,
@@ -16,8 +22,6 @@ import type {
 } from '../types/auth'
 
 // 用三種登出狀態在分頁間同步；寫入的分頁收不到自己的 storage 事件，必須自行更新 React 狀態。
-const LOGOUT_STATE_KEY = 'erpv2:logout-state'
-
 // 舊版留下未確認的登出標記時，先轉為新版狀態，避免 /api/me 意外恢復尚未確認登出的工作階段。
 const LEGACY_LOGOUT_PENDING_KEY = 'erpv2:logout-pending'
 
@@ -38,6 +42,11 @@ function migrateLegacyLogoutMarker(): LogoutMarker | null {
   // 確定已寫入新版標記後，才移除舊版標記。
   localStorage.removeItem(LEGACY_LOGOUT_PENDING_KEY)
   return migrated
+}
+
+function createAuthSessionVersion(): string {
+  // 這只是讓 storage 值在每次登入時更新的版本，不是安全 token；不依賴僅限 secure context 的 randomUUID。
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
 interface AuthContextValue {
@@ -115,7 +124,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     function handleStorage(event: StorageEvent) {
-      if (event.key !== LOGOUT_STATE_KEY) {
+      if (
+        isExternalLoginStorageEvent(event.key, event.newValue) &&
+        shouldInvalidateForExternalLogin(
+          userRef.current !== null,
+          logoutStatusRef.current,
+        )
+      ) {
+        meRequestValidRef.current = false
+        userRef.current = null
+        setUser(null)
+        return
+      }
+
+      if (event.key !== LOGOUT_STATE_KEY || event.newValue === null) {
         return
       }
 
@@ -140,7 +162,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logoutStatusRef.current = 'idle'
         setLogoutStatus('idle')
       }
-      // 其他分頁剛登入而清除標記時，此分頁沒有可保護的工作階段，不需處理。
     }
 
     window.addEventListener('storage', handleStorage)
@@ -168,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const loggedInUser = await authApi.login(login, password)
     // 新登入取得的使用者資料最具權威性，先讓本次掛載期間較早的 /api/me 回應失效。
     meRequestValidRef.current = false
+    localStorage.setItem(AUTH_SESSION_VERSION_KEY, createAuthSessionVersion())
     localStorage.removeItem(LOGOUT_STATE_KEY)
     logoutStatusRef.current = 'idle'
     setLogoutStatus('idle')

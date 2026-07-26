@@ -4,8 +4,7 @@ export const PASSWORD_CHANGE_REQUIRED_CODE = 'PASSWORD_CHANGE_REQUIRED'
 export const PASSWORD_CHANGE_REQUIRED_PATH = '/change-password'
 
 const PASSWORD_CHANGE_REQUIRED_EVENT = 'erpv2:password-change-required'
-const passwordChangeRequiredEventTarget: EventTarget =
-  typeof window === 'undefined' ? new EventTarget() : window
+const passwordChangeRequiredEventTarget = new EventTarget()
 
 interface ApiErrorPayload {
   code?: unknown
