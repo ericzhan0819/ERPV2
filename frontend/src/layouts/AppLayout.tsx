@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Car, Wallet, Banknote, Users, Contact, ScrollText, HandCoins, Menu, X } from 'lucide-react'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { LayoutDashboard, Car, Wallet, Banknote, Users, Contact, ScrollText, HandCoins, Menu, X, CircleUserRound } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import { useTheme } from '../hooks/useTheme'
 import { ThemeToggle } from '../components/ThemeToggle'
@@ -192,7 +192,14 @@ export function AppLayout() {
             <Menu size={20} />
           </button>
           <div className="flex min-w-0 items-center gap-1 sm:gap-3">
-            <span className="hidden truncate text-sm text-fg-muted sm:inline">{user?.name}</span>
+            <Link
+              to="/account"
+              aria-label={`我的帳號：${user?.name ?? ''}`}
+              className="flex min-h-11 min-w-11 max-w-48 items-center justify-center gap-2 rounded-lg px-2 text-sm font-medium text-fg-muted hover:bg-surface-2 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface sm:justify-start"
+            >
+              <CircleUserRound size={18} aria-hidden="true" className="shrink-0" />
+              <span className="hidden truncate sm:inline">{user?.name}</span>
+            </Link>
             <ThemeToggle />
             <button
               onClick={handleLogout}

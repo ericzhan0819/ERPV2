@@ -24,6 +24,7 @@ import { SalaryProfiles } from './pages/salary/SalaryProfiles'
 import { CommissionPlans } from './pages/salary/CommissionPlans'
 import { PasswordChangeRequired } from './pages/PasswordChangeRequired'
 import { PASSWORD_CHANGE_REQUIRED_PATH } from './auth/passwordChangeRequired'
+import { Account } from './pages/account/Account'
 
 function App() {
   return (
@@ -62,6 +63,7 @@ function App() {
           }
         >
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/account" element={<Account />} />
           <Route path="/vehicles" element={<VehicleList />} />
           <Route
             path="/vehicles/create"

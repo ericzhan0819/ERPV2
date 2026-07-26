@@ -516,44 +516,44 @@ flag=true 時阻擋：
 
 ### 11.1 Route 與入口
 
-- [ ] 建立 `/account` 或企劃指定等價 route
-- [ ] 三角色皆可進入
-- [ ] Header 使用者名稱區提供入口
-- [ ] Admin 可由此入口修改自己的密碼，解除第 5 部分自我 Admin Reset 限制的交付相依
-- [ ] 不新增 Sidebar 主模組項目
-- [ ] Theme Toggle 留在 Header
+- [x] 建立 `/account` 或企劃指定等價 route
+- [x] 三角色皆可進入
+- [x] Header 使用者名稱區提供入口
+- [x] Admin 可由此入口修改自己的密碼，解除第 5 部分自我 Admin Reset 限制的交付相依
+- [x] 不新增 Sidebar 主模組項目
+- [x] Theme Toggle 留在 Header
 
 ### 11.2 個人資料區塊
 
-- [ ] 顯示名稱可編輯
-- [ ] username 可新增／修改／清空
-- [ ] Email 唯讀
-- [ ] 角色唯讀
-- [ ] null username 顯示說明
-- [ ] username 規則提示
-- [ ] per-field errors
-- [ ] success feedback
-- [ ] 更新後 Header 名稱即時改變
+- [x] 顯示名稱可編輯
+- [x] username 可新增／修改／清空
+- [x] Email 唯讀
+- [x] 角色唯讀
+- [x] null username 顯示說明
+- [x] username 規則提示
+- [x] per-field errors
+- [x] success feedback
+- [x] 更新後 Header 名稱即時改變
 
 ### 11.3 密碼區塊
 
-- [ ] 目前密碼
-- [ ] 新密碼
-- [ ] 確認新密碼
-- [ ] 與個人資料分開提交
-- [ ] success 後清空密碼欄位
-- [ ] current password error
-- [ ] confirmation error
-- [ ] loading／double submit protection
+- [x] 目前密碼
+- [x] 新密碼
+- [x] 確認新密碼
+- [x] 與個人資料分開提交
+- [x] success 後清空密碼欄位
+- [x] current password error
+- [x] confirmation error
+- [x] loading／double submit protection
 
 ### 11.4 Accessibility／RWD
 
-- [ ] 320／375／390／768／1440px
-- [ ] keyboard
-- [ ] visible focus
-- [ ] label／description／error association
-- [ ] light／dark mode
-- [ ] 無水平 overflow
+- [x] 320／375／390／768／1440px
+- [x] keyboard
+- [x] visible focus
+- [x] label／description／error association
+- [x] light／dark mode
+- [x] 無水平 overflow
 
 **Migration：否。**
 
