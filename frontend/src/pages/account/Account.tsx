@@ -125,7 +125,10 @@ function ProfileSection() {
           disabled={submitting}
           maxLength={255}
           autoComplete="name"
-          onChange={(name) => setForm((current) => ({ ...current, name }))}
+          onChange={(name) => {
+            setSuccess(null)
+            setForm((current) => ({ ...current, name }))
+          }}
         />
 
         <div>
@@ -143,9 +146,7 @@ function ProfileSection() {
             autoCapitalize="none"
             autoCorrect="off"
             autoComplete="username"
-            minLength={3}
             maxLength={30}
-            pattern="[A-Za-z0-9._-]+"
             value={form.username}
             disabled={submitting}
             aria-invalid={fieldErrors.username ? true : undefined}
@@ -153,12 +154,13 @@ function ProfileSection() {
               usernameHelpId,
               fieldErrors.username ? usernameErrorId : null,
             ].filter(Boolean).join(' ')}
-            onChange={(event) =>
+            onChange={(event) => {
+              setSuccess(null)
               setForm((current) => ({
                 ...current,
                 username: event.target.value,
               }))
-            }
+            }}
             className="form-control-touch w-full rounded-lg border border-border-strong px-3 py-2 text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
           />
           <p id={usernameHelpId} className="mt-1 text-sm leading-5 text-fg-muted">
@@ -276,7 +278,10 @@ function PasswordSection({
           value={currentPassword}
           error={fieldErrors.current_password}
           disabled={submitting}
-          onChange={setCurrentPassword}
+          onChange={(value) => {
+            setSuccess(null)
+            setCurrentPassword(value)
+          }}
         />
         <PasswordField
           id="account-new-password"
@@ -287,7 +292,10 @@ function PasswordSection({
           error={fieldErrors.password}
           disabled={submitting}
           minLength={8}
-          onChange={setPassword}
+          onChange={(value) => {
+            setSuccess(null)
+            setPassword(value)
+          }}
         />
         <PasswordField
           id="account-password-confirmation"
@@ -298,7 +306,10 @@ function PasswordSection({
           error={fieldErrors.password_confirmation}
           disabled={submitting}
           minLength={8}
-          onChange={setPasswordConfirmation}
+          onChange={(value) => {
+            setSuccess(null)
+            setPasswordConfirmation(value)
+          }}
         />
 
         <Feedback error={error} success={success} />
@@ -434,9 +445,13 @@ function Feedback({
   success: string | null
 }) {
   return (
-    <div aria-live="polite">
-      {error && <p role="alert" className="text-sm text-error">{error}</p>}
-      {success && <p className="text-sm text-success">{success}</p>}
-    </div>
+    <>
+      <p role="alert" aria-live="assertive" className="text-sm text-error empty:hidden">
+        {error}
+      </p>
+      <p role="status" aria-live="polite" className="text-sm text-success empty:hidden">
+        {success}
+      </p>
+    </>
   )
 }
