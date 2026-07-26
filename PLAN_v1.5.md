@@ -471,40 +471,40 @@ flag=true 時阻擋：
 
 ### 10.1 Login Page
 
-- [ ] state `email` 改為 `login`
-- [ ] Label 改為「帳號名稱或 Email」
-- [ ] input type 改為 text
-- [ ] `autocomplete="username"`
-- [ ] password 使用 `autocomplete="current-password"`
-- [ ] Email 與 username 都可送出
-- [ ] 登入成功依 flag 導向
-- [ ] 通用錯誤與 429 呈現保留
-- [ ] Login title／subtitle 改讀 app config
+- [x] state `email` 改為 `login`
+- [x] Label 改為「帳號名稱或 Email」
+- [x] input type 改為 text
+- [x] `autocomplete="username"`
+- [x] password 使用 `autocomplete="current-password"`
+- [x] Email 與 username 都可送出
+- [x] 登入成功依 flag 導向
+- [x] 通用錯誤與 429 呈現保留
+- [x] Login title／subtitle 改讀 app config
 
 ### 10.2 強制修改密碼頁
 
-- [ ] 建立獨立 route
-- [ ] 不使用一般 AppLayout／Sidebar
-- [ ] 顯示目前密碼
-- [ ] 顯示新密碼
-- [ ] 顯示確認新密碼
-- [ ] visible labels
-- [ ] password autocomplete 語意正確
-- [ ] per-field errors
-- [ ] loading／disabled
-- [ ] Theme Toggle
-- [ ] 登出
-- [ ] 成功更新 Auth Context
-- [ ] 成功導 Dashboard
-- [ ] Mobile／safe area
+- [x] 建立獨立 route
+- [x] 不使用一般 AppLayout／Sidebar
+- [x] 顯示目前密碼
+- [x] 顯示新密碼
+- [x] 顯示確認新密碼
+- [x] visible labels
+- [x] password autocomplete 語意正確
+- [x] per-field errors
+- [x] loading／disabled
+- [x] Theme Toggle
+- [x] 登出
+- [x] 成功更新 Auth Context
+- [x] 成功導 Dashboard
+- [x] Mobile／safe area
 
 ### 10.3 強制流程錯誤
 
-- [ ] 目前密碼錯誤不清除 flag
-- [ ] validation error 保留欄位
-- [ ] API 失敗不讓使用者進營運頁
-- [ ] Session 過期回 Login
-- [ ] Admin 重設密碼造成的 stateful 401 回 Login；使用新密碼登入後依 flag 進強制頁
+- [x] 目前密碼錯誤不清除 flag
+- [x] validation error 保留欄位
+- [x] API 失敗不讓使用者進營運頁
+- [x] Session 過期回 Login
+- [x] Admin 重設密碼造成的 stateful 401 回 Login；使用新密碼登入後依 flag 進強制頁
 
 **Migration：否。**
 

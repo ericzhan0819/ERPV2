@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { handleAuthSessionInvalidatedError } from '../auth/authSessionInvalidated'
 import { handlePasswordChangeRequiredError } from '../auth/passwordChangeRequired'
 
 const configuredBaseURL = import.meta.env.VITE_API_BASE_URL as string | undefined
@@ -16,6 +17,7 @@ export const apiClient = axios.create({
 apiClient.interceptors.response.use(
   (response) => response,
   (error: unknown) => {
+    handleAuthSessionInvalidatedError(error)
     handlePasswordChangeRequiredError(error)
     return Promise.reject(error)
   },

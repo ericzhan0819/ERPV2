@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { User } from '../types/user'
 import {
   StaleCurrentUserResponseError,
+  applyAuthSessionInvalidated,
   applyCurrentUserResponse,
   applyPasswordChangeRequired,
   requireAcceptedCurrentUserResponse,
@@ -74,6 +75,25 @@ describe('current user context update', () => {
     expect(applyPasswordChangeRequired(requiredUser, 'idle')).toEqual({
       accepted: false,
       user: requiredUser,
+    })
+  })
+
+  it('clears an idle user after 401 without overriding logout safety states', () => {
+    expect(applyAuthSessionInvalidated(user, 'idle')).toEqual({
+      accepted: true,
+      user: null,
+    })
+    expect(applyAuthSessionInvalidated(user, 'pending')).toEqual({
+      accepted: false,
+      user,
+    })
+    expect(applyAuthSessionInvalidated(user, 'blocked')).toEqual({
+      accepted: false,
+      user,
+    })
+    expect(applyAuthSessionInvalidated(null, 'idle')).toEqual({
+      accepted: false,
+      user: null,
     })
   })
 

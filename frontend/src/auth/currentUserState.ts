@@ -48,6 +48,17 @@ export function applyPasswordChangeRequired(
   }
 }
 
+export function applyAuthSessionInvalidated(
+  currentUser: User | null,
+  logoutStatus: LogoutStatus,
+): CurrentUserUpdateResult {
+  if (logoutStatus !== 'idle' || !currentUser) {
+    return { accepted: false, user: currentUser }
+  }
+
+  return { accepted: true, user: null }
+}
+
 export function requireAcceptedCurrentUserResponse(
   result: CurrentUserUpdateResult,
 ): User {

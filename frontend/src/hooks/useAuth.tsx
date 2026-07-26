@@ -2,8 +2,10 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { ReactNode } from 'react'
 import * as authApi from '../api/auth'
 import { ensureCsrfCookie } from '../api/client'
+import { onAuthSessionInvalidated } from '../auth/authSessionInvalidated'
 import { onPasswordChangeRequired } from '../auth/passwordChangeRequired'
 import {
+  applyAuthSessionInvalidated,
   applyCurrentUserResponse,
   applyPasswordChangeRequired,
   requireAcceptedCurrentUserResponse,
@@ -51,7 +53,7 @@ interface AuthContextValue {
   user: User | null
   loading: boolean
   logoutStatus: LogoutStatus
-  login: (login: string, password: string) => Promise<void>
+  login: (login: string, password: string) => Promise<User>
   updateProfile: (payload: CurrentUserProfilePayload) => Promise<User>
   updatePassword: (payload: CurrentUserPasswordPayload) => Promise<User>
   logout: () => Promise<void>
@@ -173,6 +175,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(
     () =>
+      onAuthSessionInvalidated(() => {
+        const result = applyAuthSessionInvalidated(
+          userRef.current,
+          logoutStatusRef.current,
+        )
+        if (!result.accepted) {
+          return
+        }
+
+        meRequestValidRef.current = false
+        userRef.current = result.user
+        setUser(result.user)
+      }),
+    [],
+  )
+
+  useEffect(
+    () =>
       onPasswordChangeRequired(() => {
         const result = applyPasswordChangeRequired(
           userRef.current,
@@ -198,6 +218,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLogoutStatus('idle')
     userRef.current = loggedInUser
     setUser(loggedInUser)
+    return loggedInUser
   }, [])
 
   const updateCurrentUser = useCallback((nextUser: User) => {

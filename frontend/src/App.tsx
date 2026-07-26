@@ -22,7 +22,7 @@ import { SalaryPeriodList } from './pages/salary/SalaryPeriodList'
 import { SalaryPeriodDetail } from './pages/salary/SalaryPeriodDetail'
 import { SalaryProfiles } from './pages/salary/SalaryProfiles'
 import { CommissionPlans } from './pages/salary/CommissionPlans'
-import { PasswordChangeRequiredPlaceholder } from './pages/PasswordChangeRequiredPlaceholder'
+import { PasswordChangeRequired } from './pages/PasswordChangeRequired'
 import { PASSWORD_CHANGE_REQUIRED_PATH } from './auth/passwordChangeRequired'
 
 function App() {
@@ -34,7 +34,7 @@ function App() {
           path={PASSWORD_CHANGE_REQUIRED_PATH}
           element={
             <ProtectedRoute passwordChangeOnly>
-              <PasswordChangeRequiredPlaceholder />
+              <PasswordChangeRequired />
             </ProtectedRoute>
           }
         />

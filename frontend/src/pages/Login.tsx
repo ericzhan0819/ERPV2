@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { isAxiosError } from 'axios'
+import { appConfig } from '../config/app'
 import { useAuth } from '../hooks/useAuth'
+import { apiErrorMessage, loginSuccessPath } from './authFormState'
 
 export function Login() {
   const { login } = useAuth()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
+  const [loginIdentifier, setLoginIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -17,56 +18,64 @@ export function Login() {
     setError(null)
     setSubmitting(true)
     try {
-      await login(email, password)
-      navigate('/dashboard')
+      const loggedInUser = await login(loginIdentifier, password)
+      navigate(loginSuccessPath(loggedInUser), { replace: true })
     } catch (err) {
-      if (isAxiosError(err) && err.response?.data?.message) {
-        setError(err.response.data.message)
-      } else {
-        setError('登入失敗，請稍後再試')
-      }
+      setError(apiErrorMessage(err, '登入失敗，請稍後再試'))
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-bg">
+    <div className="app-shell flex items-center justify-center bg-bg pt-[calc(1rem+env(safe-area-inset-top,0px))] pr-[calc(1rem+env(safe-area-inset-right,0px))] pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pl-[calc(1rem+env(safe-area-inset-left,0px))]">
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-sm rounded-2xl border border-border bg-surface p-8 shadow-sm"
       >
-        <h1 className="text-xl font-semibold text-fg">中古車行內部營運系統</h1>
-        <p className="mt-1 text-sm text-fg-muted">請登入以繼續</p>
+        <h1 className="text-xl font-semibold text-fg">{appConfig.systemName}</h1>
+        <p className="mt-1 text-sm text-fg-muted">{appConfig.loginSubtitle}</p>
 
         <div className="mt-6 flex flex-col gap-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-fg-muted">Email</label>
+            <label htmlFor="login" className="mb-1 block text-sm font-medium text-fg-muted">
+              帳號名稱或 Email <span aria-hidden="true" className="text-error">*</span>
+            </label>
             <input
-              type="email"
+              id="login"
+              name="login"
+              type="text"
+              autoComplete="username"
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+              value={loginIdentifier}
+              onChange={(e) => setLoginIdentifier(e.target.value)}
+              className="form-control-touch w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-fg-muted">密碼</label>
+            <label htmlFor="password" className="mb-1 block text-sm font-medium text-fg-muted">
+              密碼 <span aria-hidden="true" className="text-error">*</span>
+            </label>
             <input
+              id="password"
+              name="password"
               type="password"
+              autoComplete="current-password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+              className="form-control-touch w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
 
-          {error && <p className="text-sm text-error">{error}</p>}
+          <p role="alert" aria-live="polite" className="text-sm text-error empty:hidden">
+            {error}
+          </p>
 
           <button
             type="submit"
             disabled={submitting}
-            className="mt-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
+            className="mt-2 min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-50"
           >
             {submitting ? '登入中...' : '登入'}
           </button>
