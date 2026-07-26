@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { User } from '../types/user'
 import {
+  PASSWORD_UPDATED_RELOGIN_NOTICE,
   apiErrorMessage,
   apiFieldErrors,
+  isCommittedPasswordUpdateWithStaleContext,
   loginSuccessPath,
 } from './authFormState'
+import { StaleCurrentUserResponseError } from '../auth/currentUserState'
 
 const user: User = {
   id: 1,
@@ -56,5 +59,19 @@ describe('auth form state', () => {
   it('uses a safe fallback for non-API failures', () => {
     expect(apiFieldErrors(new Error('network'), ['password'] as const)).toEqual({})
     expect(apiErrorMessage(new Error('network'), '請稍後再試')).toBe('請稍後再試')
+  })
+
+  it('distinguishes a committed password update from an API failure', () => {
+    expect(
+      isCommittedPasswordUpdateWithStaleContext(
+        new StaleCurrentUserResponseError(),
+      ),
+    ).toBe(true)
+    expect(
+      isCommittedPasswordUpdateWithStaleContext(new Error('network')),
+    ).toBe(false)
+    expect(PASSWORD_UPDATED_RELOGIN_NOTICE).toBe(
+      '密碼已更新，請使用新密碼重新登入',
+    )
   })
 })

@@ -1,5 +1,9 @@
 import type { User } from '../types/user'
-import type { LogoutStatus } from './sessionState'
+import {
+  isCurrentAuthSessionRequest,
+  type AuthSessionVersion,
+  type LogoutStatus,
+} from './sessionState'
 
 export interface CurrentUserUpdateResult {
   accepted: boolean
@@ -51,8 +55,16 @@ export function applyPasswordChangeRequired(
 export function applyAuthSessionInvalidated(
   currentUser: User | null,
   logoutStatus: LogoutStatus,
+  requestSessionVersion: AuthSessionVersion,
+  currentSessionVersion: AuthSessionVersion,
 ): CurrentUserUpdateResult {
-  if (logoutStatus !== 'idle' || !currentUser) {
+  if (
+    logoutStatus !== 'idle' ||
+    !isCurrentAuthSessionRequest(
+      requestSessionVersion,
+      currentSessionVersion,
+    )
+  ) {
     return { accepted: false, user: currentUser }
   }
 

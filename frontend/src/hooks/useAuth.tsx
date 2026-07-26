@@ -14,6 +14,8 @@ import {
   AUTH_SESSION_VERSION_KEY,
   LOGOUT_STATE_KEY,
   decideExternalLoginStorageEvent,
+  markAuthSessionCompleted,
+  readAuthSessionVersion,
   type LogoutStatus,
 } from '../auth/sessionState'
 import type {
@@ -175,10 +177,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(
     () =>
-      onAuthSessionInvalidated(() => {
+      onAuthSessionInvalidated((requestSessionVersion) => {
         const result = applyAuthSessionInvalidated(
           userRef.current,
           logoutStatusRef.current,
+          requestSessionVersion,
+          readAuthSessionVersion(),
         )
         if (!result.accepted) {
           return
@@ -187,6 +191,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         meRequestValidRef.current = false
         userRef.current = result.user
         setUser(result.user)
+        // 只有目前 generation 的 401 才能傳播，避免過期回應把新 Session 與其他分頁一起清除。
+        markAuthSessionCompleted()
       }),
     [],
   )
@@ -249,9 +255,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updatePassword = useCallback(
     async (payload: CurrentUserPasswordPayload) => {
       const updatedUser = await authApi.updateCurrentUserPassword(payload)
-      return requireAcceptedCurrentUserResponse(
+      const acceptedUser = requireAcceptedCurrentUserResponse(
         updateCurrentUser(updatedUser),
       )
+      // 後端成功後會 regenerate Session ID；同步更新 generation，讓修改前送出的舊 401 不得清除新 Session。
+      localStorage.setItem(
+        AUTH_SESSION_VERSION_KEY,
+        createAuthSessionVersion(),
+      )
+      return acceptedUser
     },
     [updateCurrentUser],
   )

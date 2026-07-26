@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { appConfig } from '../config/app'
 import { useAuth } from '../hooks/useAuth'
 import { apiErrorMessage, loginSuccessPath } from './authFormState'
@@ -8,6 +8,14 @@ import { apiErrorMessage, loginSuccessPath } from './authFormState'
 export function Login() {
   const { login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const notice =
+    typeof location.state === 'object' &&
+    location.state !== null &&
+    'notice' in location.state &&
+    typeof location.state.notice === 'string'
+      ? location.state.notice
+      : null
   const [loginIdentifier, setLoginIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -35,6 +43,13 @@ export function Login() {
       >
         <h1 className="text-xl font-semibold text-fg">{appConfig.systemName}</h1>
         <p className="mt-1 text-sm text-fg-muted">{appConfig.loginSubtitle}</p>
+        <p
+          role="status"
+          aria-live="polite"
+          className="mt-4 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm text-success empty:hidden"
+        >
+          {notice}
+        </p>
 
         <div className="mt-6 flex flex-col gap-4">
           <div>

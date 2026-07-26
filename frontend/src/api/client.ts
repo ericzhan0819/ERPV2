@@ -1,6 +1,10 @@
 import axios from 'axios'
-import { handleAuthSessionInvalidatedError } from '../auth/authSessionInvalidated'
+import {
+  handleAuthSessionInvalidatedError,
+  trackAuthSessionRequest,
+} from '../auth/authSessionInvalidated'
 import { handlePasswordChangeRequiredError } from '../auth/passwordChangeRequired'
+import { readAuthSessionVersion } from '../auth/sessionState'
 
 const configuredBaseURL = import.meta.env.VITE_API_BASE_URL as string | undefined
 const baseURL = configuredBaseURL || `${window.location.protocol}//${window.location.hostname}:8000`
@@ -13,6 +17,10 @@ export const apiClient = axios.create({
     Accept: 'application/json',
   },
 })
+
+apiClient.interceptors.request.use((config) =>
+  trackAuthSessionRequest(config, readAuthSessionVersion()),
+)
 
 apiClient.interceptors.response.use(
   (response) => response,

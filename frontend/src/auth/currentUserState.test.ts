@@ -79,19 +79,56 @@ describe('current user context update', () => {
   })
 
   it('clears an idle user after 401 without overriding logout safety states', () => {
-    expect(applyAuthSessionInvalidated(user, 'idle')).toEqual({
+    expect(
+      applyAuthSessionInvalidated(user, 'idle', 'session-v1', 'session-v1'),
+    ).toEqual({
       accepted: true,
       user: null,
     })
-    expect(applyAuthSessionInvalidated(user, 'pending')).toEqual({
+    expect(
+      applyAuthSessionInvalidated(user, 'pending', 'session-v1', 'session-v1'),
+    ).toEqual({
       accepted: false,
       user,
     })
-    expect(applyAuthSessionInvalidated(user, 'blocked')).toEqual({
+    expect(
+      applyAuthSessionInvalidated(user, 'blocked', 'session-v1', 'session-v1'),
+    ).toEqual({
       accepted: false,
       user,
     })
-    expect(applyAuthSessionInvalidated(null, 'idle')).toEqual({
+  })
+
+  it('rejects a 401 from an older request generation after a newer login', () => {
+    expect(
+      applyAuthSessionInvalidated(
+        user,
+        'idle',
+        'session-v1',
+        'session-v2',
+      ),
+    ).toEqual({
+      accepted: false,
+      user,
+    })
+  })
+
+  it('accepts a current 401 while initial user loading is still empty', () => {
+    expect(
+      applyAuthSessionInvalidated(null, 'idle', 'session-v1', 'session-v1'),
+    ).toEqual({
+      accepted: true,
+      user: null,
+    })
+    expect(
+      applyAuthSessionInvalidated(null, 'idle', null, null),
+    ).toEqual({
+      accepted: true,
+      user: null,
+    })
+    expect(
+      applyAuthSessionInvalidated(null, 'idle', null, 'session-v1'),
+    ).toEqual({
       accepted: false,
       user: null,
     })

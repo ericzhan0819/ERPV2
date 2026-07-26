@@ -1,10 +1,20 @@
 import { isAxiosError } from 'axios'
 import type { User } from '../types/user'
+import { StaleCurrentUserResponseError } from '../auth/currentUserState'
 import { PASSWORD_CHANGE_REQUIRED_PATH } from '../auth/passwordChangeRequired'
 
 interface ApiErrorPayload {
   message?: unknown
   errors?: Record<string, unknown>
+}
+
+export const PASSWORD_UPDATED_RELOGIN_NOTICE =
+  '密碼已更新，請使用新密碼重新登入'
+
+export function isCommittedPasswordUpdateWithStaleContext(
+  error: unknown,
+): boolean {
+  return error instanceof StaleCurrentUserResponseError
 }
 
 export function loginSuccessPath(user: User): string {

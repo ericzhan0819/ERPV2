@@ -4,7 +4,12 @@ import { useNavigate } from 'react-router-dom'
 import { isAxiosError } from 'axios'
 import { ThemeToggle } from '../components/ThemeToggle'
 import { useAuth } from '../hooks/useAuth'
-import { apiErrorMessage, apiFieldErrors } from './authFormState'
+import {
+  PASSWORD_UPDATED_RELOGIN_NOTICE,
+  apiErrorMessage,
+  apiFieldErrors,
+  isCommittedPasswordUpdateWithStaleContext,
+} from './authFormState'
 
 type PasswordField = 'current_password' | 'password' | 'password_confirmation'
 type PasswordFieldErrors = Partial<Record<PasswordField, string>>
@@ -46,6 +51,14 @@ export function PasswordChangeRequired() {
       })
       navigate('/dashboard', { replace: true })
     } catch (err) {
+      if (isCommittedPasswordUpdateWithStaleContext(err)) {
+        navigate('/login', {
+          replace: true,
+          state: { notice: PASSWORD_UPDATED_RELOGIN_NOTICE },
+        })
+        return
+      }
+
       if (isAxiosError(err) && err.response?.status === 401) {
         navigate('/login', { replace: true })
         return

@@ -4,10 +4,37 @@ import {
   LOGOUT_STATE_KEY,
   decideExternalLoginStorageEvent,
   isExternalLoginStorageEvent,
+  isCurrentAuthSessionRequest,
+  markAuthSessionCompleted,
+  readAuthSessionVersion,
   shouldInvalidateForExternalLogin,
 } from './sessionState'
 
 describe('cross-tab auth session state', () => {
+  it('reads and compares the auth session version used by API requests', () => {
+    const storage = {
+      getItem: (key: string) =>
+        key === AUTH_SESSION_VERSION_KEY ? 'session-v2' : null,
+    }
+
+    expect(readAuthSessionVersion(storage)).toBe('session-v2')
+    expect(isCurrentAuthSessionRequest('session-v2', 'session-v2')).toBe(true)
+    expect(isCurrentAuthSessionRequest('session-v1', 'session-v2')).toBe(false)
+    expect(isCurrentAuthSessionRequest(null, 'session-v2')).toBe(false)
+    expect(isCurrentAuthSessionRequest(null, null)).toBe(true)
+  })
+
+  it('uses the existing completed logout marker to propagate forced invalidation', () => {
+    const writes: Array<[string, string]> = []
+    markAuthSessionCompleted({
+      setItem: (key: string, value: string) => {
+        writes.push([key, value])
+      },
+    })
+
+    expect(writes).toEqual([[LOGOUT_STATE_KEY, 'completed']])
+  })
+
   it('recognizes a login version change and a cleared logout marker', () => {
     expect(
       isExternalLoginStorageEvent(AUTH_SESSION_VERSION_KEY, 'new-version'),

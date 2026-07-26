@@ -1,8 +1,28 @@
 export type LogoutStatus = 'idle' | 'pending' | 'blocked'
+export type AuthSessionVersion = string | null
 
 // 用三種登出狀態在分頁間同步；寫入的分頁收不到自己的 storage 事件，必須自行更新 React 狀態。
 export const LOGOUT_STATE_KEY = 'erpv2:logout-state'
 export const AUTH_SESSION_VERSION_KEY = 'erpv2:auth-session-version'
+
+export function readAuthSessionVersion(
+  storage: Pick<Storage, 'getItem'> = localStorage,
+): AuthSessionVersion {
+  return storage.getItem(AUTH_SESSION_VERSION_KEY)
+}
+
+export function markAuthSessionCompleted(
+  storage: Pick<Storage, 'setItem'> = localStorage,
+): void {
+  storage.setItem(LOGOUT_STATE_KEY, 'completed')
+}
+
+export function isCurrentAuthSessionRequest(
+  requestVersion: AuthSessionVersion,
+  currentVersion: AuthSessionVersion,
+): boolean {
+  return requestVersion === currentVersion
+}
 
 export interface ExternalLoginStorageDecision {
   handled: boolean
