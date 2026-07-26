@@ -22,12 +22,22 @@ import { SalaryPeriodList } from './pages/salary/SalaryPeriodList'
 import { SalaryPeriodDetail } from './pages/salary/SalaryPeriodDetail'
 import { SalaryProfiles } from './pages/salary/SalaryProfiles'
 import { CommissionPlans } from './pages/salary/CommissionPlans'
+import { PasswordChangeRequiredPlaceholder } from './pages/PasswordChangeRequiredPlaceholder'
+import { PASSWORD_CHANGE_REQUIRED_PATH } from './auth/passwordChangeRequired'
 
 function App() {
   return (
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route
+          path={PASSWORD_CHANGE_REQUIRED_PATH}
+          element={
+            <ProtectedRoute passwordChangeOnly>
+              <PasswordChangeRequiredPlaceholder />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/vehicles/:id/print/intake"
           element={

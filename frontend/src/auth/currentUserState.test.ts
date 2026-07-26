@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { User } from '../types/user'
-import { applyCurrentUserResponse } from './currentUserState'
+import {
+  StaleCurrentUserResponseError,
+  applyCurrentUserResponse,
+  applyPasswordChangeRequired,
+  requireAcceptedCurrentUserResponse,
+} from './currentUserState'
 
 const user: User = {
   id: 1,
@@ -48,5 +53,35 @@ describe('current user context update', () => {
       accepted: false,
       user,
     })
+  })
+
+  it('applies a password-required notification only to an idle logged-in user', () => {
+    expect(applyPasswordChangeRequired(user, 'idle')).toEqual({
+      accepted: true,
+      user: { ...user, must_change_password: true },
+    })
+
+    expect(applyPasswordChangeRequired(user, 'pending')).toEqual({
+      accepted: false,
+      user,
+    })
+    expect(applyPasswordChangeRequired(null, 'idle')).toEqual({
+      accepted: false,
+      user: null,
+    })
+
+    const requiredUser = { ...user, must_change_password: true }
+    expect(applyPasswordChangeRequired(requiredUser, 'idle')).toEqual({
+      accepted: false,
+      user: requiredUser,
+    })
+  })
+
+  it('throws instead of reporting success when a response was rejected', () => {
+    const rejected = applyCurrentUserResponse(user, { ...user, name: '王大明' }, 'blocked')
+
+    expect(() => requireAcceptedCurrentUserResponse(rejected)).toThrow(
+      StaleCurrentUserResponseError,
+    )
   })
 })

@@ -4,6 +4,8 @@ export const PASSWORD_CHANGE_REQUIRED_CODE = 'PASSWORD_CHANGE_REQUIRED'
 export const PASSWORD_CHANGE_REQUIRED_PATH = '/change-password'
 
 const PASSWORD_CHANGE_REQUIRED_EVENT = 'erpv2:password-change-required'
+const passwordChangeRequiredEventTarget: EventTarget =
+  typeof window === 'undefined' ? new EventTarget() : window
 
 interface ApiErrorPayload {
   code?: unknown
@@ -31,10 +33,19 @@ export function handlePasswordChangeRequiredError(
 }
 
 export function notifyPasswordChangeRequired(): void {
-  window.dispatchEvent(new Event(PASSWORD_CHANGE_REQUIRED_EVENT))
+  passwordChangeRequiredEventTarget.dispatchEvent(
+    new Event(PASSWORD_CHANGE_REQUIRED_EVENT),
+  )
 }
 
 export function onPasswordChangeRequired(listener: () => void): () => void {
-  window.addEventListener(PASSWORD_CHANGE_REQUIRED_EVENT, listener)
-  return () => window.removeEventListener(PASSWORD_CHANGE_REQUIRED_EVENT, listener)
+  passwordChangeRequiredEventTarget.addEventListener(
+    PASSWORD_CHANGE_REQUIRED_EVENT,
+    listener,
+  )
+  return () =>
+    passwordChangeRequiredEventTarget.removeEventListener(
+      PASSWORD_CHANGE_REQUIRED_EVENT,
+      listener,
+    )
 }

@@ -3,6 +3,7 @@ import {
   PASSWORD_CHANGE_REQUIRED_CODE,
   handlePasswordChangeRequiredError,
   isPasswordChangeRequiredError,
+  onPasswordChangeRequired,
 } from './passwordChangeRequired'
 
 describe('password change required API error', () => {
@@ -63,6 +64,26 @@ describe('password change required API error', () => {
         notify,
       ),
     ).toBe(false)
+    expect(notifications).toBe(1)
+  })
+
+  it('connects the default API error handler to subscribers and supports cleanup', () => {
+    let notifications = 0
+    const unsubscribe = onPasswordChangeRequired(() => {
+      notifications += 1
+    })
+    const error = {
+      response: {
+        status: 409,
+        data: { code: PASSWORD_CHANGE_REQUIRED_CODE },
+      },
+    }
+
+    expect(handlePasswordChangeRequiredError(error)).toBe(true)
+    expect(notifications).toBe(1)
+
+    unsubscribe()
+    handlePasswordChangeRequiredError(error)
     expect(notifications).toBe(1)
   })
 })

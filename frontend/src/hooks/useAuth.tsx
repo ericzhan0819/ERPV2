@@ -3,7 +3,11 @@ import type { ReactNode } from 'react'
 import * as authApi from '../api/auth'
 import { ensureCsrfCookie } from '../api/client'
 import { onPasswordChangeRequired } from '../auth/passwordChangeRequired'
-import { applyCurrentUserResponse } from '../auth/currentUserState'
+import {
+  applyCurrentUserResponse,
+  applyPasswordChangeRequired,
+  requireAcceptedCurrentUserResponse,
+} from '../auth/currentUserState'
 import type { LogoutStatus } from '../auth/sessionState'
 import type {
   CurrentUserPasswordPayload,
@@ -146,19 +150,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(
     () =>
       onPasswordChangeRequired(() => {
-        // 登出保護優先；舊的營運請求即使稍後回 409，也不能重新顯示任何已登入狀態。
-        if (logoutStatusRef.current !== 'idle') {
+        const result = applyPasswordChangeRequired(
+          userRef.current,
+          logoutStatusRef.current,
+        )
+        if (!result.accepted) {
           return
         }
 
-        const currentUser = userRef.current
-        if (!currentUser || currentUser.must_change_password) {
-          return
-        }
-
-        const requiredUser = { ...currentUser, must_change_password: true }
-        userRef.current = requiredUser
-        setUser(requiredUser)
+        userRef.current = result.user
+        setUser(result.user)
       }),
     [],
   )
@@ -174,26 +175,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(loggedInUser)
   }, [])
 
-  const updateCurrentUser = useCallback((nextUser: User): boolean => {
+  const updateCurrentUser = useCallback((nextUser: User) => {
     const result = applyCurrentUserResponse(
       userRef.current,
       nextUser,
       logoutStatusRef.current,
     )
     if (!result.accepted) {
-      return false
+      return result
     }
 
     userRef.current = result.user
     setUser(result.user)
-    return true
+    return result
   }, [])
 
   const updateProfile = useCallback(
     async (payload: CurrentUserProfilePayload) => {
       const updatedUser = await authApi.updateCurrentUserProfile(payload)
-      updateCurrentUser(updatedUser)
-      return updatedUser
+      return requireAcceptedCurrentUserResponse(
+        updateCurrentUser(updatedUser),
+      )
     },
     [updateCurrentUser],
   )
@@ -201,8 +203,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const updatePassword = useCallback(
     async (payload: CurrentUserPasswordPayload) => {
       const updatedUser = await authApi.updateCurrentUserPassword(payload)
-      updateCurrentUser(updatedUser)
-      return updatedUser
+      return requireAcceptedCurrentUserResponse(
+        updateCurrentUser(updatedUser),
+      )
     },
     [updateCurrentUser],
   )

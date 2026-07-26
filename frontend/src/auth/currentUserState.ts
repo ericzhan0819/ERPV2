@@ -6,6 +6,13 @@ export interface CurrentUserUpdateResult {
   user: User | null
 }
 
+export class StaleCurrentUserResponseError extends Error {
+  constructor() {
+    super('目前登入狀態已變更，忽略過期的使用者回應')
+    this.name = 'StaleCurrentUserResponseError'
+  }
+}
+
 export function applyCurrentUserResponse(
   currentUser: User | null,
   nextUser: User,
@@ -21,4 +28,32 @@ export function applyCurrentUserResponse(
   }
 
   return { accepted: true, user: nextUser }
+}
+
+export function applyPasswordChangeRequired(
+  currentUser: User | null,
+  logoutStatus: LogoutStatus,
+): CurrentUserUpdateResult {
+  if (
+    logoutStatus !== 'idle' ||
+    !currentUser ||
+    currentUser.must_change_password
+  ) {
+    return { accepted: false, user: currentUser }
+  }
+
+  return {
+    accepted: true,
+    user: { ...currentUser, must_change_password: true },
+  }
+}
+
+export function requireAcceptedCurrentUserResponse(
+  result: CurrentUserUpdateResult,
+): User {
+  if (!result.accepted || !result.user) {
+    throw new StaleCurrentUserResponseError()
+  }
+
+  return result.user
 }
