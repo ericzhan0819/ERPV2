@@ -36,9 +36,12 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
+        $hasSession = $request->hasSession();
         $this->authService->logout();
 
-        return response()->json(['message' => '已登出']);
+        return response()->json([
+            'message' => $hasSession ? '已登出' : '無可登出的工作階段',
+        ]);
     }
 
     public function me(Request $request): UserResource

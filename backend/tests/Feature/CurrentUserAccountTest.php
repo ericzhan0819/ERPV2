@@ -498,6 +498,17 @@ class CurrentUserAccountTest extends TestCase
         $this->getJson('/api/dashboard/summary')->assertUnauthorized();
     }
 
+    public function test_inactive_bearer_token_without_session_store_returns_forbidden(): void
+    {
+        $inactive = User::factory()->mustChangePassword()->create(['is_active' => false]);
+        $token = $inactive->createToken('inactive-sessionless-test')->plainTextToken;
+
+        $this->withToken($token)
+            ->getJson('/api/dashboard/summary')
+            ->assertForbidden()
+            ->assertExactJson(['message' => '此帳號已被停用']);
+    }
+
     public function test_user_without_required_flag_can_reach_operational_routes(): void
     {
         $admin = User::factory()->admin()->create(['must_change_password' => false]);

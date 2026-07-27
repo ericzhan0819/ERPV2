@@ -15,7 +15,10 @@ class EnsureUserIsActive
         if ($user && ! $user->is_active) {
             $guard = auth('web');
             $guard->logout();
-            $request->session()->invalidate();
+
+            if ($request->hasSession()) {
+                $request->session()->invalidate();
+            }
 
             return response()->json(['message' => '此帳號已被停用'], 403);
         }

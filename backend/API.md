@@ -75,7 +75,12 @@ Request body：
 
 不需登入（設計為冪等，重複呼叫也回 200，避免 client 重試時因 session 已失效而收到 401）。
 
-回傳：`{ "message": "已登出" }`
+Stateful 請求會登出目前 web guard、invalidate Session 並更新 CSRF token，回傳：
+`{ "message": "已登出" }`。
+
+未掛載 Session store 的非 stateful 請求沒有可銷毀的工作階段，會維持冪等 200，但明確回傳：
+`{ "message": "無可登出的工作階段" }`。此回應不代表其他既有 Session 已被銷毀；瀏覽器必須
+依 Sanctum SPA 流程帶 Origin／Referer 與 session cookie，才能完成實際登出。
 
 ### GET /api/me
 

@@ -39,11 +39,11 @@ class LogoutTest extends TestCase
         $this->logoutRequest()->assertSuccessful();
     }
 
-    public function test_non_stateful_logout_remains_idempotent(): void
+    public function test_non_stateful_logout_is_an_explicit_idempotent_noop(): void
     {
         $this->postJson('/api/logout')
             ->assertOk()
-            ->assertExactJson(['message' => '已登出']);
+            ->assertExactJson(['message' => '無可登出的工作階段']);
     }
 
     private function logoutRequest(): TestResponse
