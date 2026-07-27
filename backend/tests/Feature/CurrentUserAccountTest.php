@@ -151,8 +151,16 @@ class CurrentUserAccountTest extends TestCase
             'login' => $user->email,
             'password' => 'old-password',
         ])->assertOk();
-        $oldSessionId = session()->getId();
         AuditLog::query()->delete();
+        $probe = new class
+        {
+            public ?string $sessionId = null;
+        };
+        User::updating(function (User $updatedUser) use ($probe, $user): void {
+            if ($updatedUser->is($user) && $updatedUser->isDirty('password')) {
+                $probe->sessionId = session()->getId();
+            }
+        });
 
         $this->patchJson('/api/me/password', [
             'current_password' => 'old-password',
@@ -167,7 +175,8 @@ class CurrentUserAccountTest extends TestCase
         $user->refresh();
         $this->assertTrue(Hash::check('new-password-123', $user->password));
         $this->assertFalse($user->must_change_password);
-        $this->assertNotSame($oldSessionId, session()->getId());
+        $this->assertNotNull($probe->sessionId);
+        $this->assertNotSame($probe->sessionId, session()->getId());
 
         $audit = AuditLog::query()->where('subject_type', 'user')->where('action', 'updated')->sole();
         $this->assertTrue((bool) $audit->before_values['must_change_password']);
@@ -181,6 +190,35 @@ class CurrentUserAccountTest extends TestCase
 
         Auth::forgetGuards();
         $this->getJson('/api/dashboard/summary')->assertOk();
+    }
+
+    public function test_profile_change_does_not_regenerate_the_session_id(): void
+    {
+        $user = User::factory()->withUsername('profile.session')->create([
+            'password' => Hash::make('old-password'),
+        ]);
+        $this->withHeaders(['Referer' => 'http://localhost:5173']);
+        $this->postJson('/api/login', [
+            'login' => 'profile.session',
+            'password' => 'old-password',
+        ])->assertOk();
+        $probe = new class
+        {
+            public ?string $sessionId = null;
+        };
+        User::updating(function (User $updatedUser) use ($probe, $user): void {
+            if ($updatedUser->is($user) && $updatedUser->isDirty(['name', 'username'])) {
+                $probe->sessionId = session()->getId();
+            }
+        });
+
+        $this->patchJson('/api/me/profile', [
+            'name' => '更新後名稱',
+            'username' => 'profile.session',
+        ])->assertOk();
+
+        $this->assertNotNull($probe->sessionId);
+        $this->assertSame($probe->sessionId, session()->getId());
     }
 
     public function test_password_change_requires_current_password_and_confirmation(): void
@@ -469,20 +507,43 @@ class CurrentUserAccountTest extends TestCase
             ->assertOk();
     }
 
-    public function test_password_gate_does_not_trust_an_unknown_role(): void
+    #[DataProvider('flaggedRestrictedRoleProvider')]
+    public function test_password_gate_runs_before_restricted_role_middleware(string $role): void
     {
         $user = User::factory()->mustChangePassword()->create([
-            'role' => 'future_role',
+            'role' => $role,
             'is_admin' => false,
         ]);
 
         $this->actingAs($user, 'web')
-            ->getJson('/api/dashboard/summary')
+            ->getJson('/api/users')
             ->assertConflict()
             ->assertExactJson([
                 'message' => '請先修改密碼',
                 'code' => 'PASSWORD_CHANGE_REQUIRED',
             ]);
+    }
+
+    public static function flaggedRestrictedRoleProvider(): array
+    {
+        return [
+            'sales' => [User::ROLE_SALES],
+            'unknown role' => ['future_role'],
+        ];
+    }
+
+    public function test_unknown_role_without_password_flag_is_rejected_by_role_middleware(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'future_role',
+            'is_admin' => false,
+            'must_change_password' => false,
+        ]);
+
+        $this->actingAs($user, 'web')
+            ->getJson('/api/users')
+            ->assertForbidden()
+            ->assertExactJson(['message' => '權限不足']);
     }
 
     public function test_all_authenticated_routes_except_the_explicit_self_account_allowlist_have_the_gate(): void

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 class LogoutTest extends TestCase
@@ -38,7 +39,14 @@ class LogoutTest extends TestCase
         $this->logoutRequest()->assertSuccessful();
     }
 
-    private function logoutRequest(): \Illuminate\Testing\TestResponse
+    public function test_non_stateful_logout_remains_idempotent(): void
+    {
+        $this->postJson('/api/logout')
+            ->assertOk()
+            ->assertExactJson(['message' => '已登出']);
+    }
+
+    private function logoutRequest(): TestResponse
     {
         // 此段說明相鄰程式碼的用途與預期行為。
         return $this->withHeaders(['Referer' => 'http://localhost:5173'])->postJson('/api/logout');

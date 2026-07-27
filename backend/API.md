@@ -45,6 +45,11 @@ v1.3 Phase 1 起，`source_type=salary_settlement` 的薪資支出只對 `admin`
 
 不需登入。
 
+此端點只提供 Sanctum SPA cookie／Session 登入。請求必須先依本文件開頭流程取得
+CSRF cookie，並帶可被 Sanctum 判定為 stateful frontend request 的 Origin／Referer；
+未掛載 Session store 的非 stateful 請求會在查詢帳號、驗證密碼或異動登入 limiter 前
+回 `419 {"message":"工作階段無效，請重新整理後再試"}`。
+
 Request body：
 
 | 欄位 | 型別 | 必填 | 說明 |

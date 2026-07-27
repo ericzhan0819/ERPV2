@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\SessionRequiredException;
 use App\Exceptions\TooManyLoginAttemptsException;
 use App\Models\User;
 use Illuminate\Auth\AuthenticationException;
@@ -32,6 +33,13 @@ class AuthService
      */
     public function login(string $login, string $password): User
     {
+        // 本系統只提供 cookie-based Session 登入。若請求沒有通過 Sanctum stateful
+        // middleware，必須在查詢帳號、驗證密碼或異動 limiter 前拒絕，避免正確密碼
+        // 走到 Session 操作才回 500，形成密碼 oracle 並清空登入失敗額度。
+        if (! request()->hasSession()) {
+            throw new SessionRequiredException;
+        }
+
         $normalizedLogin = $this->normalizeLogin($login);
         $ip = (string) request()->ip();
         $ipKey = 'login:ip:'.$ip;
@@ -158,8 +166,10 @@ class AuthService
                 Auth::guard('web')->logout();
             }
 
-            request()->session()->invalidate();
-            request()->session()->regenerateToken();
+            if (request()->hasSession()) {
+                request()->session()->invalidate();
+                request()->session()->regenerateToken();
+            }
         }
     }
 }

@@ -186,21 +186,6 @@ class UserService
         });
     }
 
-    public function setUsername(User $user, ?string $username): User
-    {
-        $user->username = $username;
-
-        try {
-            $user->save();
-        } catch (QueryException $e) {
-            $this->throwUsernameValidationExceptionWhenDuplicated($e);
-
-            throw $e;
-        }
-
-        return $user;
-    }
-
     public function deleteUser(User $actingUser, User $user): void
     {
         if ($actingUser->is($user)) {

@@ -221,7 +221,10 @@ class UsernameValidationTest extends TestCase
         $loser = User::factory()->create();
 
         try {
-            app(UserService::class)->setUsername($loser, ' WINNER ');
+            app(UserService::class)->updateCurrentProfile($loser, [
+                'name' => $loser->name,
+                'username' => ' WINNER ',
+            ]);
             $this->fail('Database unique constraint 必須拒絕重複 username。');
         } catch (ValidationException $exception) {
             $this->assertSame(['此帳號名稱已被使用'], $exception->errors()['username'] ?? null);

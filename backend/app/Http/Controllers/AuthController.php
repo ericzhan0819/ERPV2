@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\SessionRequiredException;
 use App\Exceptions\TooManyLoginAttemptsException;
 use App\Http\Requests\LoginRequest;
 use App\Http\Resources\UserResource;
@@ -21,6 +22,8 @@ class AuthController extends Controller
                 $request->validated('login'),
                 $request->validated('password'),
             );
+        } catch (SessionRequiredException $e) {
+            return response()->json(['message' => $e->getMessage()], 419);
         } catch (TooManyLoginAttemptsException $e) {
             return response()->json(['message' => $e->getMessage()], 429)
                 ->header('Retry-After', (string) $e->retryAfter);

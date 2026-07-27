@@ -20,7 +20,10 @@ class UsernameDuplicateExceptionTest extends TestCase
         $user = $this->userWhoseSaveThrows($exception);
 
         try {
-            (new UserService)->setUsername($user, 'eric');
+            (new UserService)->updateCurrentProfile($user, [
+                'name' => '測試使用者',
+                'username' => 'eric',
+            ]);
             $this->fail('MySQL username duplicate 必須轉為 ValidationException。');
         } catch (ValidationException $validationException) {
             $this->assertSame(
@@ -50,7 +53,10 @@ class UsernameDuplicateExceptionTest extends TestCase
         $user = $this->userWhoseSaveThrows($exception);
 
         try {
-            (new UserService)->setUsername($user, 'eric');
+            (new UserService)->updateCurrentProfile($user, [
+                'name' => '測試使用者',
+                'username' => 'eric',
+            ]);
             $this->fail('非 username constraint 不得被誤轉為 username validation error。');
         } catch (QueryException $caught) {
             $this->assertSame($exception, $caught);

@@ -2,10 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Models\AuditLog;
 use App\Models\User;
 use App\Services\AuditLogService;
+use Illuminate\Auth\Events\Attempting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 use Mockery;
 use Mockery\MockInterface;
 use RuntimeException;
@@ -105,16 +110,90 @@ class DualIdentifierLoginTest extends TestCase
         User::factory()->withUsername('session.user')->create([
             'password' => Hash::make('correct-password'),
         ]);
-        $this->withSession(['login_probe' => true]);
-        $oldSessionId = session()->getId();
+        $probe = new class
+        {
+            public ?string $sessionId = null;
+        };
+        Event::listen(Attempting::class, function () use ($probe): void {
+            $probe->sessionId = session()->getId();
+        });
 
         $this->postJson('/api/login', [
             'login' => 'session.user',
             'password' => 'correct-password',
         ])->assertOk();
 
-        $this->assertNotSame($oldSessionId, session()->getId());
-        $this->assertTrue(session()->get('login_probe'));
+        $this->assertNotNull($probe->sessionId);
+        $this->assertNotSame($probe->sessionId, session()->getId());
+    }
+
+    public function test_failed_login_does_not_regenerate_the_session_id(): void
+    {
+        User::factory()->withUsername('session.user')->create([
+            'password' => Hash::make('correct-password'),
+        ]);
+        $probe = new class
+        {
+            public ?string $sessionId = null;
+        };
+        Event::listen(Attempting::class, function () use ($probe): void {
+            $probe->sessionId = session()->getId();
+        });
+
+        $this->postJson('/api/login', [
+            'login' => 'session.user',
+            'password' => 'wrong-password',
+        ])->assertUnprocessable();
+
+        $this->assertNotNull($probe->sessionId);
+        $this->assertSame($probe->sessionId, session()->getId());
+    }
+
+    public function test_non_stateful_login_is_rejected_before_credentials_or_limiters_are_touched(): void
+    {
+        $user = User::factory()->withUsername('stateless.user')->create([
+            'password' => Hash::make('correct-password'),
+        ]);
+        AuditLog::query()->delete();
+        $accountKey = "login:account:uid:{$user->id}";
+        $identifierIpKey = "login:identifier_ip:uid:{$user->id}|127.0.0.1";
+        RateLimiter::clear($accountKey);
+        RateLimiter::clear($identifierIpKey);
+
+        for ($attempt = 0; $attempt < 4; $attempt++) {
+            RateLimiter::hit($accountKey, 900);
+            RateLimiter::hit($identifierIpKey, 60);
+        }
+
+        $this->flushHeaders();
+        $expectedResponse = ['message' => '工作階段無效，請重新整理後再試'];
+        $authenticationAttempted = false;
+        Event::listen(Attempting::class, function () use (&$authenticationAttempted): void {
+            $authenticationAttempted = true;
+        });
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $this->postJson('/api/login', [
+            'login' => 'stateless.user',
+            'password' => 'wrong-password',
+        ])->assertStatus(419)->assertExactJson($expectedResponse);
+
+        $this->postJson('/api/login', [
+            'login' => 'stateless.user',
+            'password' => 'correct-password',
+        ])->assertStatus(419)->assertExactJson($expectedResponse);
+
+        $queries = DB::getQueryLog();
+        DB::disableQueryLog();
+        $this->assertFalse($authenticationAttempted);
+        $this->assertCount(0, $queries);
+        $this->assertSame(4, RateLimiter::attempts($accountKey));
+        $this->assertSame(4, RateLimiter::attempts($identifierIpKey));
+        $this->assertSame(0, AuditLog::query()->where('subject_type', 'authentication')->count());
+        $this->assertGuest();
+        RateLimiter::clear($accountKey);
+        RateLimiter::clear($identifierIpKey);
     }
 
     public function test_user_without_username_can_still_login_by_email(): void

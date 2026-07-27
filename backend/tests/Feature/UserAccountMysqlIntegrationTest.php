@@ -91,9 +91,10 @@ class UserAccountMysqlIntegrationTest extends TestCase
             DB::purge();
             DB::reconnect();
             DB::beginTransaction();
-            app(UserService::class)->setUsername(
-                User::query()->findOrFail($winner->id),
-                ' Race.Owner ',
+            $winner = User::query()->findOrFail($winner->id);
+            app(UserService::class)->updateCurrentProfile(
+                $winner,
+                ['name' => $winner->name, 'username' => ' Race.Owner '],
             );
 
             fwrite($parentSocket, 'G');
@@ -193,9 +194,10 @@ class UserAccountMysqlIntegrationTest extends TestCase
             fwrite($socket, 'S');
 
             try {
-                app(UserService::class)->setUsername(
-                    User::query()->findOrFail($userId),
-                    'RACE.OWNER',
+                $user = User::query()->findOrFail($userId);
+                app(UserService::class)->updateCurrentProfile(
+                    $user,
+                    ['name' => $user->name, 'username' => 'RACE.OWNER'],
                 );
                 $result = ['result' => 'unexpected_success'];
             } catch (ValidationException $exception) {

@@ -657,6 +657,14 @@ flag=true 時阻擋：
 
 **Migration：否。**
 
+### Adversarial Review Follow-up
+
+- [x] 非 stateful login 在 credential lookup／limiter 異動前固定回 419，不形成密碼 oracle
+- [x] 非 stateful logout 維持冪等 200，不讀取不存在的 Session store
+- [x] Login 與 self password 的 Session regenerate 使用 request lifecycle 內取樣及負向對照
+- [x] MariaDB username 競態改走 production `updateCurrentProfile()` transaction 路徑
+- [x] Password Gate priority 以 sales／unknown role 呼叫 admin-only route 驗證
+
 ---
 
 ## 14. Frontend Automated Tests
