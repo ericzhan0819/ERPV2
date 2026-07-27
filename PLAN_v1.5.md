@@ -565,38 +565,38 @@ flag=true 時阻擋：
 
 ### 12.1 Config
 
-- [ ] 新增 `frontend/src/config/app.ts`
-- [ ] `companyName`
-- [ ] `systemName`
-- [ ] `systemShortName`
-- [ ] `browserTitle`
-- [ ] `loginSubtitle`
-- [ ] export 型別穩定且不需要 runtime API
+- [x] 新增 `frontend/src/config/app.ts`
+- [x] `companyName`
+- [x] `systemName`
+- [x] `systemShortName`
+- [x] `browserTitle`
+- [x] `loginSubtitle`
+- [x] export 型別穩定且不需要 runtime API
 
 ### 12.2 套用位置
 
-- [ ] Login h1
-- [ ] Login subtitle
-- [ ] Sidebar brand
-- [ ] document.title
-- [ ] 搜尋到的其他相同硬編碼名稱
-- [ ] `frontend/index.html` 保留合理無 JS fallback，但不成為第二個正式設定來源
+- [x] Login h1
+- [x] Login subtitle
+- [x] Sidebar brand
+- [x] document.title
+- [x] 搜尋到的其他相同硬編碼名稱
+- [x] `frontend/index.html` 保留合理無 JS fallback，但不成為第二個正式設定來源
 
 ### 12.3 邊界
 
-- [ ] 不建立 backend settings API
-- [ ] 不建立 DB settings table
-- [ ] 不建立 Settings 頁
-- [ ] 不修改 Theme token 架構
-- [ ] 不新增 Logo upload
-- [ ] 不修改 `~/website` repo
+- [x] 不建立 backend settings API
+- [x] 不建立 DB settings table
+- [x] 不建立 Settings 頁
+- [x] 不修改 Theme token 架構
+- [x] 不新增 Logo upload
+- [x] 不修改 `~/website` repo
 
 ### 12.4 驗證
 
-- [ ] 修改 config 後所有位置一致更新
-- [ ] `rg` 確認不再散落正式硬編碼字串
-- [ ] Browser title 在首次 render 即正確
-- [ ] typecheck／build 通過
+- [x] 修改 config 後所有位置一致更新
+- [x] `rg` 確認不再散落正式硬編碼字串
+- [x] Browser title 在首次 render 即正確
+- [x] typecheck／build 通過
 
 **Migration：否。**
 

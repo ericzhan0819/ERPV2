@@ -4,6 +4,7 @@ import { LayoutDashboard, Car, Wallet, Banknote, Users, Contact, ScrollText, Han
 import { useAuth } from '../hooks/useAuth'
 import { useTheme } from '../hooks/useTheme'
 import { ThemeToggle } from '../components/ThemeToggle'
+import { appConfig } from '../config/app'
 
 const navItems = [
   { to: '/dashboard', label: '總覽', icon: LayoutDashboard, roles: ['admin', 'manager', 'sales'] },
@@ -146,7 +147,7 @@ export function AppLayout() {
         }`}
       >
         <div className="app-sidebar-brand flex min-h-14 items-center justify-between gap-2 px-4 text-lg font-semibold tracking-tight text-sidebar-fg">
-          <span>中古車行系統</span>
+          <span>{appConfig.systemShortName}</span>
           <button
             ref={sidebarCloseButtonRef}
             type="button"
