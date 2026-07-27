@@ -6,9 +6,11 @@ import * as ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 import { createAppBrowserTitlePlugin } from '../../vite.config'
 import { appConfig } from './app'
+import type { AppConfig } from './app'
 
 const frontendRoot = fileURLToPath(new URL('../../', import.meta.url))
 const sourceRoot = fileURLToPath(new URL('../', import.meta.url))
+const genericLengthThreshold = 6
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -47,14 +49,21 @@ function appConfigProperties(path: string): Set<string> {
   return properties
 }
 
-function officialStringInLiteral(text: string): string | undefined {
+function officialStringInLiteral(
+  text: string,
+  config: AppConfig = appConfig,
+): string | undefined {
   const normalizedText = text.trim()
 
-  return Object.values(appConfig).find((officialString) =>
-    officialString === appConfig.companyName
+  return Object.values(config).find((officialString) => {
+    // 過短的識別字串容易出現在一般文案中，只做完全比對避免誤報。
+    const useExactMatch =
+      Array.from(officialString).length < genericLengthThreshold
+
+    return useExactMatch
       ? normalizedText === officialString
-      : normalizedText.includes(officialString),
-  )
+      : normalizedText.includes(officialString)
+  })
 }
 
 describe('app config source contract', () => {
@@ -78,9 +87,13 @@ describe('app config source contract', () => {
       visit(parseSource(path))
     }
 
-    expect(readFileSync(`${frontendRoot}/index.html`, 'utf8')).not.toContain(
-      appConfig.browserTitle,
-    )
+    const indexHtml = readFileSync(`${frontendRoot}/index.html`, 'utf8')
+    for (const officialString of new Set(Object.values(appConfig))) {
+      expect(
+        indexHtml,
+        `index.html 不可硬編碼「${officialString}」`,
+      ).not.toContain(officialString)
+    }
   })
 
   it('detects identity strings with suffixes without flagging company prose', () => {
@@ -93,6 +106,17 @@ describe('app config source contract', () => {
     expect(
       officialStringInLiteral(`${appConfig.companyName}保留一般營運文案`),
     ).toBeUndefined()
+
+    const dealershipConfig = {
+      ...appConfig,
+      companyName: '永順中古車行',
+    }
+    expect(
+      officialStringInLiteral(
+        `${dealershipConfig.companyName} 管理後台`,
+        dealershipConfig,
+      ),
+    ).toBe(dealershipConfig.companyName)
   })
 
   it('keeps every official presentation consumer connected to app config', () => {
