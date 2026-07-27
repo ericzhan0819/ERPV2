@@ -100,6 +100,23 @@ class DualIdentifierLoginTest extends TestCase
         $this->assertAuthenticatedAs($user);
     }
 
+    public function test_successful_login_regenerates_the_session_id(): void
+    {
+        User::factory()->withUsername('session.user')->create([
+            'password' => Hash::make('correct-password'),
+        ]);
+        $this->withSession(['login_probe' => true]);
+        $oldSessionId = session()->getId();
+
+        $this->postJson('/api/login', [
+            'login' => 'session.user',
+            'password' => 'correct-password',
+        ])->assertOk();
+
+        $this->assertNotSame($oldSessionId, session()->getId());
+        $this->assertTrue(session()->get('login_probe'));
+    }
+
     public function test_user_without_username_can_still_login_by_email(): void
     {
         $user = User::factory()->create([

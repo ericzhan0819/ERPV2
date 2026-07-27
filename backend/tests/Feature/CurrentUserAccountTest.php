@@ -469,6 +469,22 @@ class CurrentUserAccountTest extends TestCase
             ->assertOk();
     }
 
+    public function test_password_gate_does_not_trust_an_unknown_role(): void
+    {
+        $user = User::factory()->mustChangePassword()->create([
+            'role' => 'future_role',
+            'is_admin' => false,
+        ]);
+
+        $this->actingAs($user, 'web')
+            ->getJson('/api/dashboard/summary')
+            ->assertConflict()
+            ->assertExactJson([
+                'message' => '請先修改密碼',
+                'code' => 'PASSWORD_CHANGE_REQUIRED',
+            ]);
+    }
+
     public function test_all_authenticated_routes_except_the_explicit_self_account_allowlist_have_the_gate(): void
     {
         $allowlist = [

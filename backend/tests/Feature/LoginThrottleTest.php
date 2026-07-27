@@ -35,9 +35,13 @@ class LoginThrottleTest extends TestCase
             $this->loginAs('admin@example.com', 'wrong-password')->assertStatus(422);
         }
 
-        $this->loginAs('admin@example.com', 'wrong-password')
+        $response = $this->loginAs('admin@example.com', 'wrong-password')
             ->assertStatus(429)
             ->assertHeader('Retry-After');
+
+        $retryAfter = (string) $response->headers->get('Retry-After');
+        $this->assertMatchesRegularExpression('/^[1-9]\d*$/', $retryAfter);
+        $this->assertLessThanOrEqual(60, (int) $retryAfter);
     }
 
     public function test_login_still_returns_normal_failure_response_below_limit(): void

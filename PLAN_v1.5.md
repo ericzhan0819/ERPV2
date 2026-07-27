@@ -606,54 +606,54 @@ flag=true 時阻擋：
 
 ### 13.1 Schema／User
 
-- [ ] Migration schema tests
-- [ ] Existing user defaults
-- [ ] Username nullable／unique／normalization
-- [ ] Username race handling
-- [ ] Create user force flag
-- [ ] Reset password force flag
-- [ ] Resource fields
+- [x] Migration schema tests
+- [x] Existing user defaults
+- [x] Username nullable／unique／normalization
+- [x] Username race handling
+- [x] Create user force flag
+- [x] Reset password force flag
+- [x] Resource fields
 
 ### 13.2 Auth
 
-- [ ] Email login
-- [ ] Username login
-- [ ] Case normalization
-- [ ] Generic errors
-- [ ] Disabled account
-- [ ] Session regenerate
-- [ ] Authentication audit
-- [ ] Alias-safe Rate Limiter
-- [ ] IP-wide limiter regression
-- [ ] Retry-After regression
+- [x] Email login
+- [x] Username login
+- [x] Case normalization
+- [x] Generic errors
+- [x] Disabled account
+- [x] Session regenerate
+- [x] Authentication audit
+- [x] Alias-safe Rate Limiter
+- [x] IP-wide limiter regression
+- [x] Retry-After regression
 
 ### 13.3 Password Gate
 
-- [ ] Allowed routes
-- [ ] Blocked operational routes
-- [ ] 409 + machine code
-- [ ] active middleware interaction
-- [ ] unknown role fail-closed
+- [x] Allowed routes
+- [x] Blocked operational routes
+- [x] 409 + machine code
+- [x] active middleware interaction
+- [x] unknown role fail-closed
 
 ### 13.4 Self Account
 
-- [ ] Self profile role matrix
-- [ ] Prohibited fields
-- [ ] Username validation／unique
-- [ ] Current password
-- [ ] Confirmed password
-- [ ] Flag clear
-- [ ] Audit password redaction
+- [x] Self profile role matrix
+- [x] Prohibited fields
+- [x] Username validation／unique
+- [x] Current password
+- [x] Confirmed password
+- [x] Flag clear
+- [x] Audit password redaction
 
 ### 13.5 Full Regression
 
-- [ ] `php artisan test`
-- [ ] 既有 UserTest
-- [ ] 既有 LoginThrottleTest
-- [ ] AuditLogTest
-- [ ] RoleAccessTest
-- [ ] Salary user references
-- [ ] 其他受 UserResource／Factory 影響 tests
+- [x] `php artisan test`
+- [x] 既有 UserTest
+- [x] 既有 LoginThrottleTest
+- [x] AuditLogTest
+- [x] RoleAccessTest
+- [x] Salary user references
+- [x] 其他受 UserResource／Factory 影響 tests
 
 **Migration：否。**
 
