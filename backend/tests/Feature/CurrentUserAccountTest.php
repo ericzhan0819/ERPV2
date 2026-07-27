@@ -350,6 +350,8 @@ class CurrentUserAccountTest extends TestCase
             'password' => Hash::make('old-password'),
         ]);
 
+        $this->flushHeaders();
+
         $this->actingAs($user, 'web')
             ->patchJson('/api/me/password', [
                 'current_password' => 'old-password',
@@ -503,7 +505,9 @@ class CurrentUserAccountTest extends TestCase
     {
         $inactive = User::factory()->admin()->create(['is_active' => false]);
 
-        // 刻意不送 Origin／Referer，讓 Sanctum 不掛載 Session store。
+        // 明確清除 Origin／Referer，避免共用測試設定讓 Sanctum 掛載 Session store。
+        $this->flushHeaders();
+
         $this->actingAs($inactive, 'web')
             ->getJson('/api/dashboard/summary')
             ->assertForbidden()
