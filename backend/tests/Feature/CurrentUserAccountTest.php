@@ -9,6 +9,7 @@ use App\Services\AuditLogService;
 use App\Services\UserService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\ValidationException;
@@ -498,15 +499,28 @@ class CurrentUserAccountTest extends TestCase
         $this->getJson('/api/dashboard/summary')->assertUnauthorized();
     }
 
-    public function test_inactive_bearer_token_without_session_store_returns_forbidden(): void
+    public function test_bearer_tokens_are_not_supported_for_api_authentication(): void
     {
-        $inactive = User::factory()->mustChangePassword()->create(['is_active' => false]);
-        $token = $inactive->createToken('inactive-sessionless-test')->plainTextToken;
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $plainTextToken = 'session-only-authentication-test-token';
+        $tokenId = DB::table('personal_access_tokens')->insertGetId([
+            'tokenable_type' => User::class,
+            'tokenable_id' => $admin->id,
+            'name' => 'legacy-token-must-not-authenticate',
+            'token' => hash('sha256', $plainTextToken),
+            'abilities' => json_encode(['*'], JSON_THROW_ON_ERROR),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
-        $this->withToken($token)
+        $this->withToken($tokenId.'|'.$plainTextToken)
             ->getJson('/api/dashboard/summary')
-            ->assertForbidden()
-            ->assertExactJson(['message' => '此帳號已被停用']);
+            ->assertUnauthorized();
+
+        $this->assertDatabaseHas('personal_access_tokens', [
+            'id' => $tokenId,
+            'last_used_at' => null,
+        ]);
     }
 
     public function test_user_without_required_flag_can_reach_operational_routes(): void

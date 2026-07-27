@@ -664,8 +664,9 @@ flag=true 時阻擋：
 - [x] Login 與 self password 的 Session regenerate 使用 request lifecycle 內取樣及負向對照
 - [x] MariaDB username 競態改走 production `updateCurrentProfile()` transaction 路徑
 - [x] Password Gate priority 以 sales／unknown role 呼叫 admin-only route 驗證
-- [x] Inactive bearer token 無 Session store 時仍固定回 403，不因 invalidate 回 500
+- [x] 認證正式限縮為 SPA Session；Bearer token 呼叫受保護 API 固定回 401
 - [x] 非 stateful logout 保留冪等 200，但明確標示沒有可登出的工作階段
+- [x] 保留既有 personal access token table，不新增破壞性 migration 或 token API
 
 ---
 

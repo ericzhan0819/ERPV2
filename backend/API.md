@@ -11,6 +11,10 @@ Base URL：`http://localhost:8000`（依 `.env` `APP_URL` 而定）
 5. v1.1 起部分路由改掛 `role:admin,manager` 或 `role:admin,manager,sales` middleware，依 `users.role` 判斷；不符合角色會回傳 `403 {"message": "權限不足"}`。
 6. v1.5 起，`must_change_password=true` 的登入者只能使用 `/api/me`、自助個人資料／密碼與登出；其他 authenticated 營運 API 固定回 `409 {"message":"請先修改密碼","code":"PASSWORD_CHANGE_REQUIRED"}`。停用帳號仍先由 `active` middleware 回 `403`，未登入仍回 `401`。
 
+ERPV2 只支援上述 SPA cookie／Session 認證，不支援 Sanctum personal access token 或
+Bearer token。即使資料庫保留框架既有的 `personal_access_tokens` table，其中的 token
+也不能通過 `auth:sanctum`，受保護 API 固定回 `401`。目前沒有 token 發放／撤銷端點。
+
 金額欄位一律為整數（新台幣元，非分），對應資料庫 `decimal`/`integer` 欄位，前端不得自行用 float 計算正式金額。
 
 業務日期與月份邊界一律採 `Asia/Taipei`。API datetime 使用帶 `+08:00` offset 的 ISO 8601；帶其他 offset 的輸入會先轉為台北時間再保存。純日期欄位（例如 `entry_date`）使用 `YYYY-MM-DD`，不做時區換算。
