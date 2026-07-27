@@ -11,22 +11,26 @@ function escapeHtmlText(value: string): string {
     .replaceAll('>', '&gt;')
 }
 
+export function createAppBrowserTitlePlugin(browserTitle: string) {
+  return {
+    name: 'app-browser-title',
+    transformIndexHtml(html: string) {
+      if (!html.includes(browserTitleFallback)) {
+        throw new Error('找不到 ERPV2 browser title fallback')
+      }
+
+      return html.replace(
+        browserTitleFallback,
+        () => `<title>${escapeHtmlText(browserTitle)}</title>`,
+      )
+    },
+  }
+}
+
 // Vite 設定文件：https://vite.dev/config/
 export default defineConfig({
   plugins: [
-    {
-      name: 'app-browser-title',
-      transformIndexHtml(html) {
-        if (!html.includes(browserTitleFallback)) {
-          throw new Error('找不到 ERPV2 browser title fallback')
-        }
-
-        return html.replace(
-          browserTitleFallback,
-          `<title>${escapeHtmlText(appConfig.browserTitle)}</title>`,
-        )
-      },
-    },
+    createAppBrowserTitlePlugin(appConfig.browserTitle),
     react(),
   ],
   server: {

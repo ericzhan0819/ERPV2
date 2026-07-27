@@ -2,7 +2,9 @@
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import * as ts from 'typescript'
 import { describe, expect, it } from 'vitest'
+import { createAppBrowserTitlePlugin } from '../../vite.config'
 import { appConfig } from './app'
 
 const frontendRoot = fileURLToPath(new URL('../../', import.meta.url))
@@ -17,6 +19,34 @@ function sourceFiles(directory: string): string[] {
   })
 }
 
+function parseSource(path: string): ts.SourceFile {
+  return ts.createSourceFile(
+    path,
+    readFileSync(path, 'utf8'),
+    ts.ScriptTarget.Latest,
+    true,
+    path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  )
+}
+
+function appConfigProperties(path: string): Set<string> {
+  const properties = new Set<string>()
+
+  function visit(node: ts.Node) {
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'appConfig'
+    ) {
+      properties.add(node.name.text)
+    }
+    ts.forEachChild(node, visit)
+  }
+
+  visit(parseSource(path))
+  return properties
+}
+
 describe('app config source contract', () => {
   it('keeps official presentation strings in app.ts only', () => {
     const configPath = `${sourceRoot}/config/app.ts`
@@ -25,10 +55,17 @@ describe('app config source contract', () => {
     for (const path of sourceFiles(sourceRoot)) {
       if (path === configPath) continue
 
-      const source = readFileSync(path, 'utf8')
-      for (const value of officialStrings) {
-        expect(source, `${path} 不可硬編碼「${value}」`).not.toContain(value)
+      function visit(node: ts.Node) {
+        if (
+          (ts.isStringLiteralLike(node) || ts.isJsxText(node)) &&
+          officialStrings.has(node.text.trim())
+        ) {
+          throw new Error(`${path} 不可硬編碼「${node.text.trim()}」`)
+        }
+        ts.forEachChild(node, visit)
       }
+
+      visit(parseSource(path))
     }
 
     expect(readFileSync(`${frontendRoot}/index.html`, 'utf8')).not.toContain(
@@ -37,20 +74,38 @@ describe('app config source contract', () => {
   })
 
   it('keeps every official presentation consumer connected to app config', () => {
-    expect(readFileSync(`${sourceRoot}/pages/Login.tsx`, 'utf8')).toContain(
-      '{appConfig.systemName}',
+    const loginProperties = appConfigProperties(`${sourceRoot}/pages/Login.tsx`)
+
+    expect(loginProperties).toContain('systemName')
+    expect(loginProperties).toContain('loginSubtitle')
+    expect(
+      appConfigProperties(`${sourceRoot}/layouts/AppLayout.tsx`),
+    ).toContain('systemShortName')
+    expect(
+      readFileSync(`${sourceRoot}/main.tsx`, 'utf8'),
+    ).toMatch(
+      /document\s*\.\s*title\s*=\s*appConfig\s*\.\s*browserTitle/,
     )
-    expect(readFileSync(`${sourceRoot}/pages/Login.tsx`, 'utf8')).toContain(
-      '{appConfig.loginSubtitle}',
+    expect(appConfigProperties(`${frontendRoot}/vite.config.ts`)).toContain(
+      'browserTitle',
     )
-    expect(readFileSync(`${sourceRoot}/layouts/AppLayout.tsx`, 'utf8')).toContain(
-      '{appConfig.systemShortName}',
+  })
+
+  it('injects and escapes browser titles without interpreting dollar patterns', () => {
+    const browserTitle = "A$&B $'C $`D $$E <車行>&"
+    const plugin = createAppBrowserTitlePlugin(browserTitle)
+    const html = '<html><head><title>ERPV2</title></head><body></body></html>'
+
+    expect(plugin.transformIndexHtml(html)).toBe(
+      "<html><head><title>A$&amp;B $'C $`D $$E &lt;車行&gt;&amp;</title></head><body></body></html>",
     )
-    expect(readFileSync(`${sourceRoot}/main.tsx`, 'utf8')).toContain(
-      'document.title = appConfig.browserTitle',
-    )
-    expect(readFileSync(`${frontendRoot}/vite.config.ts`, 'utf8')).toContain(
-      'escapeHtmlText(appConfig.browserTitle)',
-    )
+  })
+
+  it('fails explicitly when the browser title fallback is missing', () => {
+    const plugin = createAppBrowserTitlePlugin(appConfig.browserTitle)
+
+    expect(() =>
+      plugin.transformIndexHtml('<html><head></head><body></body></html>'),
+    ).toThrow('找不到 ERPV2 browser title fallback')
   })
 })
