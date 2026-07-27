@@ -47,20 +47,30 @@ function appConfigProperties(path: string): Set<string> {
   return properties
 }
 
+function officialStringInLiteral(text: string): string | undefined {
+  const normalizedText = text.trim()
+
+  return Object.values(appConfig).find((officialString) =>
+    officialString === appConfig.companyName
+      ? normalizedText === officialString
+      : normalizedText.includes(officialString),
+  )
+}
+
 describe('app config source contract', () => {
   it('keeps official presentation strings in app.ts only', () => {
     const configPath = `${sourceRoot}/config/app.ts`
-    const officialStrings = new Set(Object.values(appConfig))
 
     for (const path of sourceFiles(sourceRoot)) {
       if (path === configPath) continue
 
       function visit(node: ts.Node) {
-        if (
-          (ts.isStringLiteralLike(node) || ts.isJsxText(node)) &&
-          officialStrings.has(node.text.trim())
-        ) {
-          throw new Error(`${path} 不可硬編碼「${node.text.trim()}」`)
+        if (ts.isStringLiteralLike(node) || ts.isJsxText(node)) {
+          const officialString = officialStringInLiteral(node.text)
+
+          if (officialString) {
+            throw new Error(`${path} 不可硬編碼「${officialString}」`)
+          }
         }
         ts.forEachChild(node, visit)
       }
@@ -71,6 +81,18 @@ describe('app config source contract', () => {
     expect(readFileSync(`${frontendRoot}/index.html`, 'utf8')).not.toContain(
       appConfig.browserTitle,
     )
+  })
+
+  it('detects identity strings with suffixes without flagging company prose', () => {
+    expect(
+      officialStringInLiteral(`${appConfig.systemShortName} 管理後台`),
+    ).toBe(appConfig.systemShortName)
+    expect(officialStringInLiteral(appConfig.companyName)).toBe(
+      appConfig.companyName,
+    )
+    expect(
+      officialStringInLiteral(`${appConfig.companyName}保留一般營運文案`),
+    ).toBeUndefined()
   })
 
   it('keeps every official presentation consumer connected to app config', () => {
