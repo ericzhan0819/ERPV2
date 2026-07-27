@@ -499,6 +499,17 @@ class CurrentUserAccountTest extends TestCase
         $this->getJson('/api/dashboard/summary')->assertUnauthorized();
     }
 
+    public function test_inactive_user_without_a_session_store_still_gets_forbidden(): void
+    {
+        $inactive = User::factory()->admin()->create(['is_active' => false]);
+
+        // 刻意不送 Origin／Referer，讓 Sanctum 不掛載 Session store。
+        $this->actingAs($inactive, 'web')
+            ->getJson('/api/dashboard/summary')
+            ->assertForbidden()
+            ->assertExactJson(['message' => '此帳號已被停用']);
+    }
+
     public function test_bearer_tokens_are_not_supported_for_api_authentication(): void
     {
         $admin = User::factory()->admin()->create(['is_active' => true]);
