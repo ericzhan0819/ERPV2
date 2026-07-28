@@ -37,11 +37,17 @@ export function applyCurrentUserResponse(
 export function applyPasswordChangeRequired(
   currentUser: User | null,
   logoutStatus: LogoutStatus,
+  requestGeneration: AuthRequestGeneration,
+  currentGeneration: AuthRequestGeneration,
 ): CurrentUserUpdateResult {
   if (
     logoutStatus !== 'idle' ||
     !currentUser ||
-    currentUser.must_change_password
+    currentUser.must_change_password ||
+    !isCurrentAuthSessionRequest(
+      requestGeneration,
+      currentGeneration,
+    )
   ) {
     return { accepted: false, user: currentUser }
   }

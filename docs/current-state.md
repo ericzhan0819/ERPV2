@@ -2,7 +2,8 @@
 
 日期：2026-07-29
 專案：ERPV2 / 中古車行內部營運系統
-目前 v1.5 驗收基準：`a4bf025 test：完成 v1.5 browser manual smoke`
+目前 v1.5 browser smoke 基準：`a4bf025 test：完成 v1.5 browser manual smoke`
+目前工作樹：Claude review 的 3 個有效 low findings 已修正並完成回歸，尚待使用者 commit
 目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`、`v1.3-smoke-passed`、`v1.4-smoke-passed`
 狀態：v1.5「帳號自助管理與系統識別集中化」第 0～16 部分、完整自動回歸、Firefox／Desktop Chrome 工程預驗證、使用者 Desktop Chrome／Mobile Safari Browser Manual Smoke、文件及交接均已完成。依專案規則，尚未在未獲使用者明確授權時建立 v1.5 annotated tag。
 
@@ -59,7 +60,7 @@ cd frontend && npm run build
 
 v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped。v1.3 與獨立 Customer hotfix 納入後的完整回歸為 499 tests、485 passed、14 environment-gated skipped、2293 assertions；所有受保護的 MariaDB 10.11.18 並發／時區測試分別在專用可拋棄 schema 執行，共 14 tests／176 assertions 全數通過，驗證後均刪除 schema。frontend lint（2 個既有 Fast Refresh warnings）／typecheck／production build 均重新執行通過。使用者於 2026-07-18 完成完整 browser manual smoke。完整紀錄見 `docs/v1.3-smoke-report.md` 與 `docs/customer-workflow-hotfix.md`。
 
-v1.4 最終回歸為 519 tests（504 passed、15 environment-gated skipped）／2516 assertions，Frontend 14 tests、lint、typecheck、production build 及三角色／RWD browser smoke 通過。v1.5 第 16 部分重新執行後為 Backend 632 tests（615 passed、17 environment-gated skipped）／3163 assertions；Frontend 16 files／77 tests、lint（2 個既有 Fast Refresh warnings）、typecheck 與 production build 通過。v1.5 的 MariaDB username 專用整合另為 2 tests／36 assertions；Firefox 38 checks、Chrome 15 checks、config 2 checks 與使用者 33 項 manual smoke 均通過。完整紀錄見 `docs/v1.5-smoke-report.md`。
+v1.4 最終回歸為 519 tests（504 passed、15 environment-gated skipped）／2516 assertions，Frontend 14 tests、lint、typecheck、production build 及三角色／RWD browser smoke 通過。v1.5 Claude review follow-up 修正完成後為 Backend 633 tests（616 passed、17 environment-gated skipped）／3170 assertions；Frontend 16 files／80 tests、lint（2 個既有 Fast Refresh warnings）、typecheck 與 production build 通過。v1.5 的 MariaDB username 專用整合另為 2 tests／36 assertions；Firefox 38 checks、Chrome 15 checks、config 2 checks 與使用者 33 項 manual smoke 均通過。完整紀錄見 `docs/v1.5-smoke-report.md`。
 
 ---
 
@@ -69,6 +70,7 @@ v1.4 最終回歸為 519 tests（504 passed、15 environment-gated skipped）／
 
 - username 或 Email 雙識別登入，大小寫不敏感
 - 同一 User 的 username／Email 共用 canonical account 與 identifier + IP limiter
+- 停用帳號的正確密碼嘗試不會清除 limiter，仍累積 identifier、account 與 IP-wide 額度
 - 登入 / 冪等登出
 - 登出 idempotent retry
 - 登入失敗節流
@@ -456,9 +458,10 @@ v1.5 已完成 `企劃書_v1.5.md` 與 `PLAN_v1.5.md` 的工程範圍：
 - 我的帳號 name／username／password 自助管理；Email／角色／啟用狀態維持管理邊界。
 - UserResource／Audit／log 密碼保護。
 - Login、Sidebar 與 Browser title 的 source-controlled app config。
-- Backend 632 tests（615 passed、17 environment-gated skipped）／3163 assertions；Frontend 16 files／77 tests、lint、typecheck、production build。
+- Backend 633 tests（616 passed、17 environment-gated skipped）／3170 assertions；Frontend 16 files／80 tests、lint、typecheck、production build。
 - MariaDB username migration／大小寫 unique／真實兩連線競態 2 tests／36 assertions。
 - Firefox 38 checks、Chrome 15 checks、config 2 checks，以及使用者 Desktop Chrome／Mobile Safari 33 項 manual smoke。
+- Claude review follow-up 修正停用帳號 limiter 清除、過期 409 auth generation 與個人資料 committed-stale 回饋；三項均有直接回歸測試。
 
 完整證據見 `docs/v1.5-smoke-report.md` 與 `docs/v1.5-handoff.md`。尚未建立 v1.5 annotated tag；只有使用者明確授權後才可建立。
 

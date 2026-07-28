@@ -57,24 +57,46 @@ describe('current user context update', () => {
   })
 
   it('applies a password-required notification only to an idle logged-in user', () => {
-    expect(applyPasswordChangeRequired(user, 'idle')).toEqual({
+    expect(
+      applyPasswordChangeRequired(user, 'idle', 'request-v1', 'request-v1'),
+    ).toEqual({
       accepted: true,
       user: { ...user, must_change_password: true },
     })
 
-    expect(applyPasswordChangeRequired(user, 'pending')).toEqual({
+    expect(
+      applyPasswordChangeRequired(user, 'pending', 'request-v1', 'request-v1'),
+    ).toEqual({
       accepted: false,
       user,
     })
-    expect(applyPasswordChangeRequired(null, 'idle')).toEqual({
+    expect(
+      applyPasswordChangeRequired(null, 'idle', 'request-v1', 'request-v1'),
+    ).toEqual({
       accepted: false,
       user: null,
     })
 
     const requiredUser = { ...user, must_change_password: true }
-    expect(applyPasswordChangeRequired(requiredUser, 'idle')).toEqual({
+    expect(
+      applyPasswordChangeRequired(
+        requiredUser,
+        'idle',
+        'request-v1',
+        'request-v1',
+      ),
+    ).toEqual({
       accepted: false,
       user: requiredUser,
+    })
+  })
+
+  it('rejects a password-required response from an older request generation', () => {
+    expect(
+      applyPasswordChangeRequired(user, 'idle', 'request-v1', 'request-v2'),
+    ).toEqual({
+      accepted: false,
+      user,
     })
   })
 

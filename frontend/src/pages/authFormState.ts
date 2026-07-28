@@ -11,7 +11,10 @@ interface ApiErrorPayload {
 export const PASSWORD_UPDATED_RELOGIN_NOTICE =
   '密碼已更新，請使用新密碼重新登入'
 
-export function isCommittedPasswordUpdateWithStaleContext(
+export const PROFILE_UPDATED_RELOGIN_NOTICE =
+  '個人資料已更新，請重新登入確認'
+
+export function isCommittedCurrentUserUpdateWithStaleContext(
   error: unknown,
 ): boolean {
   return error instanceof StaleCurrentUserResponseError

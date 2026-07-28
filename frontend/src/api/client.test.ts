@@ -47,7 +47,7 @@ describe('apiClient auth request generation contract', () => {
     )
     const { apiClient } = await import('./client')
     const receivedGenerations: Array<string | null> = []
-    let passwordChangeNotifications = 0
+    const passwordChangeGenerations: Array<string | null> = []
     const unsubscribeAuth =
       authSessionInvalidated.onAuthSessionInvalidated(
         (requestGeneration) => {
@@ -55,8 +55,8 @@ describe('apiClient auth request generation contract', () => {
         },
       )
     const unsubscribePassword =
-      passwordChangeRequired.onPasswordChangeRequired(() => {
-        passwordChangeNotifications += 1
+      passwordChangeRequired.onPasswordChangeRequired((requestGeneration) => {
+        passwordChangeGenerations.push(requestGeneration)
       })
 
     await expect(
@@ -76,7 +76,7 @@ describe('apiClient auth request generation contract', () => {
     })
 
     expect(receivedGenerations).toEqual(['request-v2'])
-    expect(passwordChangeNotifications).toBe(0)
+    expect(passwordChangeGenerations).toEqual([])
     unsubscribeAuth()
     unsubscribePassword()
   })
@@ -93,7 +93,7 @@ describe('apiClient auth request generation contract', () => {
     )
     const { apiClient } = await import('./client')
     const receivedGenerations: Array<string | null> = []
-    let passwordChangeNotifications = 0
+    const passwordChangeGenerations: Array<string | null> = []
     const unsubscribeAuth =
       authSessionInvalidated.onAuthSessionInvalidated(
         (requestGeneration) => {
@@ -101,8 +101,8 @@ describe('apiClient auth request generation contract', () => {
         },
       )
     const unsubscribePassword =
-      passwordChangeRequired.onPasswordChangeRequired(() => {
-        passwordChangeNotifications += 1
+      passwordChangeRequired.onPasswordChangeRequired((requestGeneration) => {
+        passwordChangeGenerations.push(requestGeneration)
       })
 
     await expect(
@@ -129,7 +129,7 @@ describe('apiClient auth request generation contract', () => {
     })
 
     expect(receivedGenerations).toEqual([])
-    expect(passwordChangeNotifications).toBe(1)
+    expect(passwordChangeGenerations).toEqual(['request-v2'])
     unsubscribeAuth()
     unsubscribePassword()
   })

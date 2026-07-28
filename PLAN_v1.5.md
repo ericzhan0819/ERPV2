@@ -806,6 +806,16 @@ flag=true 時阻擋：
 - [x] 檢查 App config 沒有擴張成 Settings 模組
 - [x] 檢查無關 schema／dependency／UI 重構
 
+**Claude Review Follow-up（2026-07-29）：**
+
+- [x] 停用帳號正確密碼不得清除 identifier／account limiter，並累積 IP-wide failure
+- [x] `PASSWORD_CHANGE_REQUIRED` 409 使用 request generation 拒絕舊 Session 回應
+- [x] self profile committed-stale response 不得誤報更新失敗
+- [x] 登入 timing oracle 疑慮經 Laravel Timebox 實測否定
+
+未納入：self password per-user throttle 屬規格外 hardening，需另行產品決策與 hotfix PLAN，
+不作為 v1.5 或第 16 部分未完成項目。
+
 ### 16.3 Git
 
 - [x] 每個完整階段有可驗證 commit

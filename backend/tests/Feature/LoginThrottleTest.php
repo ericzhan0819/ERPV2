@@ -279,6 +279,42 @@ class LoginThrottleTest extends TestCase
         $this->loginAs('admin@example.com', 'wrong-password')->assertStatus(422);
     }
 
+    public function test_inactive_account_with_correct_password_keeps_login_attempts_and_hits_ip_limiter(): void
+    {
+        $user = User::factory()->withUsername('inactive.user')->create([
+            'email' => 'inactive@example.com',
+            'password' => bcrypt('correct-password'),
+            'is_active' => false,
+        ]);
+        $ip = '203.0.113.60';
+        $accountKey = "login:account:uid:{$user->id}";
+        $identifierIpKey = "login:identifier_ip:uid:{$user->id}|{$ip}";
+        $ipKey = "login:ip:{$ip}";
+
+        try {
+            for ($attempt = 0; $attempt < 4; $attempt++) {
+                RateLimiter::hit($accountKey, 900);
+                RateLimiter::hit($identifierIpKey, 60);
+            }
+
+            $this->loginAs('inactive@example.com', 'correct-password', $ip)
+                ->assertUnprocessable()
+                ->assertExactJson(['message' => '此帳號已被停用']);
+
+            $this->assertSame(5, RateLimiter::attempts($accountKey));
+            $this->assertSame(5, RateLimiter::attempts($identifierIpKey));
+            $this->assertSame(1, RateLimiter::attempts($ipKey));
+
+            $this->loginAs('INACTIVE.USER', 'correct-password', $ip)
+                ->assertTooManyRequests()
+                ->assertHeader('Retry-After');
+        } finally {
+            RateLimiter::clear($accountKey);
+            RateLimiter::clear($identifierIpKey);
+            RateLimiter::clear($ipKey);
+        }
+    }
+
     public function test_successful_login_does_not_clear_another_users_account_limiter(): void
     {
         User::factory()->withUsername('first.user')->create([

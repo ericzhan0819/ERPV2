@@ -8,7 +8,7 @@ import {
   PASSWORD_UPDATED_RELOGIN_NOTICE,
   apiErrorMessage,
   apiFieldErrors,
-  isCommittedPasswordUpdateWithStaleContext,
+  isCommittedCurrentUserUpdateWithStaleContext,
 } from './authFormState'
 
 type PasswordField = 'current_password' | 'password' | 'password_confirmation'
@@ -51,7 +51,7 @@ export function PasswordChangeRequired() {
       })
       navigate('/dashboard', { replace: true })
     } catch (err) {
-      if (isCommittedPasswordUpdateWithStaleContext(err)) {
+      if (isCommittedCurrentUserUpdateWithStaleContext(err)) {
         navigate('/login', {
           replace: true,
           state: { notice: PASSWORD_UPDATED_RELOGIN_NOTICE },

@@ -200,10 +200,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(
     () =>
-      onPasswordChangeRequired(() => {
+      onPasswordChangeRequired((requestGeneration) => {
         const result = applyPasswordChangeRequired(
           userRef.current,
           logoutStatusRef.current,
+          requestGeneration,
+          readAuthRequestGeneration(),
         )
         if (!result.accepted) {
           return

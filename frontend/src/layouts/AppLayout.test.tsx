@@ -102,7 +102,7 @@ describe('AppLayout auth and presentation regression', () => {
     renderLayout()
     expect(await screen.findByText('Dashboard 測試頁')).toBeTruthy()
 
-    notifyPasswordChangeRequired()
+    notifyPasswordChangeRequired(null)
 
     expect(
       await screen.findByRole('heading', { name: '請先修改密碼' }),

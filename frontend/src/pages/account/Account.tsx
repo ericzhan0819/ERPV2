@@ -5,9 +5,10 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import {
   PASSWORD_UPDATED_RELOGIN_NOTICE,
+  PROFILE_UPDATED_RELOGIN_NOTICE,
   apiErrorMessage,
   apiFieldErrors,
-  isCommittedPasswordUpdateWithStaleContext,
+  isCommittedCurrentUserUpdateWithStaleContext,
 } from '../authFormState'
 import {
   accountProfileForm,
@@ -46,7 +47,15 @@ export function Account() {
       </div>
 
       <div className="grid min-w-0 gap-6 lg:grid-cols-2 lg:items-start">
-        <ProfileSection key={`profile-${user.id}`} />
+        <ProfileSection
+          key={`profile-${user.id}`}
+          onCommittedStaleResponse={() => {
+            navigate('/login', {
+              replace: true,
+              state: { notice: PROFILE_UPDATED_RELOGIN_NOTICE },
+            })
+          }}
+        />
         <PasswordSection
           onSessionExpired={() => navigate('/login', { replace: true })}
           onCommittedStaleResponse={() => {
@@ -61,7 +70,11 @@ export function Account() {
   )
 }
 
-function ProfileSection() {
+function ProfileSection({
+  onCommittedStaleResponse,
+}: {
+  onCommittedStaleResponse: () => void
+}) {
   const { user, updateProfile } = useAuth()
   const [form, setForm] = useState(() => accountProfileForm(user!))
   const [fieldErrors, setFieldErrors] = useState<
@@ -95,6 +108,11 @@ function ProfileSection() {
       setForm(accountProfileForm(updatedUser))
       setSuccess('個人資料已更新')
     } catch (caught) {
+      if (isCommittedCurrentUserUpdateWithStaleContext(caught)) {
+        onCommittedStaleResponse()
+        return
+      }
+
       const nextFieldErrors = apiFieldErrors(caught, profileFields)
       setFieldErrors(nextFieldErrors)
       if (Object.keys(nextFieldErrors).length === 0) {
@@ -242,7 +260,7 @@ function PasswordSection({
       setPasswordConfirmation('')
       setSuccess('密碼已更新')
     } catch (caught) {
-      if (isCommittedPasswordUpdateWithStaleContext(caught)) {
+      if (isCommittedCurrentUserUpdateWithStaleContext(caught)) {
         onCommittedStaleResponse()
         return
       }

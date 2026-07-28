@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { User } from '../types/user'
 import {
   PASSWORD_UPDATED_RELOGIN_NOTICE,
+  PROFILE_UPDATED_RELOGIN_NOTICE,
   apiErrorMessage,
   apiFieldErrors,
-  isCommittedPasswordUpdateWithStaleContext,
+  isCommittedCurrentUserUpdateWithStaleContext,
   loginSuccessPath,
 } from './authFormState'
 import { StaleCurrentUserResponseError } from '../auth/currentUserState'
@@ -61,17 +62,20 @@ describe('auth form state', () => {
     expect(apiErrorMessage(new Error('network'), '請稍後再試')).toBe('請稍後再試')
   })
 
-  it('distinguishes a committed password update from an API failure', () => {
+  it('distinguishes a committed current-user update from an API failure', () => {
     expect(
-      isCommittedPasswordUpdateWithStaleContext(
+      isCommittedCurrentUserUpdateWithStaleContext(
         new StaleCurrentUserResponseError(),
       ),
     ).toBe(true)
     expect(
-      isCommittedPasswordUpdateWithStaleContext(new Error('network')),
+      isCommittedCurrentUserUpdateWithStaleContext(new Error('network')),
     ).toBe(false)
     expect(PASSWORD_UPDATED_RELOGIN_NOTICE).toBe(
       '密碼已更新，請使用新密碼重新登入',
+    )
+    expect(PROFILE_UPDATED_RELOGIN_NOTICE).toBe(
+      '個人資料已更新，請重新登入確認',
     )
   })
 })

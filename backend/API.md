@@ -75,6 +75,9 @@ Request body：
 - `422` 帳號已被停用
 - `429` 短時間內登入失敗次數過多（`Retry-After` header 秒數）
 
+停用帳號即使輸入正確密碼也不視為成功登入，不會清除 identifier + IP 或 canonical
+account limiter，並會累積 IP-wide 失敗次數；重複嘗試仍可能進入上述 `429`。
+
 ### POST /api/logout
 
 不需登入（設計為冪等，重複呼叫也回 200，避免 client 重試時因 session 已失效而收到 401）。

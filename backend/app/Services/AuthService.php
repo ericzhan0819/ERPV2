@@ -72,17 +72,20 @@ class AuthService
             throw new AuthenticationException('帳號或密碼錯誤');
         }
 
-        RateLimiter::clear($limiters['identifier_ip'][0]);
-        RateLimiter::clear($limiters['account'][0]);
-
         /** @var User $user */
         $user = Auth::user();
 
         if (! $user->is_active) {
             Auth::logout();
+            RateLimiter::hit($ipKey, self::IP_DECAY_SECONDS);
 
             throw new AuthenticationException('此帳號已被停用');
         }
+
+        // 只有通過啟用狀態檢查的正式成功登入才能清除額度；停用帳號即使密碼正確，
+        // 仍必須保留本次 identifier／account 嘗試並累積 IP-wide 失敗次數。
+        RateLimiter::clear($limiters['identifier_ip'][0]);
+        RateLimiter::clear($limiters['account'][0]);
 
         request()->session()->regenerate();
 

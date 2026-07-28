@@ -1,15 +1,17 @@
 // @vitest-environment jsdom
 
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as authApi from '../../api/auth'
+import { StaleCurrentUserResponseError } from '../../auth/currentUserState'
 import { AuthProvider } from '../../hooks/useAuth'
 import { ThemeProvider } from '../../hooks/useTheme'
 import { AppLayout } from '../../layouts/AppLayout'
 import { ProtectedRoute } from '../../routes/ProtectedRoute'
 import type { User } from '../../types/user'
+import { PROFILE_UPDATED_RELOGIN_NOTICE } from '../authFormState'
 import { Account } from './Account'
 
 vi.mock('../../api/auth', () => ({
@@ -53,7 +55,7 @@ function renderAccount(currentUser: User = baseUser) {
       <AuthProvider>
         <MemoryRouter initialEntries={['/account']}>
           <Routes>
-            <Route path="/login" element={<p>登入測試頁</p>} />
+            <Route path="/login" element={<LoginTestPage />} />
             <Route
               element={
                 <ProtectedRoute>
@@ -67,6 +69,18 @@ function renderAccount(currentUser: User = baseUser) {
         </MemoryRouter>
       </AuthProvider>
     </ThemeProvider>,
+  )
+}
+
+function LoginTestPage() {
+  const location = useLocation()
+  const notice = (location.state as { notice?: string } | null)?.notice
+
+  return (
+    <>
+      <p>登入測試頁</p>
+      {notice && <p>{notice}</p>}
+    </>
   )
 }
 
@@ -193,5 +207,24 @@ describe('Account', () => {
 
     expect(await screen.findByText('帳號名稱已被使用')).toBeTruthy()
     expect(usernameInput.getAttribute('aria-invalid')).toBe('true')
+  })
+
+  it('does not report a committed profile update as failed when auth context changed', async () => {
+    vi.mocked(authApi.updateCurrentUserProfile).mockRejectedValue(
+      new StaleCurrentUserResponseError(),
+    )
+    const interaction = userEvent.setup()
+
+    renderAccount()
+    await screen.findByRole('heading', { name: '我的帳號' })
+    await interaction.click(
+      screen.getByRole('button', { name: '儲存個人資料' }),
+    )
+
+    expect(await screen.findByText('登入測試頁')).toBeTruthy()
+    expect(screen.getByText(PROFILE_UPDATED_RELOGIN_NOTICE)).toBeTruthy()
+    expect(
+      screen.queryByText('個人資料更新失敗，請稍後再試'),
+    ).toBeNull()
   })
 })
