@@ -14,6 +14,7 @@ v1.1：實務工作流補強已完成 smoke，並以 `v1.1-smoke-passed` tag 封
 v1.2：車輛圖片與官網公開車輛資料前置階段已完成 smoke，並以 `v1.2-smoke-passed` tag 封版。
 v1.3：薪資結算工程實作、自動回歸、RWD／dark mode 驗證與使用者 browser manual smoke 已通過，並以 `v1.3-smoke-passed` tag 封板。
 v1.4：資訊架構與 UI／UX 改版、自動回歸、三角色 browser manual smoke 與真實 iPhone Safari 複驗已完成，並以 `v1.4-smoke-passed` tag 封板；tag 指向 `d4ea978`，runtime 與封板前修正基準為 `a10dd0c`。
+v1.5：帳號自助管理與系統識別集中化工程實作、自動回歸、Desktop Chrome／Mobile Safari browser manual smoke 與文件交接已完成；尚未在未獲使用者明確授權時建立 annotated tag。
 ```
 
 核心目標不是擴張成完整 ERP，而是讓中古車行日常營運能穩定落地：車輛進來、建檔、整備、上架、保留、收款、成交、列印收支明細與查看營運摘要。
@@ -94,6 +95,30 @@ v1.3 任務必須閱讀：
 11. `backend/app/Services/VehicleService.php`
 12. `backend/app/Services/MoneyEntryService.php`
 13. 相關 Policy、Request、Resource、routes、tests 與前端 API 型別
+
+### v1.4 資訊架構與 UI／UX 文件
+
+v1.4 任務必須閱讀：
+
+1. `企劃書_v1.4.md`
+2. `PLAN_v1.4.md`
+3. `docs/v1.4-smoke-report.md`
+4. `docs/v1.4-handoff.md`
+5. `docs/current-state.md`
+6. `backend/API.md`
+7. `UI.md`
+
+### v1.5 帳號自助管理文件
+
+v1.5 任務必須閱讀：
+
+1. `企劃書_v1.5.md`
+2. `PLAN_v1.5.md`
+3. `docs/v1.5-smoke-report.md`
+4. `docs/v1.5-handoff.md`
+5. `docs/current-state.md`
+6. `backend/API.md`
+7. 相關 Auth／User migration、Model、Request、Controller、Service、Resource、middleware、routes、tests、前端 API、Auth Context、頁面與 app config
 
 不得只看單一檔案就直接大量改碼。實作前必須先檢查既有目錄、路由、Service、Request、Resource、測試與前端 API 型別。
 
@@ -632,6 +657,8 @@ UI 風格遵守 `UI.md`：
 目前 v1.4 已完成 PLAN 第 0～14 部分，工程、自動回歸、Browser Manual Smoke、文件與交接均已完成，並以 `v1.4-smoke-passed` tag 封板；tag 指向 `d4ea978`，runtime 與封板前 follow-up 基準為 `a10dd0c`。Firefox 獨立環境與使用者真實手機中文輸入法、iPhone Safari Safe Area／Sidebar／light-dark 複驗均通過；iOS 修正以 App Shell 內的 viewport-height absolute layer 取代 fixed Mobile Sidebar／overlay，並由 ThemeProvider 同步 Sidebar 開關及主題切換時的頁面與瀏覽器底色。最終 follow-up 另包含 CustomerSelect 空白搜尋編輯狀態修正，以及 MoneyEntry 載入期間清除過期分頁 `meta`。審查證據見 `docs/v1.4-smoke-report.md` 與 `docs/v1.4-handoff.md`。
 
 v1.4 對立性審查必須維持 Presentation Layer 邊界：不得新增 migration、schema、商業公式、Workflow、角色或權限；Dashboard 只能總覽與導流，不得加入 Table、車輛列表、展開明細、通知或薪資 KPI；Vehicle List 不得回傳收購價、毛利、完整相簿或其他敏感資料；sales 的 Dashboard 原始 JSON 必須真正移除財務欄位。Filter 的 URL 還原、`sold_month` 台北月份半開區間、approved-only 統計及 iOS Safe Area 行為不可在收尾時回歸。
+
+v1.5 第 0～16 部分已完成。審查證據見 `docs/v1.5-smoke-report.md` 與 `docs/v1.5-handoff.md`。v1.5 對立性審查必須維持帳號自助管理邊界：密碼值不得進入 API、Audit 或 log；username／Email 必須共用 canonical account limiter；所有 authenticated 營運路由預設受 `must_change_password` gate 保護，只有 `/api/me`、self profile、self password 與登出流程可用；self endpoint 不可修改 Email、role、is_admin、is_active 或其他管理欄位；前端 app config 只能是 source-controlled presentation config，不得擴張成 Database settings、線上設定頁、MFA、SSO、Email reset 或裝置／Session 管理。Annotated tag 仍須使用者明確授權。
 
 Claude 審查時必須特別檢查：
 

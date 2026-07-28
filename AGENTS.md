@@ -14,6 +14,7 @@ v1.1：實務工作流補強已完成 smoke，並以 `v1.1-smoke-passed` tag 封
 v1.2：車輛圖片與官網公開資料前置已完成 smoke，並以 `v1.2-smoke-passed` tag 封版。
 v1.3：薪資結算工程實作、自動回歸與使用者 browser manual smoke 已通過，並以 `v1.3-smoke-passed` tag 封版。
 v1.4：資訊架構與 UI／UX 改版、自動回歸、三角色 browser manual smoke 與真實 iPhone Safari 複驗已完成，並以 `v1.4-smoke-passed` tag 封板；tag 指向 `d4ea978`，runtime 與封板前修正基準為 `a10dd0c`。
+v1.5：帳號自助管理與系統識別集中化工程實作、自動回歸、Desktop Chrome／Mobile Safari browser manual smoke 與文件交接已完成；尚未在未獲使用者明確授權時建立 annotated tag。
 ```
 
 ---
@@ -54,6 +55,7 @@ Codex 應完成使用者授權範圍內的實作，不把主要工程工作轉�
 - v1.2：`企劃書_v1.2.md`、`PLAN_v1.2.md`、`docs/v1.2-smoke-report.md`、`docs/v1.2-handoff.md`
 - v1.3：`企劃書_v1.3.md`、`PLAN_v1.3.md`、`docs/v1.3-smoke-report.md`、`docs/v1.3-handoff.md`
 - v1.4：`企劃書_v1.4.md`、`PLAN_v1.4.md`、`docs/v1.4-smoke-report.md`、`docs/v1.4-handoff.md`、`docs/current-state.md`、`backend/API.md`
+- v1.5：`企劃書_v1.5.md`、`PLAN_v1.5.md`、`docs/v1.5-smoke-report.md`、`docs/v1.5-handoff.md`、`docs/current-state.md`、`backend/API.md`
 
 不得只看完成報告或單一檔案就直接大量改碼。先搜尋並確認既有路由、Controller、FormRequest、Service、Model、Policy、Resource、migration、tests、前端 API、types 與相關頁面。
 
@@ -167,11 +169,13 @@ preparing → listed → reserved → sold
 
 只實作目前任務明確指定版本的企劃書與 PLAN 範圍。
 
-v1.1、v1.2、v1.3、v1.4 均已完成既定範圍。除非使用者明確要求 hotfix，否則不得回開舊版或繼續塞入新功能。
+v1.1、v1.2、v1.3、v1.4、v1.5 均已完成既定工程範圍。除非使用者明確要求 hotfix，否則不得回開舊版或繼續塞入新功能。
 
 v1.3 薪資結算必須維持既有範圍與資料保護，包括薪資設定、收／賣車歸屬、版本化獎金方案、approved-only 毛利、整月跨級獎金、薪資草稿／鎖定／發薪與專用 MoneyEntry 保護。
 
 v1.4 必須維持 Presentation Layer 邊界：Dashboard 只做總覽與 URL Filter 導流；Vehicle List 使用 Card Grid 與封面縮圖；Filter 支援 URL 還原與 Mobile Drawer；不得藉 UI 收尾新增 schema、商業公式、Workflow、角色、權限、通知或報表。
+
+v1.5 必須維持帳號體驗補強邊界：username／Email 雙登入需共用 alias-safe limiter；`must_change_password` 必須由後端 fail-closed gate 強制；self endpoint 只能修改 name、username 與 password；系統識別維持 source-controlled 前端 config。不得擴張為自助註冊、Email reset／驗證、MFA、SSO、裝置／Session 管理、Database settings、線上設定頁或多公司品牌切換。
 
 禁止擴張為：
 

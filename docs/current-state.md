@@ -1,10 +1,10 @@
-# ERPV2 current-state — v1.4 Smoke 已通過
+# ERPV2 current-state — v1.5 Smoke 已通過
 
-日期：2026-07-23
+日期：2026-07-29
 專案：ERPV2 / 中古車行內部營運系統
-目前 runtime 基準：`a10dd0c fix：修正收支列表載入期間過期分頁資訊`
-目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`、`v1.3-smoke-passed`
-狀態：v1.4「資訊架構與 UI／UX 改版」第 0～14 部分、完整自動回歸、Firefox Browser Manual Smoke、使用者真實手機中文輸入法與 iPhone Safari 複驗、封板前 follow-up、文件及交接均已完成，並以 `v1.4-smoke-passed` tag 封板；tag 指向 `d4ea978`。
+目前 v1.5 驗收基準：`a4bf025 test：完成 v1.5 browser manual smoke`
+目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`、`v1.3-smoke-passed`、`v1.4-smoke-passed`
+狀態：v1.5「帳號自助管理與系統識別集中化」第 0～16 部分、完整自動回歸、Firefox／Desktop Chrome 工程預驗證、使用者 Desktop Chrome／Mobile Safari Browser Manual Smoke、文件及交接均已完成。依專案規則，尚未在未獲使用者明確授權時建立 v1.5 annotated tag。
 
 ---
 
@@ -50,12 +50,16 @@ v1.1 的重點是補足真實車行操作需要的角色、遮蔽、審核、客
 ### 目前驗證指令
 
 ```bash
-cd backend && ./vendor/bin/phpunit
-cd frontend && npx tsc -b
-cd frontend && ./node_modules/.bin/vite build
+cd backend && php artisan test
+cd frontend && npm test
+cd frontend && npm run lint
+cd frontend && npm run typecheck
+cd frontend && npm run build
 ```
 
 v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped。v1.3 與獨立 Customer hotfix 納入後的完整回歸為 499 tests、485 passed、14 environment-gated skipped、2293 assertions；所有受保護的 MariaDB 10.11.18 並發／時區測試分別在專用可拋棄 schema 執行，共 14 tests／176 assertions 全數通過，驗證後均刪除 schema。frontend lint（2 個既有 Fast Refresh warnings）／typecheck／production build 均重新執行通過。使用者於 2026-07-18 完成完整 browser manual smoke。完整紀錄見 `docs/v1.3-smoke-report.md` 與 `docs/customer-workflow-hotfix.md`。
+
+v1.4 最終回歸為 519 tests（504 passed、15 environment-gated skipped）／2516 assertions，Frontend 14 tests、lint、typecheck、production build 及三角色／RWD browser smoke 通過。v1.5 第 16 部分重新執行後為 Backend 632 tests（615 passed、17 environment-gated skipped）／3163 assertions；Frontend 16 files／77 tests、lint（2 個既有 Fast Refresh warnings）、typecheck 與 production build 通過。v1.5 的 MariaDB username 專用整合另為 2 tests／36 assertions；Firefox 38 checks、Chrome 15 checks、config 2 checks 與使用者 33 項 manual smoke 均通過。完整紀錄見 `docs/v1.5-smoke-report.md`。
 
 ---
 
@@ -63,14 +67,22 @@ v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend 
 
 ### 3.1 Auth / 使用者
 
-- 登入 / 登出
+- username 或 Email 雙識別登入，大小寫不敏感
+- 同一 User 的 username／Email 共用 canonical account 與 identifier + IP limiter
+- 登入 / 冪等登出
 - 登出 idempotent retry
 - 登入失敗節流
+- 新建使用者與 admin 重設密碼會設 `must_change_password=true`
+- 待改密碼帳號只可使用 `/api/me`、self profile、self password 與登出；一般營運 API 固定回 `409 + PASSWORD_CHANGE_REQUIRED`
+- 各角色可在「我的帳號」修改自己的 name、username 與 password
+- Self API 明確拒絕 Email、role、is_admin、is_active 與其他管理欄位
+- 密碼值不進 UserResource、Audit Log 或一般 log
 - 使用者管理
 - 角色：`admin` / `manager` / `sales`
 - `role` 是正式權限來源
 - `is_admin` 僅保留相容用途，不可作為唯一權限來源
 - 最後一個 active admin 不可被停用、降權或刪除
+- 前端系統名稱集中於 `frontend/src/config/app.ts`；Login、Sidebar 與 Browser title 共用同一 config，沒有線上 Settings 模組
 
 ### 3.2 Dashboard
 
@@ -433,7 +445,28 @@ v1.4 已完成第 0～14 部分：UX Design System／共用元件盤點、Vehicl
 
 ---
 
-## 8. 給下一位 AI / 工程師的注意事項
+## 8. v1.5 完成狀態
+
+v1.5 已完成 `企劃書_v1.5.md` 與 `PLAN_v1.5.md` 的工程範圍：
+
+- `users.username` nullable unique 與 `must_change_password` default false migration；既有帳號不做推測式回填。
+- Admin 新建員工與重設密碼固定進強制改密碼流程。
+- username／Email 雙登入、通用錯誤訊息與 alias-safe Rate Limiter。
+- 後端 password change required gate、前端強制頁與 409 導流。
+- 我的帳號 name／username／password 自助管理；Email／角色／啟用狀態維持管理邊界。
+- UserResource／Audit／log 密碼保護。
+- Login、Sidebar 與 Browser title 的 source-controlled app config。
+- Backend 632 tests（615 passed、17 environment-gated skipped）／3163 assertions；Frontend 16 files／77 tests、lint、typecheck、production build。
+- MariaDB username migration／大小寫 unique／真實兩連線競態 2 tests／36 assertions。
+- Firefox 38 checks、Chrome 15 checks、config 2 checks，以及使用者 Desktop Chrome／Mobile Safari 33 項 manual smoke。
+
+完整證據見 `docs/v1.5-smoke-report.md` 與 `docs/v1.5-handoff.md`。尚未建立 v1.5 annotated tag；只有使用者明確授權後才可建立。
+
+v1.5 不做自助註冊、Email reset／驗證、MFA、SSO、密碼歷史、Session／裝置管理、Database settings、線上設定頁、多公司品牌或 Theme server-side 個人設定。
+
+---
+
+## 9. 給下一位 AI / 工程師的注意事項
 
 1. 後端 Resource 遮蔽是正式安全邊界，不能只靠前端隱藏。
 2. `canViewFinancials()` 不等於 sales 可看的銷售金額；成交價、開價、底價走 sales pricing 權限。
@@ -445,3 +478,7 @@ v1.4 已完成第 0～14 部分：UX Design System／共用元件盤點、Vehicl
 8. v1.3 只依 `企劃書_v1.3.md`／`PLAN_v1.3.md` 實作，不得把完整 HR、官網或正式會計混入。
 9. 薪資計算必須由後端純計算服務產生，前端只顯示結果，不可把正式公式放在 React。
 10. 薪資資料初版只開放 admin，manager／sales 必須在 API、路由與 UI 全部 fail-closed。
+11. username／Email 是同一帳號的 alias，不得拆成兩組 account limiter 或洩漏識別是否存在。
+12. `must_change_password` 是後端安全狀態；新增 authenticated route 必須預設受 password gate 保護，不能只補前端 redirect。
+13. Self account endpoint 只能修改 name、username 與 password；Email、角色、啟用狀態及員工欄位仍由 admin 專用流程管理。
+14. 系統識別只集中在 `frontend/src/config/app.ts`，不得把 v1.5 擴張成 Settings schema／API／頁面。

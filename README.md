@@ -1,10 +1,12 @@
-# 中古車行內部營運系統（1.0 + v1.1 + v1.2 + v1.3 + v1.4）
+# 中古車行內部營運系統（1.0 + v1.1 + v1.2 + v1.3 + v1.4 + v1.5）
 
-小型中古車行內部使用的前後端分離營運管理系統。v1.1 完成角色、敏感資料遮蔽、收支審核與客戶流程；v1.2 完成車輛照片與官網公開唯讀 API；v1.3 完成薪資結算與發薪；v1.4 完成 Dashboard 資訊架構、Vehicle Card Grid、URL Filter、Mobile Drawer、RWD 與 UX Design System。完整穩定狀態見 `docs/current-state.md`、`docs/v1.4-smoke-report.md` 與 `docs/v1.4-handoff.md`。
+小型中古車行內部使用的前後端分離營運管理系統。v1.1 完成角色、敏感資料遮蔽、收支審核與客戶流程；v1.2 完成車輛照片與官網公開唯讀 API；v1.3 完成薪資結算與發薪；v1.4 完成 Dashboard 資訊架構、Vehicle Card Grid、URL Filter、Mobile Drawer、RWD 與 UX Design System；v1.5 完成 username／Email 雙登入、首次登入強制改密碼、我的帳號與前端系統識別集中化。完整穩定狀態見 `docs/current-state.md`、`docs/v1.5-smoke-report.md` 與 `docs/v1.5-handoff.md`。
 
 v1.3 薪資結算的功能實作、自動測試、真實 MariaDB 並發／時區測試、前端 lint／typecheck／production build、RWD／dark mode 驗證與使用者 browser manual smoke 已完成。範圍包含 admin-only 員工薪資設定、版本化獎金方案、正式收／賣車歸屬、approved-only 整月跨級獎金、異常與非阻擋提示、月份草稿／重算／確認，以及具備 transaction、idempotency 與 paid 歷史保護的整批發薪。當月只能建立與重算草稿，必須等月份結束後才能確認，避免中途鎖定後漏掉後續成交。2026-07-18 納入 Customer hotfix 後的完整回歸為 485 passed、14 environment-gated skipped、2293 assertions；所有受保護的 MariaDB 10.11.18 並發／時區測試於專用 schema 共 14 tests／176 assertions 全數通過。完整規格與驗收證據見 `企劃書_v1.3.md`、`PLAN_v1.3.md`、`PLAN_customer_workflow_hotfix.md`、`docs/current-state.md`、`docs/customer-workflow-hotfix.md`、`docs/v1.3-smoke-report.md`、`docs/v1.3-handoff.md`；已以 `v1.3-smoke-passed` tag 封版。
 
 v1.4 資訊架構與 UI／UX 改版第 0～14 部分已完成。Dashboard、Vehicle Card Grid、URL Filter、Mobile Drawer、RWD、light／dark mode 與 Safe Area 均通過工程驗證及 Browser Manual Smoke。最終 backend regression 為 519 tests（504 passed、15 environment-gated skipped）／2516 assertions；第 10 部分另於可拋棄 MariaDB 10.11 schema 完成 3 個時區邊界測試／35 assertions。Frontend 14 tests、lint、typecheck 與 production build 通過；Firefox 獨立環境完成三角色、Action／KPI 導流、Filter、320／375／390／768／Desktop 與鍵盤操作，使用者亦以真實手機確認中文輸入法及 iPhone Safari Sidebar、Safe Area、light／dark mode。封板前 follow-up 已修正 CustomerSelect 空白搜尋後編輯卡住狀態，以及 MoneyEntry 載入期間短暫顯示過期分頁資訊；runtime 與 follow-up 基準為 `a10dd0c`，完成文件已對齊。完整證據與部署邊界見 `docs/v1.4-smoke-report.md` 與 `docs/v1.4-handoff.md`；已以 `v1.4-smoke-passed` tag 封板，tag 指向 `d4ea978`。
+
+v1.5 帳號自助管理與系統識別集中化第 0～16 部分已完成。管理員建立員工或重設密碼後，員工必須以預設密碼登入並先完成強制改密碼；一般營運 API 由後端 fail-closed gate 阻擋，不能只靠前端導頁。使用者可在「我的帳號」修改顯示名稱、username 與密碼，但不能自行修改 Email、角色或啟用狀態。登入接受 username 或 Email，兩個 alias 共用同一實際帳號的 limiter。系統名稱集中在 `frontend/src/config/app.ts`，沒有新增線上 Settings 模組。完整自動回歸、Firefox／Desktop Chrome 工程預驗證及使用者 Desktop Chrome／Mobile Safari manual smoke 均已通過；證據見 `docs/v1.5-smoke-report.md` 與 `docs/v1.5-handoff.md`。依專案規則，尚未在未獲使用者明確授權時建立 v1.5 annotated tag。
 
 ### v1.3 薪資公式
 
@@ -114,6 +116,15 @@ php artisan migrate:fresh --seed
 
 `AdminUserSeeder` 只建立 `admin` 帳號；若要手動驗證 `manager`／`sales` 的權限遮蔽與收支審核流程，請以此管理員帳號登入後，於使用者管理頁另外新增 `manager`／`sales` 測試帳號。
 
+登入欄位接受 Email 或已設定的 username，兩者使用同一組密碼。`AdminUserSeeder` 建立的既有開發管理員不會被強制進入首次改密碼流程；由管理員在使用者管理頁新建的員工則固定為：
+
+```text
+username = 尚未設定
+must_change_password = true
+```
+
+新員工先以 Email 與預設密碼登入，完成強制改密碼後即可進入 Dashboard，再到 Header 的「我的帳號」設定 username。管理員重設員工密碼時也會重新啟用相同強制流程，員工既有 stateful Session 會在各自下一次 API 操作失效。
+
 ## 測試方式
 
 後端自動化測試（PHPUnit，涵蓋登入／登出、車輛、車輛流程、收支、資金帳戶、使用者、列印、車輛照片與公開 API 等模組）：
@@ -133,7 +144,7 @@ npm run typecheck
 npm run build
 ```
 
-手動驗證（v1.4 最新完整結果見 `docs/v1.4-smoke-report.md`；重新部署或重大修改後依下列項目複查）：
+手動驗證（v1.5 最新完整結果見 `docs/v1.5-smoke-report.md`；重新部署或重大修改後依下列項目複查）：
 
 1. `php artisan serve` 啟動後端、`npm run dev` 啟動前端。
 2. 用預設管理員帳號登入，確認未登入無法進入後台頁面。
@@ -158,6 +169,10 @@ npm run build
 20. （v1.4）以 admin／manager／sales 檢查 Dashboard 四區塊、角色差異與 KPI／Action 導流，確認 sales 原始 JSON 不含財務資料。
 21. （v1.4）確認 Vehicle Card Grid 在 320／375／390px 為 1 欄、768px 為 2 欄，`sold`／`cancelled` 預設隱藏但可由 Filter 顯示；URL、reload、上一頁／下一頁可還原 Filter。
 22. （v1.4）在 light／dark mode 操作 Mobile Filter Drawer 與 Sidebar，確認 focus／Escape／捲動鎖定、中文輸入法組字及 iPhone Safe Area 正常。
+23. （v1.5）由 admin 建立員工，確認顯示 username 尚未設定與需修改密碼；員工以 Email／預設密碼登入後只能進強制改密碼頁，直接進 Dashboard 或一般 API 仍被阻擋。
+24. （v1.5）完成改密碼後，於 Header 進入「我的帳號」修改顯示名稱、設定 username 及修改密碼；確認 Email／角色唯讀，重複 username 與密碼欄位錯誤顯示在對應欄位。
+25. （v1.5）分別以 username、Email 與不同大小寫登入，確認皆對應同一帳號且錯誤登入使用通用訊息；admin 重設密碼後，確認員工每個既有 stateful Session 在各自下一次操作回 401，重新登入後再次進強制改密碼頁。
+26. （v1.5）修改 `frontend/src/config/app.ts` 的辨識文字並重新啟動／build，確認 Login、Sidebar 與 Browser title 同步；同時複查 Theme Toggle、三角色主要流程與 Mobile 基本操作。
 
 ## 常見問題
 

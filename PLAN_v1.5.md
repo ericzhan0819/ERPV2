@@ -788,30 +788,30 @@ flag=true 時阻擋：
 
 ### 16.1 文件
 
-- [ ] `README.md` 更新登入方式與首次登入流程
-- [ ] `backend/API.md` 更新 Auth、Self Account 與 UserResource
-- [ ] `docs/current-state.md` 更新 v1.5 現況
-- [ ] `AGENTS.md` 更新版本狀態與 v1.5 邊界
-- [ ] `CLAUDE.md` 更新 reviewer 必讀與 v1.5 邊界
-- [ ] 補 v1.5 smoke report
-- [ ] 補 v1.5 handoff
-- [ ] 不修改 v1.1～v1.4 PLAN 完成內容
+- [x] `README.md` 更新登入方式與首次登入流程
+- [x] `backend/API.md` 更新 Auth、Self Account 與 UserResource
+- [x] `docs/current-state.md` 更新 v1.5 現況
+- [x] `AGENTS.md` 更新版本狀態與 v1.5 邊界
+- [x] `CLAUDE.md` 更新 reviewer 必讀與 v1.5 邊界
+- [x] 補 v1.5 smoke report
+- [x] 補 v1.5 handoff
+- [x] 不修改 v1.1～v1.4 PLAN 完成內容
 
 ### 16.2 Review
 
-- [ ] 檢查所有密碼欄位未進 Audit／Resource／log
-- [ ] 檢查 username／Email alias limiter
-- [ ] 檢查 middleware fail-closed
-- [ ] 檢查 self endpoint 不可改 Email／role／active
-- [ ] 檢查 App config 沒有擴張成 Settings 模組
-- [ ] 檢查無關 schema／dependency／UI 重構
+- [x] 檢查所有密碼欄位未進 Audit／Resource／log
+- [x] 檢查 username／Email alias limiter
+- [x] 檢查 middleware fail-closed
+- [x] 檢查 self endpoint 不可改 Email／role／active
+- [x] 檢查 App config 沒有擴張成 Settings 模組
+- [x] 檢查無關 schema／dependency／UI 重構
 
 ### 16.3 Git
 
-- [ ] 每個完整階段有可驗證 commit
-- [ ] 不自動 push
-- [ ] 使用者完成 smoke 後再準備 tag
-- [ ] 只有使用者明確授權才建立 annotated tag
+- [x] 每個完整階段有可驗證 commit
+- [x] 不自動 push
+- [x] 使用者完成 smoke 後再準備 tag
+- [x] 只有使用者明確授權才建立 annotated tag
 
 **建議規劃文件 Commit Message：**
 
@@ -837,22 +837,22 @@ docs：完成 v1.5 smoke 與交接
 
 只有以下全部成立，才能將本 PLAN 標記完成：
 
-- [ ] `username`／`must_change_password` migration 安全完成
-- [ ] 既有 User 未被錯誤強制改密碼
-- [ ] Admin 新建與重設密碼均設 force flag
-- [ ] Email／username 雙登入完成
-- [ ] Alias-safe Rate Limiter 完成
-- [ ] 後端 Password Change Required Gate 完成
-- [ ] 首次登入無法略過密碼修改
-- [ ] 三角色皆可修改自己的 name／username／password
-- [ ] Self API 無法修改 Email／role／active 等欄位
-- [ ] Password 不存在於 API、Audit 或 log
-- [ ] Admin User List 顯示 username 與待改密碼狀態
-- [ ] Header 我的帳號入口完成
-- [ ] App config 取代系統名稱硬編碼
-- [ ] Theme Toggle 無回歸
-- [ ] Backend full suite 通過
-- [ ] Frontend test／lint／typecheck／build 通過
-- [ ] Browser manual smoke 通過
-- [ ] 文件與 handoff 完成
+- [x] `username`／`must_change_password` migration 安全完成
+- [x] 既有 User 未被錯誤強制改密碼
+- [x] Admin 新建與重設密碼均設 force flag
+- [x] Email／username 雙登入完成
+- [x] Alias-safe Rate Limiter 完成
+- [x] 後端 Password Change Required Gate 完成
+- [x] 首次登入無法略過密碼修改
+- [x] 三角色皆可修改自己的 name／username／password
+- [x] Self API 無法修改 Email／role／active 等欄位
+- [x] Password 不存在於 API、Audit 或 log
+- [x] Admin User List 顯示 username 與待改密碼狀態
+- [x] Header 我的帳號入口完成
+- [x] App config 取代系統名稱硬編碼
+- [x] Theme Toggle 無回歸
+- [x] Backend full suite 通過
+- [x] Frontend test／lint／typecheck／build 通過
+- [x] Browser manual smoke 通過
+- [x] 文件與 handoff 完成
 - [ ] 使用者明確授權後完成 annotated tag
