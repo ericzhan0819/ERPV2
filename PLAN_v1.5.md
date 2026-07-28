@@ -675,35 +675,35 @@ flag=true 時阻擋：
 
 ### 14.1 Auth
 
-- [ ] Login label／payload
-- [ ] Email login input
-- [ ] Username login input
-- [ ] flag redirect
-- [ ] 409 redirect
-- [ ] logout regression
+- [x] Login label／payload
+- [x] Email login input
+- [x] Username login input
+- [x] flag redirect
+- [x] 409 redirect
+- [x] logout regression
 
 ### 14.2 Account
 
-- [ ] Load current user
-- [ ] Name update
-- [ ] Username add／update／clear
-- [ ] Email／role readonly
-- [ ] Password success／errors
-- [ ] Context／Header update
+- [x] Load current user
+- [x] Name update
+- [x] Username add／update／clear
+- [x] Email／role readonly
+- [x] Password success／errors
+- [x] Context／Header update
 
 ### 14.3 Config
 
-- [ ] Login title from config
-- [ ] Sidebar title from config
-- [ ] document title from config
+- [x] Login title from config
+- [x] Sidebar title from config
+- [x] document title from config
 
 ### 14.4 Quality
 
-- [ ] `npm test`
-- [ ] `npm run lint`
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] 無新增未使用 dependency
+- [x] `npm test`
+- [x] `npm run lint`
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] 無新增未使用 dependency
 
 **Migration：否。**
 

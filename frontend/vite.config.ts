@@ -1,3 +1,5 @@
+/// <reference types="vitest/config" />
+
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { appConfig } from './src/config/app.ts'
@@ -35,5 +37,8 @@ export default defineConfig({
   ],
   server: {
     host: true,
+  },
+  test: {
+    setupFiles: ['./src/test/setup.ts'],
   },
 })

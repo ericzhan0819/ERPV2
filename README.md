@@ -129,7 +129,7 @@ php artisan test
 cd frontend
 npm test
 npm run lint
-npx tsc -b --noEmit
+npm run typecheck
 npm run build
 ```
 
