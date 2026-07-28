@@ -772,6 +772,18 @@ flag=true 時阻擋：
 
 **Migration：否。**
 
+### 工程端 Browser 預驗證（2026-07-28）
+
+- [x] Firefox 152 headless 可拋棄環境完成 38 項帳號工作流、三角色、雙 Session、Config、Theme 與 390px RWD 檢查
+- [x] 官方 Chrome for Testing 151.0.7922.47 完成 15 項 Desktop Chrome 基本操作檢查
+- [x] 獨立 SQLite、Laravel／Vite ports 與瀏覽器 profiles 均已清理，未接觸既有開發資料
+- [ ] 使用者依本部分完成 Desktop Chrome 人工操作並確認結果
+- [ ] 使用者以真實 iPhone Safari 確認 Password Manager、虛擬鍵盤、Safe Area、Theme 與基本操作
+
+工程端預驗證結果記錄於 `docs/v1.5-phase15-smoke-report.md`。上述真實瀏覽器檢查可證明
+正式 API、Router、Session 與畫面整合，但不取代使用者人工操作；因此 15.1～15.6 的正式
+Browser Manual Smoke 項目仍維持未勾選，待使用者實機確認後再完成。
+
 ---
 
 ## 16. 文件同步與交接
