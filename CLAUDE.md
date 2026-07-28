@@ -14,7 +14,7 @@ v1.1：實務工作流補強已完成 smoke，並以 `v1.1-smoke-passed` tag 封
 v1.2：車輛圖片與官網公開車輛資料前置階段已完成 smoke，並以 `v1.2-smoke-passed` tag 封版。
 v1.3：薪資結算工程實作、自動回歸、RWD／dark mode 驗證與使用者 browser manual smoke 已通過，並以 `v1.3-smoke-passed` tag 封板。
 v1.4：資訊架構與 UI／UX 改版、自動回歸、三角色 browser manual smoke 與真實 iPhone Safari 複驗已完成，並以 `v1.4-smoke-passed` tag 封板；tag 指向 `d4ea978`，runtime 與封板前修正基準為 `a10dd0c`。
-v1.5：帳號自助管理與系統識別集中化工程實作、自動回歸、Desktop Chrome／Mobile Safari browser manual smoke 與文件交接已完成；尚未在未獲使用者明確授權時建立 annotated tag。
+v1.5：帳號自助管理與系統識別集中化工程實作、自動回歸、Desktop Chrome／Mobile Safari browser manual smoke、封板審查與文件交接已完成，並以 `v1.5-smoke-passed` annotated tag 封板；tag 尚未推送至 origin。
 ```
 
 核心目標不是擴張成完整 ERP，而是讓中古車行日常營運能穩定落地：車輛進來、建檔、整備、上架、保留、收款、成交、列印收支明細與查看營運摘要。

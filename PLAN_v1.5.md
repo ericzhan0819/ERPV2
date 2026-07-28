@@ -865,4 +865,6 @@ docs：完成 v1.5 smoke 與交接
 - [x] Frontend test／lint／typecheck／build 通過
 - [x] Browser manual smoke 通過
 - [x] 文件與 handoff 完成
-- [ ] 使用者明確授權後完成 annotated tag
+- [x] 使用者明確授權後完成 annotated tag
+
+**封板註記（2026-07-29）：** 使用者明確要求確認後進行封板。本輪重新審查 v1.5 核心實作、manual smoke 後三項 runtime follow-up、文件與 Git 狀態，並重跑 Backend full suite（616 passed／17 skipped／3170 assertions）及 Frontend test／lint／typecheck／build。三項 follow-up 均有直接回歸測試，封板審查判定不需再重跑額外人工複驗；已建立 `v1.5-smoke-passed` annotated tag，尚未推送至 origin。

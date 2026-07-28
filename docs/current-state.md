@@ -4,8 +4,8 @@
 專案：ERPV2 / 中古車行內部營運系統
 目前 v1.5 browser smoke 基準：`a4bf025 test：完成 v1.5 browser manual smoke`
 目前 v1.5 runtime 與 smoke 後修正基準：`3f86871 fix：修正 v1.5 登入限流與前端身分競態`
-目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`、`v1.3-smoke-passed`、`v1.4-smoke-passed`
-狀態：v1.5「帳號自助管理與系統識別集中化」第 0～16 部分、完整自動回歸、Firefox／Desktop Chrome 工程預驗證、使用者 Desktop Chrome／Mobile Safari Browser Manual Smoke、文件及交接均已完成。使用者 manual smoke 執行於 `a4bf025`；其後 `3f86871` 修改登入限流、強制改密碼導流的前端競態保護與我的帳號 stale-context 回饋，完整自動回歸已通過，但尚未記錄使用者對三項小範圍人工複驗的決定。依專案規則，尚未在未獲使用者明確授權時建立 v1.5 annotated tag。
+目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`、`v1.3-smoke-passed`、`v1.4-smoke-passed`、`v1.5-smoke-passed`
+狀態：v1.5「帳號自助管理與系統識別集中化」第 0～16 部分、完整自動回歸、Firefox／Desktop Chrome 工程預驗證、使用者 Desktop Chrome／Mobile Safari Browser Manual Smoke、封板審查、文件及交接均已完成。使用者 manual smoke 執行於 `a4bf025`；其後 `3f86871` 修改登入限流、強制改密碼導流的前端競態保護與我的帳號 stale-context 回饋，三項均有直接回歸測試。本輪封板審查再次重跑完整 Backend／Frontend 驗證並判定不需額外人工複驗；使用者已明確授權，以 `v1.5-smoke-passed` annotated tag 封板，tag 尚未推送至 origin。
 
 ---
 
@@ -463,9 +463,8 @@ v1.5 已完成 `企劃書_v1.5.md` 與 `PLAN_v1.5.md` 的工程範圍：
 - Firefox 38 checks、Chrome 15 checks、config 2 checks，以及使用者於 `a4bf025` 完成的 Desktop Chrome／Mobile Safari 33 項 manual smoke。
 - Claude review follow-up 修正停用帳號 limiter 清除、過期 409 auth generation 與個人資料 committed-stale 回饋；三項均有直接回歸測試。
 
-完整證據見 `docs/v1.5-smoke-report.md` 與 `docs/v1.5-handoff.md`。`3f86871` 是目前 runtime
-基準；tag 前由使用者決定是否針對登入、強制改密碼導向與我的帳號儲存做小範圍人工複驗。
-尚未建立 v1.5 annotated tag；只有使用者明確授權後才可建立。
+完整證據見 `docs/v1.5-smoke-report.md` 與 `docs/v1.5-handoff.md`。`3f86871` 是 v1.5 runtime
+基準；本輪封板審查已確認三項 smoke 後修正的直接回歸覆蓋並重跑完整自動驗證，判定不需額外人工複驗。使用者已明確授權建立 `v1.5-smoke-passed` annotated tag；tag 已建立於本地，尚未推送至 origin。
 
 v1.5 不做自助註冊、Email reset／驗證、MFA、SSO、密碼歷史、Session／裝置管理、Database settings、線上設定頁、多公司品牌或 Theme server-side 個人設定。
 
