@@ -721,54 +721,54 @@ flag=true 時阻擋：
 
 ### 15.1 Admin 建立帳號
 
-- [ ] Admin 建立 sales 帳號：名稱、Email、預設密碼、角色
-- [ ] User list 顯示 username 尚未設定
-- [ ] User list 顯示待修改密碼
-- [ ] 建立提示正確
+- [x] Admin 建立 sales 帳號：名稱、Email、預設密碼、角色
+- [x] User list 顯示 username 尚未設定
+- [x] User list 顯示待修改密碼
+- [x] 建立提示正確
 
 ### 15.2 首次登入
 
-- [ ] Email + 預設密碼登入成功
-- [ ] 立即導向強制改密碼
-- [ ] 直接輸入 `/dashboard` 仍回強制頁
-- [ ] 一般 API 被後端阻擋
-- [ ] Theme Toggle 可用
-- [ ] Logout 可用
-- [ ] 錯誤目前密碼不可通過
-- [ ] 正確修改後進 Dashboard
+- [x] Email + 預設密碼登入成功
+- [x] 立即導向強制改密碼
+- [x] 直接輸入 `/dashboard` 仍回強制頁
+- [x] 一般 API 被後端阻擋
+- [x] Theme Toggle 可用
+- [x] Logout 可用
+- [x] 錯誤目前密碼不可通過
+- [x] 正確修改後進 Dashboard
 
 ### 15.3 我的帳號
 
-- [ ] Header 可進我的帳號
-- [ ] 修改名稱後 Header 即時更新
-- [ ] 設定 username
-- [ ] 重複 username 顯示錯誤
-- [ ] Email／角色不可編輯
-- [ ] 修改密碼必須目前密碼
-- [ ] confirmation 不符顯示錯誤
+- [x] Header 可進我的帳號
+- [x] 修改名稱後 Header 即時更新
+- [x] 設定 username
+- [x] 重複 username 顯示錯誤
+- [x] Email／角色不可編輯
+- [x] 修改密碼必須目前密碼
+- [x] confirmation 不符顯示錯誤
 
 ### 15.4 雙登入
 
-- [ ] username + 新密碼登入
-- [ ] Email + 同一新密碼登入
-- [ ] username 大小寫登入行為符合規格
-- [ ] 錯誤密碼訊息不洩漏識別方式
+- [x] username + 新密碼登入
+- [x] Email + 同一新密碼登入
+- [x] username 大小寫登入行為符合規格
+- [x] 錯誤密碼訊息不洩漏識別方式
 
 ### 15.5 Admin Reset
 
-- [ ] Admin 重設員工密碼
-- [ ] User list 顯示待修改密碼
-- [ ] 員工每個既有 stateful Session 在各自下次操作回 401 並登出
-- [ ] 員工以新預設密碼重新登入後進強制修改密碼頁
-- [ ] 使用新預設密碼完成強制修改
+- [x] Admin 重設員工密碼
+- [x] User list 顯示待修改密碼
+- [x] 員工每個既有 stateful Session 在各自下次操作回 401 並登出
+- [x] 員工以新預設密碼重新登入後進強制修改密碼頁
+- [x] 使用新預設密碼完成強制修改
 
 ### 15.6 Config／Regression
 
-- [ ] 修改 app config 後 Login／Sidebar／Browser title 同步
-- [ ] Theme Toggle 無回歸
-- [ ] Admin／Manager／Sales 既有主要流程 smoke
-- [ ] Mobile Safari 基本操作
-- [ ] Desktop Chrome 基本操作
+- [x] 修改 app config 後 Login／Sidebar／Browser title 同步
+- [x] Theme Toggle 無回歸
+- [x] Admin／Manager／Sales 既有主要流程 smoke
+- [x] Mobile Safari 基本操作
+- [x] Desktop Chrome 基本操作
 
 **Migration：否。**
 
@@ -779,9 +779,8 @@ flag=true 時阻擋：
 - [x] 獨立 SQLite、Laravel／Vite ports 與瀏覽器 profiles 均已清理，未接觸既有開發資料
 
 工程端預驗證結果記錄於 `docs/v1.5-phase15-smoke-report.md`。上述真實瀏覽器檢查可證明
-正式 API、Router、Session 與畫面整合，但不取代使用者人工操作；因此 15.1～15.6 的正式
-Browser Manual Smoke 項目仍維持未勾選，並作為本部分唯一完成閘門，待使用者逐項確認後
-再完成。
+正式 API、Router、Session 與畫面整合，但不取代使用者人工操作。使用者已於 2026-07-29
+依 15.1～15.6 完成 Desktop Chrome 與 Mobile Safari 人工 smoke，33 個正式項目全數通過。
 
 ---
 
