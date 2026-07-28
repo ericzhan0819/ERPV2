@@ -136,11 +136,14 @@ RUN_MYSQL_CONCURRENCY_TESTS=1 \
 ```bash
 docker exec erpv2-db mariadb -uroot -proot \
   -e "DROP DATABASE erpv2_v15_test;"
+docker exec erpv2-db mariadb -uroot -proot \
+  -e "REVOKE ALL PRIVILEGES ON erpv2_v15_test.* FROM 'erpv2'@'%'; FLUSH PRIVILEGES;"
 docker exec erpv2-db mariadb -N -uroot -proot \
-  -e "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = 'erpv2_v15_test';"
+  -e "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = 'erpv2_v15_test'; SELECT COUNT(*) FROM mysql.db WHERE User = 'erpv2' AND Db = 'erpv2_v15_test';"
 ```
 
-最後一個查詢必須輸出 `0`。
+最後兩個查詢必須各自輸出 `0`，分別證明 schema 與 database-level grant 都已清除。
+`DROP DATABASE` 不會自動移除 `mysql.db` 的 grant，因此不得省略 `REVOKE`。
 
 ## 5. 清理
 
