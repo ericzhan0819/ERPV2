@@ -453,9 +453,13 @@ try:
     }.items():
         manager.get(path)
         manager.wait_text(marker)
+    manager_api_denied = manager.fetch("/api/users")
     manager.get("/users")
     manager.wait_url("/dashboard")
-    checks.check("Manager 主要流程可用且管理員路由仍被阻擋")
+    checks.check(
+        "Manager 主要流程可用、前端阻擋管理路由且後端 API 回 403",
+        manager_api_denied.get("status") == 403,
+    )
 
     for path, marker in {
         "/dashboard": "營運總覽",
@@ -466,9 +470,13 @@ try:
     }.items():
         sales_a.get(path)
         sales_a.wait_text(marker)
+    sales_api_denied = sales_a.fetch("/api/cash-accounts")
     sales_a.get("/cash-accounts")
     sales_a.wait_url("/dashboard")
-    checks.check("Sales 主要流程可用且敏感路由仍被阻擋")
+    checks.check(
+        "Sales 主要流程可用、前端阻擋敏感路由且後端 API 回 403",
+        sales_api_denied.get("status") == 403,
+    )
 
     mobile = browser(390, 844)
     login(mobile, "smoke.sales", "FinalA123!")

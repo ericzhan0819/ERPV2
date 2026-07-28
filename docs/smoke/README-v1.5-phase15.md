@@ -95,7 +95,54 @@ git diff -- frontend/src/config/app.ts
 最後一個指令必須沒有輸出。若 config 原本已有使用者修改，不得套用 patch，應另開乾淨
 worktree 執行。
 
-## 4. 清理
+## 4. MariaDB username gated integration
+
+此測試會對指定 schema 執行 `migrate:fresh`。只能使用明確可拋棄且名稱符合 test guard 的
+schema，絕不可把 `DB_DATABASE` 或 allowlist 指向既有 `erpv2`。
+
+先確認專用 schema 不存在；下列查詢必須輸出 `0`，否則停止並查明來源：
+
+```bash
+docker exec erpv2-db mariadb -N -uroot -proot \
+  -e "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = 'erpv2_v15_test';"
+```
+
+建立並只授權專用 schema：
+
+```bash
+docker exec erpv2-db mariadb -uroot -proot \
+  -e "CREATE DATABASE erpv2_v15_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; GRANT ALL PRIVILEGES ON erpv2_v15_test.* TO 'erpv2'@'%'; FLUSH PRIVILEGES;"
+```
+
+執行 v1.5 專用的兩項 MySQL／MariaDB integration：
+
+```bash
+cd backend
+APP_ENV=testing \
+DB_CONNECTION=mysql \
+DB_HOST=127.0.0.1 \
+DB_PORT=3307 \
+DB_DATABASE=erpv2_v15_test \
+DB_USERNAME=erpv2 \
+DB_PASSWORD=erpv2 \
+MYSQL_CONCURRENCY_TEST_CONNECTION=mysql \
+MYSQL_CONCURRENCY_TEST_DATABASE=erpv2_v15_test \
+RUN_MYSQL_CONCURRENCY_TESTS=1 \
+./vendor/bin/phpunit tests/Feature/UserAccountMysqlIntegrationTest.php
+```
+
+無論測試通過或失敗，都要明確刪除這個專用 schema：
+
+```bash
+docker exec erpv2-db mariadb -uroot -proot \
+  -e "DROP DATABASE erpv2_v15_test;"
+docker exec erpv2-db mariadb -N -uroot -proot \
+  -e "SELECT COUNT(*) FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = 'erpv2_v15_test';"
+```
+
+最後一個查詢必須輸出 `0`。
+
+## 5. 清理
 
 停止 Laravel／Vite 後，刪除本輪明確建立的 `/tmp` SQLite、下載檔與 Chrome 解壓目錄。
 不得使用未解析變數、glob 或 broad recursive path 作為清理目標。
