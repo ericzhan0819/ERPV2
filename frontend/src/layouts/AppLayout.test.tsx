@@ -5,10 +5,13 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as authApi from '../api/auth'
+import { ensureCsrfCookie } from '../api/client'
 import { notifyPasswordChangeRequired } from '../auth/passwordChangeRequired'
+import { LOGOUT_STATE_KEY } from '../auth/sessionState'
 import { appConfig } from '../config/app'
 import { AuthProvider } from '../hooks/useAuth'
 import { ThemeProvider } from '../hooks/useTheme'
+import { PasswordChangeRequired } from '../pages/PasswordChangeRequired'
 import { ProtectedRoute } from '../routes/ProtectedRoute'
 import type { User } from '../types/user'
 import { AppLayout } from './AppLayout'
@@ -19,6 +22,10 @@ vi.mock('../api/auth', () => ({
   me: vi.fn(),
   updateCurrentUserProfile: vi.fn(),
   updateCurrentUserPassword: vi.fn(),
+}))
+
+vi.mock('../api/client', () => ({
+  ensureCsrfCookie: vi.fn(),
 }))
 
 const user: User = {
@@ -43,7 +50,14 @@ function renderLayout() {
         <MemoryRouter initialEntries={['/dashboard']}>
           <Routes>
             <Route path="/login" element={<p>登入測試頁</p>} />
-            <Route path="/change-password" element={<p>強制修改密碼測試頁</p>} />
+            <Route
+              path="/change-password"
+              element={
+                <ProtectedRoute passwordChangeOnly>
+                  <PasswordChangeRequired />
+                </ProtectedRoute>
+              }
+            />
             <Route
               element={
                 <ProtectedRoute>
@@ -89,7 +103,9 @@ describe('AppLayout auth and presentation regression', () => {
 
     notifyPasswordChangeRequired()
 
-    expect(await screen.findByText('強制修改密碼測試頁')).toBeTruthy()
+    expect(
+      await screen.findByRole('heading', { name: '請先修改密碼' }),
+    ).toBeTruthy()
   })
 
   it('logs out through the auth context and returns to login', async () => {
@@ -101,6 +117,23 @@ describe('AppLayout auth and presentation regression', () => {
 
     expect(authApi.logout).toHaveBeenCalledOnce()
     expect(await screen.findByText('登入測試頁')).toBeTruthy()
-    expect(localStorage.getItem('erpv2:logout-state')).toBe('completed')
+    expect(localStorage.getItem(LOGOUT_STATE_KEY)).toBe('completed')
+  })
+
+  it('blocks the app when logout and its CSRF retry both fail', async () => {
+    vi.mocked(authApi.logout).mockRejectedValue(new Error('network'))
+    vi.mocked(ensureCsrfCookie).mockResolvedValue()
+    const interaction = userEvent.setup()
+
+    renderLayout()
+    await interaction.click(await screen.findByRole('button', { name: '登出' }))
+
+    expect(authApi.logout).toHaveBeenCalledTimes(2)
+    expect(ensureCsrfCookie).toHaveBeenCalledOnce()
+    expect(
+      await screen.findByText(/登出尚未完成。為保護資料，後台畫面已關閉/),
+    ).toBeTruthy()
+    expect(localStorage.getItem(LOGOUT_STATE_KEY)).toBe('failed')
+    expect(screen.queryByText('登入測試頁')).toBeNull()
   })
 })

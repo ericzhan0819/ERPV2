@@ -8,6 +8,9 @@ import * as authApi from '../api/auth'
 import { PASSWORD_CHANGE_REQUIRED_PATH } from '../auth/passwordChangeRequired'
 import { appConfig } from '../config/app'
 import { AuthProvider } from '../hooks/useAuth'
+import { ThemeProvider } from '../hooks/useTheme'
+import { PasswordChangeRequired } from './PasswordChangeRequired'
+import { ProtectedRoute } from '../routes/ProtectedRoute'
 import type { User } from '../types/user'
 import { Login } from './Login'
 
@@ -36,18 +39,24 @@ const baseUser: User = {
 
 function renderLogin() {
   render(
-    <AuthProvider>
-      <MemoryRouter initialEntries={['/login']}>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/dashboard" element={<p>Dashboard 測試頁</p>} />
-          <Route
-            path={PASSWORD_CHANGE_REQUIRED_PATH}
-            element={<p>強制修改密碼測試頁</p>}
-          />
-        </Routes>
-      </MemoryRouter>
-    </AuthProvider>,
+    <ThemeProvider>
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/login']}>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/dashboard" element={<p>Dashboard 測試頁</p>} />
+            <Route
+              path={PASSWORD_CHANGE_REQUIRED_PATH}
+              element={
+                <ProtectedRoute passwordChangeOnly>
+                  <PasswordChangeRequired />
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>
+    </ThemeProvider>,
   )
 }
 
@@ -93,6 +102,8 @@ describe('Login', () => {
     await user.type(screen.getByLabelText(/密碼/), 'password')
     await user.click(screen.getByRole('button', { name: '登入' }))
 
-    expect(await screen.findByText('強制修改密碼測試頁')).toBeTruthy()
+    expect(
+      await screen.findByRole('heading', { name: '請先修改密碼' }),
+    ).toBeTruthy()
   })
 })
