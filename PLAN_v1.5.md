@@ -600,6 +600,14 @@ flag=true 時阻擋：
 
 **Migration：否。**
 
+### Adversarial Review Follow-up
+
+- [x] 登出兩次失敗固定進入 blocked 狀態並保留 failed marker
+- [x] Login flag 與 API 409 導向通過真實 passwordChangeOnly gate
+- [x] 首次 logout 失敗但 CSRF 重試成功時正常完成登出
+- [x] API client 測試採保留原模組的 partial mock
+- [x] Review 補強同步至 PLAN 與第 14 部分 handoff
+
 ---
 
 ## 13. Backend Automated Tests

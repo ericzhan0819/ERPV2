@@ -24,7 +24,8 @@ vi.mock('../api/auth', () => ({
   updateCurrentUserPassword: vi.fn(),
 }))
 
-vi.mock('../api/client', () => ({
+vi.mock('../api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/client')>()),
   ensureCsrfCookie: vi.fn(),
 }))
 
@@ -116,6 +117,22 @@ describe('AppLayout auth and presentation regression', () => {
     await interaction.click(await screen.findByRole('button', { name: '登出' }))
 
     expect(authApi.logout).toHaveBeenCalledOnce()
+    expect(await screen.findByText('登入測試頁')).toBeTruthy()
+    expect(localStorage.getItem(LOGOUT_STATE_KEY)).toBe('completed')
+  })
+
+  it('returns to login when the CSRF logout retry succeeds', async () => {
+    vi.mocked(authApi.logout)
+      .mockRejectedValueOnce(new Error('csrf'))
+      .mockResolvedValue()
+    vi.mocked(ensureCsrfCookie).mockResolvedValue()
+    const interaction = userEvent.setup()
+
+    renderLayout()
+    await interaction.click(await screen.findByRole('button', { name: '登出' }))
+
+    expect(authApi.logout).toHaveBeenCalledTimes(2)
+    expect(ensureCsrfCookie).toHaveBeenCalledOnce()
     expect(await screen.findByText('登入測試頁')).toBeTruthy()
     expect(localStorage.getItem(LOGOUT_STATE_KEY)).toBe('completed')
   })
