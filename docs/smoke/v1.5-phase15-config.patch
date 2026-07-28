@@ -1,0 +1,17 @@
+diff --git a/frontend/src/config/app.ts b/frontend/src/config/app.ts
+--- a/frontend/src/config/app.ts
++++ b/frontend/src/config/app.ts
+@@ -8,8 +8,8 @@ export interface AppConfig {
+ 
+ export const appConfig = {
+-  companyName: '中古車行',
+-  systemName: '中古車行內部營運系統',
+-  systemShortName: '中古車行系統',
+-  browserTitle: '中古車行內部營運系統',
+-  loginSubtitle: '請登入以繼續',
++  companyName: '第十五部分測試車行',
++  systemName: '第十五部分測試營運系統',
++  systemShortName: '第十五部分測試系統',
++  browserTitle: '第十五部分測試瀏覽器標題',
++  loginSubtitle: '第十五部分測試登入副標',
+ } satisfies AppConfig
