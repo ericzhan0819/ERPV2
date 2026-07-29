@@ -174,7 +174,9 @@ describe('Customer, audit and print presentation', () => {
     })
 
     expect(screen.getAllByText('查無相符客戶；填寫電話後將建立新客戶')).toHaveLength(2)
-    expect(screen.getByLabelText('買方電話 *').getAttribute('placeholder')).toBeNull()
+    const phone = screen.getByLabelText('買方電話 *')
+    expect(phone.getAttribute('placeholder')).toBeNull()
+    expect(phone.getAttribute('aria-describedby')).toBeNull()
   })
 
   it('distinguishes filtered customer no-result and keeps the clear action', async () => {
