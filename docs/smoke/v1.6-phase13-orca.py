@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import time
+from pathlib import Path
 from typing import Any
 
 from v15_webdriver_support import Browser, BrowserConfig, wait_until
@@ -131,3 +132,17 @@ try:
     time.sleep(3)
 finally:
     target.close()
+
+debug_log = os.environ.get("ORCA_DEBUG_LOG")
+if debug_log:
+    speech_output = Path(debug_log).read_text(encoding="utf-8", errors="replace")
+    speech_patterns = {
+        "login_speech_output_count": "SPEECH OUTPUT: '帳號或密碼錯誤",
+        "field_speech_output_count": "SPEECH OUTPUT: '請選擇分類",
+        "label_speech_output_count": "SPEECH OUTPUT: '帳戶名稱",
+    }
+    for name, pattern in speech_patterns.items():
+        count = speech_output.count(pattern)
+        print(f"{name}={count}", flush=True)
+        if count != 1:
+            raise AssertionError(f"{name} expected 1, got {count}")

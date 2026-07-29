@@ -109,13 +109,16 @@ function Field({
   required?: boolean
   readOnly?: boolean
 }) {
+  const inputId = useId()
+
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-fg-muted">
+      <label htmlFor={inputId} className="mb-1 block text-sm font-medium text-fg-muted">
         {label}
         {required && <span className="text-error"> *</span>}
       </label>
       <input
+        id={inputId}
         type={type}
         required={required}
         readOnly={readOnly}
@@ -136,13 +139,16 @@ function CashAccountField({
   value: string
   onChange: (value: string) => void
 }) {
+  const selectId = useId()
+
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-fg-muted">
+      <label htmlFor={selectId} className="mb-1 block text-sm font-medium text-fg-muted">
         收款帳戶
         <span className="text-error"> *</span>
       </label>
       <select
+        id={selectId}
         required
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -839,10 +845,11 @@ function ReserveModal({
         <Field label="訂金金額" value={deposit_amount} onChange={setDepositAmount} type="number" required />
         {!isSales && (
           <div>
-            <label className="mb-1 block text-sm font-medium text-fg-muted">
+            <label htmlFor="reserve-sales-agent" className="mb-1 block text-sm font-medium text-fg-muted">
               賣車人<span className="text-error"> *</span>
             </label>
             <select
+              id="reserve-sales-agent"
               required
               value={sales_agent_id}
               onChange={(event) => setSalesAgentId(event.target.value)}
@@ -855,8 +862,9 @@ function ReserveModal({
         )}
         <CashAccountField cashAccounts={cashAccounts} value={cash_account_id} onChange={setCashAccountId} />
         <div>
-          <label className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
+          <label htmlFor="reserve-description" className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
           <textarea
+            id="reserve-description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
@@ -910,8 +918,9 @@ function FinalPaymentModal({
         <Field label="尾款金額" value={amount} onChange={setAmount} type="number" required />
         <CashAccountField cashAccounts={cashAccounts} value={cash_account_id} onChange={setCashAccountId} />
         <div>
-          <label className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
+          <label htmlFor="final-payment-description" className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
           <textarea
+            id="final-payment-description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
@@ -984,10 +993,11 @@ function ExpenseModal({
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <FormAlert message={error} focusOnShow />
         <div>
-          <label className="mb-1 block text-sm font-medium text-fg-muted">
+          <label htmlFor="vehicle-expense-category" className="mb-1 block text-sm font-medium text-fg-muted">
             分類<span className="text-error"> *</span>
           </label>
           <select
+            id="vehicle-expense-category"
             required
             value={category}
             onChange={(e) => setCategory(e.target.value)}
@@ -1005,8 +1015,9 @@ function ExpenseModal({
         <Field label="支出日期（預設今天）" value={entry_date} onChange={setEntryDate} type="date" />
         <Field label="對象" value={counterparty_name} onChange={setCounterpartyName} />
         <div>
-          <label className="mb-1 block text-sm font-medium text-fg-muted">說明</label>
+          <label htmlFor="vehicle-expense-description" className="mb-1 block text-sm font-medium text-fg-muted">說明</label>
           <textarea
+            id="vehicle-expense-description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}

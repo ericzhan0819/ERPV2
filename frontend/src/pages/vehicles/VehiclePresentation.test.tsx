@@ -315,6 +315,46 @@ describe('Vehicle presentation', () => {
     expect(descriptionLabel?.nextElementSibling?.tagName).toBe('TEXTAREA')
   })
 
+  it('closes an open customer suggestion list before closing the reserve dialog', async () => {
+    vi.mocked(vehiclesApi.getVehicle).mockResolvedValue({
+      ...detail,
+      vehicle: {
+        ...vehicle,
+        status: 'listed',
+        reserved_at: null,
+        sold_price: null,
+        sales_agent_id: null,
+        sales_agent: null,
+        buyer_name: null,
+        buyer_phone: null,
+        buyer_customer_id: null,
+      },
+    })
+    const interaction = userEvent.setup()
+    renderDetail()
+
+    await screen.findByRole('heading', { name: '車輛照片' })
+    const trigger = screen.getByRole('button', { name: '收訂金並保留' })
+    await interaction.click(trigger)
+    const dialog = screen.getByRole('dialog', { name: '收訂金並保留' })
+    const buyerName = within(dialog).getByRole('combobox', { name: '買方姓名 *' })
+    await interaction.click(buyerName)
+    await interaction.type(buyerName, '王')
+    expect(buyerName.getAttribute('aria-expanded')).toBe('true')
+
+    await interaction.keyboard('{Escape}')
+    expect(screen.getByRole('dialog', { name: '收訂金並保留' })).toBeTruthy()
+    expect(within(dialog).getByRole('spinbutton', { name: '成交價 *' })).toBeTruthy()
+    expect(within(dialog).getByRole('spinbutton', { name: '訂金金額 *' })).toBeTruthy()
+    expect(within(dialog).getByRole('combobox', { name: '賣車人 *' })).toBeTruthy()
+    expect(within(dialog).getByRole('combobox', { name: '收款帳戶 *' })).toBeTruthy()
+    expect(within(dialog).getByRole('textbox', { name: '備註' })).toBeTruthy()
+
+    await interaction.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: '收訂金並保留' })).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+  })
+
   it('keeps the pending approval outcome for non-admin vehicle expenses', async () => {
     setRole('manager')
     const interaction = userEvent.setup()

@@ -32,6 +32,8 @@ export function useDialogFocus<T extends HTMLElement>(
     initialFocusRef.current?.focus()
 
     function handleKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented) return
+
       if (event.key === 'Escape') {
         event.preventDefault()
         onCloseRef.current()

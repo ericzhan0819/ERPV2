@@ -69,6 +69,29 @@ class V16Browser(Browser):
             {"width": width, "height": height},
         )
 
+    def set_safe_area(self, top: int, right: int, bottom: int, left: int) -> None:
+        if self.config.browser != "chrome":
+            raise AssertionError("safe-area emulation requires Chrome CDP")
+        self._request(
+            "POST",
+            f"/session/{self.session}/goog/cdp/execute",
+            {
+                "cmd": "Emulation.setSafeAreaInsetsOverride",
+                "params": {
+                    "insets": {
+                        "top": top,
+                        "topMax": top,
+                        "right": right,
+                        "rightMax": right,
+                        "bottom": bottom,
+                        "bottomMax": bottom,
+                        "left": left,
+                        "leftMax": left,
+                    },
+                },
+            },
+        )
+
     def key(self, value: str) -> None:
         self._request(
             "POST",
@@ -126,6 +149,46 @@ def assert_no_document_overflow(target: Browser) -> bool:
           <= document.documentElement.clientWidth + 1
           && document.body.scrollWidth
           <= document.body.clientWidth + 1
+        """
+    ))
+
+
+def assert_page_hierarchy_layout(target: Browser) -> bool:
+    return bool(target.execute(
+        """
+        const heading = document.querySelector('h1');
+        const parent = heading?.parentElement;
+        const header = parent?.nextElementSibling ? parent : heading;
+        let content = header?.nextElementSibling;
+        while (content && (
+          getComputedStyle(content).display === 'none'
+          || content.getBoundingClientRect().height === 0
+        )) {
+          content = content.nextElementSibling;
+        }
+        if (!heading || !header || !content) return false;
+        const headingRect = heading.getBoundingClientRect();
+        const headerRect = header.getBoundingClientRect();
+        const contentRect = content.getBoundingClientRect();
+        const controls = Array.from(
+          header.querySelectorAll('a, button')
+        ).map((node) => node.getBoundingClientRect());
+        const controlsFit = controls.every((rect) =>
+          rect.left >= -1 && rect.right <= window.innerWidth + 1
+        );
+        const noOverlap = controls.every((rect) =>
+          rect.bottom <= headingRect.top
+          || rect.top >= headingRect.bottom
+          || rect.left >= headingRect.right
+          || rect.right <= headingRect.left
+        );
+        const contentGap = contentRect.top - headerRect.bottom;
+        return headingRect.left >= -1
+          && headingRect.right <= window.innerWidth + 1
+          && controlsFit
+          && noOverlap
+          && contentGap >= -1
+          && contentGap <= 96;
         """
     ))
 
@@ -200,14 +263,8 @@ try:
         ]),
     )
 
-    for dark in [False, True]:
-        set_theme(admin, dark)
-        checks.check(
-            f"1440px {'dark' if dark else 'light'} mode 無水平 overflow",
-            assert_no_document_overflow(admin),
-        )
-
-    for path, heading in {
+    desktop_routes = {
+        "/dashboard": "營運總覽",
         "/account": "我的帳號",
         "/users": "員工/帳號管理",
         "/vehicles": "車輛管理",
@@ -216,8 +273,22 @@ try:
         "/salary": "薪資結算",
         "/audit-logs": "稽核紀錄",
         "/cash-accounts": "資金帳戶",
-    }.items():
-        route_check(admin, path, heading)
+    }
+    for dark in [False, True]:
+        set_theme(admin, dark)
+        for path, heading in desktop_routes.items():
+            route_check(admin, path, heading)
+            if not assert_no_document_overflow(admin):
+                raise AssertionError(
+                    f"1440px {'dark' if dark else 'light'} overflow at {path}"
+                )
+            if not assert_page_hierarchy_layout(admin):
+                raise AssertionError(
+                    f"1440px {'dark' if dark else 'light'} hierarchy at {path}"
+                )
+        checks.check(
+            f"1440px {'dark' if dark else 'light'} 主要頁面版面與 overflow",
+        )
     checks.check("Admin Account／User／營運／薪資／Audit／資金帳戶主要路由")
 
     admin.get("/dashboard")
@@ -410,7 +481,11 @@ try:
     manager.wait_url("/dashboard")
     checks.check(
         "Manager 不出現 admin-only 入口或教學",
-        "員工管理" not in manager.body()
+        all(text not in manager.body() for text in [
+            "員工/帳號管理",
+            "薪資結算",
+            "稽核紀錄",
+        ])
         and manager.fetch("/api/users").get("status") == 403,
     )
 
@@ -477,6 +552,10 @@ try:
                 if not assert_no_document_overflow(mobile):
                     raise AssertionError(
                         f"{width}px {'dark' if dark else 'light'} overflow at {path}"
+                    )
+                if not assert_page_hierarchy_layout(mobile):
+                    raise AssertionError(
+                        f"{width}px {'dark' if dark else 'light'} hierarchy at {path}"
                     )
         checks.check(f"{width}px light／dark 主要頁面無水平 overflow")
 
@@ -599,22 +678,27 @@ try:
     )
     checks.check("320px 資金帳戶表格可橫向捲動", bool(cash_metrics))
 
+    mobile.set_safe_area(20, 0, 34, 0)
+    route_check(mobile, "/dashboard", "營運總覽")
     safe_area = mobile.execute(
         """
-        const root = document.querySelector('#root');
-        const shell = root?.firstElementChild;
-        const style = shell ? getComputedStyle(shell) : null;
+        const header = document.querySelector('.app-header');
+        const main = document.querySelector('.app-main');
+        const headerStyle = header ? getComputedStyle(header) : null;
+        const mainStyle = main ? getComputedStyle(main) : null;
         return {
-          minHeight: style?.minHeight || '',
-          viewportHeight: window.innerHeight,
-          bodyHeight: document.body.getBoundingClientRect().height,
+          headerTop: Number.parseFloat(headerStyle?.paddingTop || '0'),
+          mainBottom: Number.parseFloat(mainStyle?.paddingBottom || '0'),
+          noDocumentOverflow:
+            document.documentElement.scrollWidth <= window.innerWidth + 1,
         }
         """
     )
     checks.check(
-        "Mobile Safe Area 與底部 viewport 空間不回歸",
-        "100" in safe_area.get("minHeight", "")
-        or safe_area.get("bodyHeight", 0) >= safe_area.get("viewportHeight", 0),
+        "Mobile 模擬 Safe Area inset 與底部空間不回歸",
+        safe_area.get("headerTop", 0) >= 28
+        and safe_area.get("mainBottom", 0) >= 66
+        and safe_area.get("noDocumentOverflow"),
     )
 
     checks.check(
