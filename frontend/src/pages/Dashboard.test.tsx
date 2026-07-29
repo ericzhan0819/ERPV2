@@ -111,8 +111,11 @@ describe('Dashboard presentation', () => {
 
     expect(business.getAllByText(/僅計已核准收支/)).toHaveLength(1)
     expect(
-      business.getByText('本月涵蓋完整月份；金額僅計已核准收支，現金為正式帳面餘額。'),
+      business.getByText(
+        '本月涵蓋完整月份：收入／支出依收支日期，毛利／成交依成交日期；金額僅計已核准收支，現金為正式帳面餘額。',
+      ),
     ).toBeTruthy()
+    expect(business.getByText('含保留中')).toBeTruthy()
     expect(business.getByRole('link', { name: /本月收入/ }).getAttribute('href')).toBe(
       '/money-entries?direction=income&date_from=2026-07-01&date_to=2026-07-31&approval=approved',
     )
@@ -148,5 +151,7 @@ describe('Dashboard presentation', () => {
     expect(screen.queryByText('待審核收支') !== null).toBe(showsApproval)
     expect(screen.queryByRole('img', { name: /近 30 天毛利/ }) !== null).toBe(showsFinance)
     expect(screen.queryByRole('img', { name: /現金變化/ }) !== null).toBe(showsFinance)
+    expect(screen.queryByText(/收入／支出依收支日期/) !== null).toBe(showsFinance)
+    expect(screen.getByText('含保留中')).toBeTruthy()
   })
 })

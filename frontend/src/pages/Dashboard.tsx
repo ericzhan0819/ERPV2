@@ -66,10 +66,11 @@ interface KpiCardProps {
   to: string
   label: string
   value: string
+  detail?: string
   icon: ComponentType<{ className?: string; 'aria-hidden'?: boolean }>
 }
 
-function KpiCard({ to, label, value, icon: Icon }: KpiCardProps) {
+function KpiCard({ to, label, value, detail, icon: Icon }: KpiCardProps) {
   return (
     <Link
       to={to}
@@ -83,6 +84,7 @@ function KpiCard({ to, label, value, icon: Icon }: KpiCardProps) {
       </div>
       <p className="mt-4 text-sm font-medium text-fg-muted">{label}</p>
       <p className="mt-1 text-3xl font-bold text-fg tabular-nums">{value}</p>
+      {detail && <p className="mt-2 text-xs text-fg-muted">{detail}</p>}
     </Link>
   )
 }
@@ -182,13 +184,17 @@ export function Dashboard() {
       <section aria-labelledby="business-overview-title">
         <div className="mb-4">
           <h2 id="business-overview-title" className="text-lg font-semibold text-fg">經營概況</h2>
-          <p className="mt-1 text-sm text-fg-muted">本月涵蓋完整月份；金額僅計已核准收支，現金為正式帳面餘額。</p>
+          {canViewFinance && (
+            <p className="mt-1 text-sm text-fg-muted">
+              本月涵蓋完整月份：收入／支出依收支日期，毛利／成交依成交日期；金額僅計已核准收支，現金為正式帳面餘額。
+            </p>
+          )}
         </div>
         {stateMessage ? (
           <SectionState message={stateMessage} />
         ) : business && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <KpiCard to="/vehicles?status=preparing,listed,reserved" label="在庫數" value={`${numberFormatter.format(business.inventory_count)} 台`} icon={CarFront} />
+            <KpiCard to="/vehicles?status=preparing,listed,reserved" label="在庫數" value={`${numberFormatter.format(business.inventory_count)} 台`} detail="含保留中" icon={CarFront} />
             {canViewFinance && business.cash_balance !== undefined && (
               <KpiCard to="/cash-accounts" label="現金帳面餘額" value={currencyFormatter.format(business.cash_balance)} icon={Banknote} />
             )}
