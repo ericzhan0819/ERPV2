@@ -20,10 +20,12 @@ export function SalaryPeriodList() {
   function load(refreshErrorMessage = '薪資月份載入失敗') {
     setLoading(true)
     setFocusError(false)
-    setLoadFailed(false)
     setError(null)
     listSalaryPeriods()
-      .then(setPeriods)
+      .then((loadedPeriods) => {
+        setPeriods(loadedPeriods)
+        setLoadFailed(false)
+      })
       .catch((caught) => {
         setLoadFailed(true)
         setError(apiError(caught, refreshErrorMessage))
@@ -41,7 +43,6 @@ export function SalaryPeriodList() {
       await createSalaryPeriod(month)
       load('薪資草稿已建立，但列表可能不是最新；請重新整理後確認。')
     } catch (caught) {
-      setLoadFailed(false)
       setError(apiError(caught, '建立薪資草稿失敗'))
     } finally {
       setSaving(false)

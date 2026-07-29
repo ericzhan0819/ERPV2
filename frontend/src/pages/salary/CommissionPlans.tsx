@@ -31,10 +31,12 @@ export function CommissionPlans() {
   function load(refreshErrorMessage = '獎金方案載入失敗') {
     setLoading(true)
     setFocusError(false)
-    setLoadFailed(false)
     setError(null)
     listCommissionPlans()
-      .then(setPlans)
+      .then((loadedPlans) => {
+        setPlans(loadedPlans)
+        setLoadFailed(false)
+      })
       .catch((caught) => {
         setLoadFailed(true)
         setError(apiError(caught, refreshErrorMessage))
@@ -54,7 +56,6 @@ export function CommissionPlans() {
       setForm({ ...initialForm, name: '' })
       load('方案已建立，但列表可能不是最新；請重新整理後確認。')
     } catch (caught) {
-      setLoadFailed(false)
       setError(apiError(caught, '建立獎金方案失敗'))
     } finally {
       setSaving(false)

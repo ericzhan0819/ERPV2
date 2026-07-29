@@ -159,6 +159,24 @@ describe('salary copy presentation', () => {
     expect((await screen.findByRole('alert')).textContent).toBe('薪資月份載入失敗')
   })
 
+  it('does not claim an empty salary list when both load and create fail', async () => {
+    vi.mocked(salaryPeriodsApi.listSalaryPeriods).mockRejectedValue(new Error('offline'))
+    vi.mocked(salaryPeriodsApi.createSalaryPeriod).mockRejectedValue(new Error('conflict'))
+    const interaction = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <SalaryPeriodList />
+      </MemoryRouter>,
+    )
+
+    expect((await screen.findByRole('alert')).textContent).toBe('薪資月份載入失敗')
+    await interaction.click(screen.getByRole('button', { name: '建立月份草稿' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('建立薪資草稿失敗')
+    expect(
+      screen.queryByText('尚未建立薪資月份，請選擇月份並建立草稿。'),
+    ).toBeNull()
+  })
+
   it('shows the plan-version rule only on used plans', async () => {
     vi.mocked(commissionPlansApi.listCommissionPlans).mockResolvedValue([
       commissionPlan,
