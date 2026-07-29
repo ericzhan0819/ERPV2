@@ -175,6 +175,7 @@ export function MoneyEntryList() {
   const [draftFilters, setDraftFilters] = useState<MoneyEntryListFilters>(() => ({ ...filters }))
   const filterDrawerTriggerRef = useRef<HTMLButtonElement>(null)
   const requestSequenceRef = useRef(0)
+  const reviewRefreshPendingRef = useRef(false)
   const hasActiveFilters = hasActiveMoneyEntryListFilters(filters)
   const isPageOutOfRange = Boolean(meta && filters.page > meta.last_page)
 
@@ -231,6 +232,8 @@ export function MoneyEntryList() {
 
   useEffect(() => {
     const requestSequence = ++requestSequenceRef.current
+    const isReviewRefresh = reviewRefreshPendingRef.current
+    reviewRefreshPendingRef.current = false
     setLoading(true)
     setFocusPageError(false)
     setError(null)
@@ -252,7 +255,13 @@ export function MoneyEntryList() {
         setMeta(response.meta)
       })
       .catch(() => {
-        if (requestSequence === requestSequenceRef.current) setError('收支列表載入失敗')
+        if (requestSequence === requestSequenceRef.current) {
+          setError(
+            isReviewRefresh
+              ? '審核已送出，但列表可能不是最新；請重新整理後確認。'
+              : '收支列表載入失敗',
+          )
+        }
       })
       .finally(() => {
         if (requestSequence === requestSequenceRef.current) setLoading(false)
@@ -280,6 +289,7 @@ export function MoneyEntryList() {
     setError(null)
     try {
       await approveMoneyEntry(id)
+      reviewRefreshPendingRef.current = true
       setRefreshToken((token) => token + 1)
     } catch {
       setError('核准失敗，請稍後再試')
@@ -294,6 +304,7 @@ export function MoneyEntryList() {
     setError(null)
     try {
       await rejectMoneyEntry(id)
+      reviewRefreshPendingRef.current = true
       setRefreshToken((token) => token + 1)
     } catch {
       setError('駁回失敗，請稍後再試')

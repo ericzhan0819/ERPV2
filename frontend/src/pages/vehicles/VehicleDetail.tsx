@@ -1087,7 +1087,10 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
   // 到別台車，這個刷新回來的就是舊車輛的照片，不該套用到目前畫面。
   const vehicleIdRef = useRef(vehicleId)
 
-  function loadPhotos(forVehicleId: number) {
+  function loadPhotos(
+    forVehicleId: number,
+    refreshErrorMessage = '車輛照片載入失敗',
+  ) {
     // 呼叫當下就先擋掉「已經不是目前顯示中車輛」的刷新（例如上傳/刪除等操作完成觸發
     // 的刷新，但使用者早已切換到別台車），完全不遞增 requestIdRef、不打 API、不動
     // loading 狀態。這一步很關鍵：如果讓這種舊車輛的刷新照樣遞增 requestIdRef，會把
@@ -1105,7 +1108,7 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
       })
       .catch(() => {
         if (requestIdRef.current !== requestId || vehicleIdRef.current !== forVehicleId) return
-        setLoadError('車輛照片載入失敗')
+        setLoadError(refreshErrorMessage)
       })
       .finally(() => {
         if (requestIdRef.current !== requestId || vehicleIdRef.current !== forVehicleId) return
@@ -1132,7 +1135,7 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
       await uploadVehiclePhotos(vehicleId, files, idempotencyKey)
       pendingUploadRef.current = null
       setCanRetryUpload(false)
-      loadPhotos(vehicleId)
+      loadPhotos(vehicleId, '操作已送出，但照片可能不是最新；請重新整理後確認。')
     } catch (err) {
       // 失敗時保留這次的 key 與檔案供「重試上傳」使用（見上方 pendingUploadRef 註解），
       // 不清除、不重新產生 key。
@@ -1165,7 +1168,7 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
     setActionError(null)
     try {
       await deleteVehiclePhoto(vehicleId, photo.id)
-      loadPhotos(vehicleId)
+      loadPhotos(vehicleId, '操作已送出，但照片可能不是最新；請重新整理後確認。')
     } catch (err) {
       setActionError(extractErrorMessage(err, '刪除照片失敗，請稍後再試'))
     } finally {
@@ -1179,7 +1182,7 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
     setActionError(null)
     try {
       await setCoverVehiclePhoto(vehicleId, photo.id)
-      loadPhotos(vehicleId)
+      loadPhotos(vehicleId, '操作已送出，但照片可能不是最新；請重新整理後確認。')
     } catch (err) {
       setActionError(extractErrorMessage(err, '設定封面失敗，請稍後再試'))
     } finally {
@@ -1202,7 +1205,7 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
         vehicleId,
         reordered.map((p) => p.id),
       )
-      loadPhotos(vehicleId)
+      loadPhotos(vehicleId, '操作已送出，但照片可能不是最新；請重新整理後確認。')
     } catch (err) {
       setActionError(extractErrorMessage(err, '調整排序失敗，請稍後再試'))
       loadPhotos(vehicleId)

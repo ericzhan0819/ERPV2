@@ -164,10 +164,12 @@ describe('Money entry presentation', () => {
 
   it('keeps approval status and admin approve/reject outcomes', async () => {
     const interaction = userEvent.setup()
-    vi.mocked(moneyEntriesApi.listMoneyEntries).mockResolvedValue({
-      data: [pendingEntry],
-      meta: { current_page: 1, last_page: 1, per_page: 20, total: 1 },
-    })
+    vi.mocked(moneyEntriesApi.listMoneyEntries)
+      .mockResolvedValueOnce({
+        data: [pendingEntry],
+        meta: { current_page: 1, last_page: 1, per_page: 20, total: 1 },
+      })
+      .mockRejectedValueOnce(new Error('offline'))
     vi.mocked(moneyEntriesApi.approveMoneyEntry).mockResolvedValue({
       ...pendingEntry,
       approval_status: 'approved',
@@ -181,6 +183,10 @@ describe('Money entry presentation', () => {
     expect(within(row!).getByText('營運現金')).toBeTruthy()
     await interaction.click(within(row!).getByRole('button', { name: '核准' }))
     expect(moneyEntriesApi.approveMoneyEntry).toHaveBeenCalledWith(9)
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      '審核已送出，但列表可能不是最新；請重新整理後確認。',
+    )
+    expect(within(row!).getByText('待審核')).toBeTruthy()
   })
 
   it('keeps sales-safe amounts while masking cash accounts and approval controls', async () => {

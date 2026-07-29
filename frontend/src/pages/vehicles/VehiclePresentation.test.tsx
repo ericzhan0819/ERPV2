@@ -352,7 +352,9 @@ describe('Vehicle presentation', () => {
     await screen.findByText('front.webp')
     await interaction.click(screen.getByRole('button', { name: '設封面' }))
 
-    expect((await screen.findByRole('alert')).textContent).toBe('車輛照片載入失敗')
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      '操作已送出，但照片可能不是最新；請重新整理後確認。',
+    )
     expect(screen.getByText('front.webp')).toBeTruthy()
     expect(screen.getByText('rear.webp')).toBeTruthy()
     expect(screen.getByRole('button', { name: '設封面' })).toBeTruthy()
