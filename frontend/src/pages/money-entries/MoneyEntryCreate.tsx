@@ -41,6 +41,7 @@ export function MoneyEntryCreate() {
   const [counterpartyName, setCounterpartyName] = useState('')
   const [description, setDescription] = useState('')
 
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<'entryDate' | 'category' | 'cashAccountId' | 'amount', string>>>({})
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const idempotencyKeyRef = useRef<string | null>(null)
@@ -56,20 +57,13 @@ export function MoneyEntryCreate() {
     event.preventDefault()
     setError(null)
 
-    if (!entryDate) {
-      setError('請選擇日期')
-      return
-    }
-    if (!category) {
-      setError('請選擇分類')
-      return
-    }
-    if (!cashAccountId) {
-      setError('請選擇資金帳戶')
-      return
-    }
-    if (!amount || Number(amount) <= 0) {
-      setError('金額必須大於 0')
+    const nextFieldErrors: typeof fieldErrors = {}
+    if (!entryDate) nextFieldErrors.entryDate = '請選擇日期'
+    if (!category) nextFieldErrors.category = '請選擇分類'
+    if (!cashAccountId) nextFieldErrors.cashAccountId = '請選擇資金帳戶'
+    if (!amount || Number(amount) <= 0) nextFieldErrors.amount = '金額必須大於 0'
+    setFieldErrors(nextFieldErrors)
+    if (Object.keys(nextFieldErrors).length > 0) {
       return
     }
 
@@ -104,20 +98,27 @@ export function MoneyEntryCreate() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-semibold text-fg">新增收支</h1>
-        <p className="mt-1 text-sm text-fg-muted">一般營運收支請勿選擇車輛；單車相關收支請務必綁定車輛</p>
+        <p className="mt-1 text-sm text-fg-muted">一般營運收支不綁車；單車收支必須選擇關聯車輛。</p>
       </div>
 
       <form noValidate onSubmit={handleSubmit} className="max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-fg-muted">日期</label>
+            <label htmlFor="money-entry-date" className="mb-1 block text-sm font-medium text-fg-muted">日期</label>
             <input
+              id="money-entry-date"
               type="date"
               required
               value={entryDate}
-              onChange={(e) => setEntryDate(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.entryDate)}
+              aria-describedby={fieldErrors.entryDate ? 'money-entry-date-error' : undefined}
+              onChange={(e) => {
+                setEntryDate(e.target.value)
+                setFieldErrors((current) => ({ ...current, entryDate: undefined }))
+              }}
               className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
             />
+            {fieldErrors.entryDate && <p id="money-entry-date-error" className="mt-1 text-xs text-error">{fieldErrors.entryDate}</p>}
           </div>
 
           <div>
@@ -136,11 +137,17 @@ export function MoneyEntryCreate() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-fg-muted">分類</label>
+            <label htmlFor="money-entry-category" className="mb-1 block text-sm font-medium text-fg-muted">分類</label>
             <select
+              id="money-entry-category"
               required
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.category)}
+              aria-describedby={fieldErrors.category ? 'money-entry-category-error' : undefined}
+              onChange={(e) => {
+                setCategory(e.target.value)
+                setFieldErrors((current) => ({ ...current, category: undefined }))
+              }}
               className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
             >
               <option value="">請選擇分類</option>
@@ -150,26 +157,40 @@ export function MoneyEntryCreate() {
                 </option>
               ))}
             </select>
+            {fieldErrors.category && <p id="money-entry-category-error" className="mt-1 text-xs text-error">{fieldErrors.category}</p>}
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-fg-muted">金額</label>
+            <label htmlFor="money-entry-amount" className="mb-1 block text-sm font-medium text-fg-muted">金額</label>
             <input
+              id="money-entry-amount"
               type="number"
               required
               min={1}
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.amount)}
+              aria-describedby={fieldErrors.amount ? 'money-entry-amount-error' : undefined}
+              onChange={(e) => {
+                setAmount(e.target.value)
+                setFieldErrors((current) => ({ ...current, amount: undefined }))
+              }}
               className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
             />
+            {fieldErrors.amount && <p id="money-entry-amount-error" className="mt-1 text-xs text-error">{fieldErrors.amount}</p>}
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-fg-muted">資金帳戶</label>
+            <label htmlFor="money-entry-cash-account" className="mb-1 block text-sm font-medium text-fg-muted">資金帳戶</label>
             <select
+              id="money-entry-cash-account"
               required
               value={cashAccountId}
-              onChange={(e) => setCashAccountId(e.target.value)}
+              aria-invalid={Boolean(fieldErrors.cashAccountId)}
+              aria-describedby={fieldErrors.cashAccountId ? 'money-entry-cash-account-error' : undefined}
+              onChange={(e) => {
+                setCashAccountId(e.target.value)
+                setFieldErrors((current) => ({ ...current, cashAccountId: undefined }))
+              }}
               className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
             >
               <option value="">請選擇資金帳戶</option>
@@ -179,6 +200,7 @@ export function MoneyEntryCreate() {
                 </option>
               ))}
             </select>
+            {fieldErrors.cashAccountId && <p id="money-entry-cash-account-error" className="mt-1 text-xs text-error">{fieldErrors.cashAccountId}</p>}
           </div>
 
           <div>

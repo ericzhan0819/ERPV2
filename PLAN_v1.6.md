@@ -375,40 +375,40 @@ v1.6 是小型純前端 UX cleanup 版本：系統性移除重複副標與教學
 
 ### 8.1 新增收支
 
-- [ ] 縮短「一般營運收支請勿選擇車輛；單車相關收支請務必綁定車輛」
-- [ ] 確認縮短後仍能避免使用者誤解
-- [ ] 不改 category、vehicle field、validation 或 payload
-- [ ] 保留日期、分類、資金帳戶的 per-field error
-- [ ] 保留 pending／approved 的送出結果
+- [x] 縮短「一般營運收支請勿選擇車輛；單車相關收支請務必綁定車輛」
+- [x] 確認縮短後仍能避免使用者誤解
+- [x] 不改 category、vehicle field、validation 或 payload
+- [x] 保留日期、分類、資金帳戶的 per-field error
+- [x] 保留 pending／approved 的送出結果
 
 ### 8.2 收支列表
 
-- [ ] 檢查頁面副標、Filter 說明與 empty state
-- [ ] 保留 approval status、核准、駁回與錯誤結果
-- [ ] 不改 URL Filter、分頁、角色可見性與金額遮蔽
-- [ ] 載入期間不得重新引入過期 pagination meta
+- [x] 檢查頁面副標、Filter 說明與 empty state
+- [x] 保留 approval status、核准、駁回與錯誤結果
+- [x] 不改 URL Filter、分頁、角色可見性與金額遮蔽
+- [x] 載入期間不得重新引入過期 pagination meta
 
 ### 8.3 客戶
 
-- [ ] 移除重述頁面用途的副標
-- [ ] 保留搜尋、無結果、更新與刪除錯誤
-- [ ] 檢查 CustomerSelect placeholder 與 help 是否重複
-- [ ] visible label 不可由 placeholder 取代
-- [ ] 不改客戶／買方／賣方關聯
+- [x] 移除重述頁面用途的副標
+- [x] 保留搜尋、無結果、更新與刪除錯誤
+- [x] 檢查 CustomerSelect placeholder 與 help 是否重複
+- [x] visible label 不可由 placeholder 取代
+- [x] 不改客戶／買方／賣方關聯
 
 ### 8.4 Audit Log
 
-- [ ] 檢查「追蹤系統登入、資料新增、修改與刪除操作」是否可刪或縮短
-- [ ] 「紀錄僅供查詢」若為重要邊界則短句保留
-- [ ] 保留無欄位異動與請求資訊 empty state
-- [ ] 不改 audit payload、遮蔽或 API
+- [x] 檢查「追蹤系統登入、資料新增、修改與刪除操作」是否可刪或縮短
+- [x] 「紀錄僅供查詢」若為重要邊界則短句保留
+- [x] 保留無欄位異動與請求資訊 empty state
+- [x] 不改 audit payload、遮蔽或 API
 
 ### 8.5 Print
 
-- [ ] 不刪正式欄位名稱與收支「說明」資料
-- [ ] 只處理明顯重複的畫面副標
-- [ ] 不改 print CSS、資料結構與權限
-- [ ] 封板前肉眼檢查紙本／PDF 預覽
+- [x] 不刪正式欄位名稱與收支「說明」資料
+- [x] 只處理明顯重複的畫面副標
+- [x] 不改 print CSS、資料結構與權限
+- [ ] 封板前肉眼檢查紙本／PDF 預覽（承接於 13.2）
 
 ---
 
@@ -555,6 +555,7 @@ v1.6 不修改 backend，但封板前仍建立完整回歸證據。
 - [ ] Account／User
 - [ ] Vehicle／MoneyEntry／Customer
 - [ ] Salary／Audit／Cash Account
+- [ ] 車輛建檔／成交結案紙本與 PDF 預覽
 - [ ] Keyboard-only 主要操作
 - [ ] 錯誤、warning、success、empty state
 

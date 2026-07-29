@@ -178,7 +178,7 @@ export function CustomerSelect({
 
         {customerId && (
           <div className="mt-1 flex items-center justify-between gap-2 text-xs">
-            <span className="text-success">已選擇既有客戶，電話已自動帶入</span>
+            <span className="text-success">已選擇既有客戶，電話由客戶資料帶入</span>
             <button
               type="button"
               onClick={handleUseAsNewCustomer}
@@ -192,12 +192,12 @@ export function CustomerSelect({
         {showListbox && (
           <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border-strong bg-surface shadow-lg">
             <div role="status" className="sr-only">
-              {!loading && results.length === 0 ? '查無相符客戶，繼續填寫電話後會自動建立' : ''}
+              {!loading && results.length === 0 ? '查無相符客戶；填寫電話後將建立新客戶' : ''}
             </div>
             {loading && <div className="px-3 py-2 text-sm text-fg-muted">搜尋中...</div>}
             {!loading && results.length === 0 && (
               <div aria-hidden="true" className="px-3 py-2 text-sm text-fg-muted">
-                查無相符客戶，繼續填寫電話後會自動建立
+                查無相符客戶；填寫電話後將建立新客戶
               </div>
             )}
             <div id={listboxId} role="listbox" aria-label={`${nameLabel}搜尋結果`} aria-busy={loading}>
@@ -235,7 +235,6 @@ export function CustomerSelect({
           readOnly={Boolean(customerId)}
           value={phone}
           onChange={(event) => onChange({ customerId: '', name, phone: event.target.value })}
-          placeholder={customerId ? '由既有客戶資料帶入' : '未選既有客戶時請手動輸入'}
           className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30 read-only:bg-surface-2 read-only:text-fg-muted"
         />
       </div>

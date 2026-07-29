@@ -151,7 +151,7 @@ export function AuditLogList() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-semibold text-fg">稽核紀錄</h1>
-        <p className="mt-1 text-sm text-fg-muted">追蹤系統登入、資料新增、修改與刪除操作；紀錄僅供查詢。</p>
+        <p className="mt-1 text-sm text-fg-muted">紀錄僅供查詢。</p>
       </div>
 
       <div className="flex flex-wrap gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
