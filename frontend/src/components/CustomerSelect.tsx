@@ -152,7 +152,7 @@ export function CustomerSelect({
       return
     }
 
-    if (event.key === 'Escape' && open) {
+    if (event.key === 'Escape' && showListbox) {
       event.preventDefault()
       setOpen(false)
       setActiveIndex(-1)

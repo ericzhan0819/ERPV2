@@ -747,8 +747,9 @@ function ListModal({
         <Field label="底價" value={floor_price} onChange={setFloorPrice} type="number" />
         <Field label="上架日期" value={listing_date} onChange={setListingDate} type="date" />
         <div>
-          <label className="mb-1 block text-sm font-medium text-fg-muted">銷售備註</label>
+          <label htmlFor="vehicle-listing-sales-note" className="mb-1 block text-sm font-medium text-fg-muted">銷售備註</label>
           <textarea
+            id="vehicle-listing-sales-note"
             value={sales_note}
             onChange={(e) => setSalesNote(e.target.value)}
             rows={3}

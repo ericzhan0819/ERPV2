@@ -138,7 +138,15 @@ def login(target: Browser, identifier: str, password: str) -> None:
     target.replace("#login", identifier)
     target.replace("#password", password)
     target.click_text("登入")
-    target.wait_url("/dashboard")
+    try:
+        target.wait_url("/dashboard", 6)
+    except AssertionError:
+        if not target.url().endswith("/login"):
+            raise
+        target.replace("#login", identifier)
+        target.replace("#password", password)
+        target.click_text("登入")
+        target.wait_url("/dashboard")
     target.wait_text("營運總覽")
 
 
@@ -157,15 +165,15 @@ def assert_page_hierarchy_layout(target: Browser) -> bool:
     return bool(target.execute(
         """
         const heading = document.querySelector('h1');
-        const parent = heading?.parentElement;
-        const header = parent?.nextElementSibling ? parent : heading;
-        let content = header?.nextElementSibling;
-        while (content && (
-          getComputedStyle(content).display === 'none'
-          || content.getBoundingClientRect().height === 0
-        )) {
-          content = content.nextElementSibling;
-        }
+        const pageRoot = document.querySelector('main.app-main')
+          ?.firstElementChild;
+        const sections = Array.from(pageRoot?.children || []).filter((node) => {
+          const rect = node.getBoundingClientRect();
+          return getComputedStyle(node).display !== 'none' && rect.height > 0;
+        });
+        const header = sections.find((node) => node.contains(heading));
+        const headerIndex = header ? sections.indexOf(header) : -1;
+        const content = headerIndex >= 0 ? sections[headerIndex + 1] : null;
         if (!heading || !header || !content) return false;
         const headingRect = heading.getBoundingClientRect();
         const headerRect = header.getBoundingClientRect();

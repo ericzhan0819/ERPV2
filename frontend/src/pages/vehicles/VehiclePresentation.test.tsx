@@ -315,7 +315,7 @@ describe('Vehicle presentation', () => {
     expect(descriptionLabel?.nextElementSibling?.tagName).toBe('TEXTAREA')
   })
 
-  it('closes an open customer suggestion list before closing the reserve dialog', async () => {
+  it('uses Escape to close only the currently visible reserve layer', async () => {
     vi.mocked(vehiclesApi.getVehicle).mockResolvedValue({
       ...detail,
       vehicle: {
@@ -336,8 +336,16 @@ describe('Vehicle presentation', () => {
     await screen.findByRole('heading', { name: '車輛照片' })
     const trigger = screen.getByRole('button', { name: '收訂金並保留' })
     await interaction.click(trigger)
-    const dialog = screen.getByRole('dialog', { name: '收訂金並保留' })
-    const buyerName = within(dialog).getByRole('combobox', { name: '買方姓名 *' })
+    let dialog = screen.getByRole('dialog', { name: '收訂金並保留' })
+    let buyerName = within(dialog).getByRole('combobox', { name: '買方姓名 *' })
+    await interaction.click(buyerName)
+    await interaction.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: '收訂金並保留' })).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+
+    await interaction.click(trigger)
+    dialog = screen.getByRole('dialog', { name: '收訂金並保留' })
+    buyerName = within(dialog).getByRole('combobox', { name: '買方姓名 *' })
     await interaction.click(buyerName)
     await interaction.type(buyerName, '王')
     expect(buyerName.getAttribute('aria-expanded')).toBe('true')
@@ -353,6 +361,32 @@ describe('Vehicle presentation', () => {
     await interaction.keyboard('{Escape}')
     expect(screen.queryByRole('dialog', { name: '收訂金並保留' })).toBeNull()
     expect(document.activeElement).toBe(trigger)
+  })
+
+  it('gives the listing workflow notes field a programmatic name', async () => {
+    vi.mocked(vehiclesApi.getVehicle).mockResolvedValue({
+      ...detail,
+      vehicle: {
+        ...vehicle,
+        status: 'preparing',
+        is_preparation_completed: false,
+        listing_date: null,
+        reserved_at: null,
+        sold_price: null,
+        sales_agent_id: null,
+        sales_agent: null,
+        buyer_name: null,
+        buyer_phone: null,
+        buyer_customer_id: null,
+      },
+    })
+    const interaction = userEvent.setup()
+    renderDetail()
+
+    await screen.findByRole('heading', { name: '車輛照片' })
+    await interaction.click(screen.getByRole('button', { name: '整備完成並上架' }))
+    const dialog = screen.getByRole('dialog', { name: '整備完成並上架' })
+    expect(within(dialog).getByRole('textbox', { name: '銷售備註' })).toBeTruthy()
   })
 
   it('keeps the pending approval outcome for non-admin vehicle expenses', async () => {
