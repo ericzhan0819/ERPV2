@@ -408,7 +408,7 @@ v1.6 是小型純前端 UX cleanup 版本：系統性移除重複副標與教學
 - [x] 不刪正式欄位名稱與收支「說明」資料
 - [x] 只處理明顯重複的畫面副標
 - [x] 不改 print CSS、資料結構與權限
-- [ ] 封板前肉眼檢查紙本／PDF 預覽（承接於 13.2）
+- [x] 封板前肉眼檢查紙本／PDF 預覽（承接於 13.2）
 
 ---
 
@@ -610,22 +610,22 @@ Sales：
 
 ### 14.1 Review 目標
 
-- [ ] 審查完整 v1.6 diff
-- [ ] 確認沒有刪除關鍵業務規則
-- [ ] 確認 approved-only、成交月份、期末餘額等定義仍可理解
-- [ ] 確認薪資鎖定、發薪、重設密碼與 Session 失效後果仍清楚
-- [ ] 確認沒有 broken `aria-describedby`
-- [ ] 確認 disabled reason 不只存在於 hover `title`
-- [ ] 確認 Mobile 沒有因文字條件式出現造成 overflow
-- [ ] 確認沒有新增功能、API、schema、dependency 或平行元件系統
+- [x] 審查完整 v1.6 diff
+- [x] 確認沒有刪除關鍵業務規則
+- [x] 確認 approved-only、成交月份、期末餘額等定義仍可理解
+- [x] 確認薪資鎖定、發薪、重設密碼與 Session 失效後果仍清楚
+- [x] 確認沒有 broken `aria-describedby`
+- [x] 確認 disabled reason 不只存在於 hover `title`
+- [x] 確認 Mobile 沒有因文字條件式出現造成 overflow
+- [x] 確認沒有新增功能、API、schema、dependency 或平行元件系統
 
 ### 14.2 Reviewer 邊界
 
-- [ ] Reviewer 不得要求把所有被刪文字改放 tooltip
-- [ ] Reviewer 不得以個人文案偏好提出無可觀察影響的 finding
-- [ ] Reviewer 不得把 v1.6 擴張成整站視覺改版
-- [ ] Reviewer 不得要求 backend／schema 配合純 copy cleanup
-- [ ] 有效 finding 必須指出具體頁面、缺失資訊與失敗模式
+- [x] Reviewer 不得要求把所有被刪文字改放 tooltip
+- [x] Reviewer 不得以個人文案偏好提出無可觀察影響的 finding
+- [x] Reviewer 不得把 v1.6 擴張成整站視覺改版
+- [x] Reviewer 不得要求 backend／schema 配合純 copy cleanup
+- [x] 有效 finding 必須指出具體頁面、缺失資訊與失敗模式
 
 ### 14.3 Follow-up
 
