@@ -490,35 +490,35 @@ v1.6 是小型純前端 UX cleanup 版本：系統性移除重複副標與教學
 
 ### 11.1 Unit／Contract tests
 
-- [ ] `npm test`
-- [ ] 修正因預期文案改動造成的合理失敗
-- [ ] 不為了讓測試通過而恢復不必要文案
-- [ ] Dashboard presentation tests 通過
-- [ ] Account／Auth tests 通過
-- [ ] User 管理 tests 通過
-- [ ] Salary 條件式 warning tests 通過
-- [ ] Vehicle／MoneyEntry／Filter tests 通過
-- [ ] App config 與 App Layout tests 通過
+- [x] `npm test`
+- [x] 修正因預期文案改動造成的合理失敗
+- [x] 不為了讓測試通過而恢復不必要文案
+- [x] Dashboard presentation tests 通過
+- [x] Account／Auth tests 通過
+- [x] User 管理 tests 通過
+- [x] Salary 條件式 warning tests 通過
+- [x] Vehicle／MoneyEntry／Filter tests 通過
+- [x] App config 與 App Layout tests 通過
 
 ### 11.2 Static quality
 
-- [ ] `npm run lint`
-- [ ] `npm run typecheck`
-- [ ] `npm run build`
-- [ ] 記錄既有 warning 與本版本新增 warning 的差異
-- [ ] 不新增 runtime dependency
-- [ ] 不新增大幅 bundle growth
+- [x] `npm run lint`
+- [x] `npm run typecheck`
+- [x] `npm run build`
+- [x] 記錄既有 warning 與本版本新增 warning 的差異
+- [x] 不新增 runtime dependency
+- [x] 不新增大幅 bundle growth
 
 ### 11.3 Static scope audit
 
-- [ ] `git diff -- backend` 為空
-- [ ] `git diff -- backend/database` 為空
-- [ ] `git diff -- backend/routes` 為空
-- [ ] `git diff -- frontend/src/api frontend/src/types` 原則上為空
-- [ ] 無 migration
-- [ ] 無 package dependency 變更
-- [ ] 無新路由
-- [ ] 無新 KPI／圖表／報表
+- [x] `git diff -- backend` 為空
+- [x] `git diff -- backend/database` 為空
+- [x] `git diff -- backend/routes` 為空
+- [x] `git diff -- frontend/src/api frontend/src/types` 原則上為空
+- [x] 無 migration
+- [x] 無 package dependency 變更
+- [x] 無新路由
+- [x] 無新 KPI／圖表／報表
 
 若任何項目不為空，停止並確認是否已超出 v1.6。
 
