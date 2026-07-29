@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { createCommissionPlan, listCommissionPlans } from '../../api/commissionPlans'
+import { FormAlert } from '../../components/FormAlert'
 import type { CommissionPlan, CommissionPlanPayload } from '../../types/salary'
 import { apiError, formatPercent } from './salaryUtils'
 
@@ -57,7 +58,7 @@ export function CommissionPlans() {
         <Link to="/salary" className="flex min-h-11 items-center text-sm font-medium text-primary">返回薪資月份</Link>
       </div>
 
-      {error && <p className="text-sm text-error">{error}</p>}
+      <FormAlert message={error} />
       {loading && <p className="text-sm text-fg-muted">載入中...</p>}
       <button
         onClick={() => setShowForm((visible) => !visible)}

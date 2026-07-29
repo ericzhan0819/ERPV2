@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { listCashAccounts } from '../../api/cashAccounts'
+import { FormAlert } from '../../components/FormAlert'
 import { listSalaryProfiles } from '../../api/salaryProfiles'
 import {
   addSalaryAdjustment,
@@ -135,7 +136,7 @@ export function SalaryPeriodDetail() {
   return (
     <div className="flex flex-col gap-6">
       <PeriodHeader period={period} />
-      {error && <p className="rounded-lg bg-error/10 p-3 text-sm text-error">{error}</p>}
+      <FormAlert message={error} className="rounded-lg bg-error/10 p-3" />
       <CompanySummary period={period} />
 
       {period.status === 'draft' && (

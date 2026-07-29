@@ -48,11 +48,13 @@ export function CashAccountList() {
   const [creating, setCreating] = useState(false)
   const [createForm, setCreateForm] = useState<AccountFormState>(emptyForm)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [createSubmitAttempt, setCreateSubmitAttempt] = useState(0)
   const [submitting, setSubmitting] = useState(false)
 
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editForm, setEditForm] = useState<EditFormState>(emptyEditForm)
   const [editError, setEditError] = useState<string | null>(null)
+  const [editSubmitAttempt, setEditSubmitAttempt] = useState(0)
 
   function loadAccounts() {
     setLoading(true)
@@ -78,6 +80,7 @@ export function CashAccountList() {
 
   async function handleCreateSubmit(event: FormEvent) {
     event.preventDefault()
+    setCreateSubmitAttempt((current) => current + 1)
     setCreateError(null)
 
     if (!createForm.name.trim()) {
@@ -122,6 +125,7 @@ export function CashAccountList() {
 
   async function handleEditSubmit(event: FormEvent, id: number) {
     event.preventDefault()
+    setEditSubmitAttempt((current) => current + 1)
     setEditError(null)
 
     if (!editForm.name.trim()) {
@@ -195,7 +199,7 @@ export function CashAccountList() {
 
       {isAdmin && creating && (
         <form onSubmit={handleCreateSubmit} className="max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
-          <FormAlert message={createError} className="mb-4" />
+          <FormAlert message={createError} signal={createSubmitAttempt} className="mb-4" />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-fg-muted">帳戶名稱</label>
@@ -289,7 +293,7 @@ export function CashAccountList() {
                   <tr key={account.id} className="bg-surface-2">
                     <td colSpan={6} className="px-4 py-4">
                       <form onSubmit={(e) => handleEditSubmit(e, account.id)} className="flex flex-col gap-4">
-                        <FormAlert message={editError} />
+                        <FormAlert message={editError} signal={editSubmitAttempt} />
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                           <div>
                             <label className="mb-1 block text-sm font-medium text-fg-muted">帳戶名稱</label>

@@ -282,6 +282,10 @@ describe('Vehicle presentation', () => {
     expect(alert.textContent).toBe('已勾選同步購車付款，請填寫付款金額與付款帳戶')
     expect(document.activeElement).toBe(alert)
     expect(vehiclesApi.createVehicle).not.toHaveBeenCalled()
+
+    submit.focus()
+    fireEvent.submit(submit.closest('form')!)
+    expect(document.activeElement).toBe(alert)
   })
 
   it('keeps high-risk vehicle outcomes and description fields in workflow modals', async () => {
@@ -290,6 +294,9 @@ describe('Vehicle presentation', () => {
 
     await screen.findByRole('heading', { name: '車輛照片' })
     await interaction.click(screen.getByRole('button', { name: '成交結案' }))
+    const modalPanel = screen.getByRole('heading', { name: '成交結案' }).parentElement?.parentElement
+    expect(modalPanel?.className).toContain('max-h-[calc(100dvh-2rem)]')
+    expect(modalPanel?.className).toContain('overflow-y-auto')
     expect(
       screen.getByText('成交日期決定薪資獎金月份；已確認或已發薪月份不能新增成交。收款日期不影響成交月份。'),
     ).toBeTruthy()

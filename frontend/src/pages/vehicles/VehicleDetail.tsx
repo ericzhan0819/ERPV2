@@ -71,7 +71,7 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-lg">
+      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-surface p-6 shadow-lg">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-semibold text-fg">{title}</h3>
           <button onClick={onClose} className="text-sm text-fg-subtle hover:text-fg-muted">

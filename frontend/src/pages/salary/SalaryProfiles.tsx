@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listSalaryProfiles, updateSalaryProfile } from '../../api/salaryProfiles'
 import { listUsers } from '../../api/users'
+import { FormAlert } from '../../components/FormAlert'
 import type { SalaryProfile, SalaryProfilePayload } from '../../types/salary'
 import type { User } from '../../types/user'
 import { apiError, apiValidationErrors } from './salaryUtils'
@@ -80,7 +81,7 @@ export function SalaryProfiles() {
         <Link to="/salary" className="flex min-h-11 items-center text-sm font-medium text-primary">返回薪資月份</Link>
       </div>
 
-      {error && <p className="text-sm text-error">{error}</p>}
+      <FormAlert message={error} />
       {loading && <p className="text-sm text-fg-muted">載入中...</p>}
       {!loading && rows.length === 0 && <p className="text-sm text-fg-muted">目前沒有可設定的員工</p>}
       <div className="grid gap-4">

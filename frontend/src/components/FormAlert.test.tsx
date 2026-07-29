@@ -17,4 +17,25 @@ describe('FormAlert', () => {
     expect(alert.getAttribute('tabindex')).toBe('-1')
     expect(document.activeElement).toBe(alert)
   })
+
+  it('focuses the same error again after a new submit signal', () => {
+    const view = render(
+      <>
+        <FormAlert message="請輸入必要資料" signal={1} />
+        <button type="button">再次送出</button>
+      </>,
+    )
+    const alert = screen.getByRole('alert')
+    expect(document.activeElement).toBe(alert)
+
+    screen.getByRole('button', { name: '再次送出' }).focus()
+    view.rerender(
+      <>
+        <FormAlert message="請輸入必要資料" signal={2} />
+        <button type="button">再次送出</button>
+      </>,
+    )
+
+    expect(document.activeElement).toBe(alert)
+  })
 })

@@ -166,6 +166,7 @@ export function VehicleCreate() {
   const [cashAccounts, setCashAccounts] = useState<CashAccountOption[]>([])
   const [commissionAgents, setCommissionAgents] = useState<CommissionAgent[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [submitAttempt, setSubmitAttempt] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   // 冪等鍵在表單掛載時就固定下來，重試送出必須沿用同一把鍵，
   // 而不是每次送出都重新產生，否則重試會被視為全新請求。
@@ -182,6 +183,7 @@ export function VehicleCreate() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    setSubmitAttempt((current) => current + 1)
     setError(null)
 
     if (!form.license_plate && !form.vin) {
@@ -214,7 +216,7 @@ export function VehicleCreate() {
       <h1 className="text-xl font-semibold text-fg">新增買入車輛</h1>
 
       <form onSubmit={handleSubmit} className="max-w-3xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
-        <FormAlert message={error} className="mb-4" />
+        <FormAlert message={error} signal={submitAttempt} className="mb-4" />
         <SectionTitle>基本車輛資料</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="廠牌" value={form.brand} onChange={(v) => set('brand', v)} required />

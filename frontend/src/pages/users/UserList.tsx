@@ -61,15 +61,18 @@ export function UserList() {
   const [creating, setCreating] = useState(false)
   const [createForm, setCreateForm] = useState<CreateFormState>(emptyCreateForm)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [createSubmitAttempt, setCreateSubmitAttempt] = useState(0)
   const [submitting, setSubmitting] = useState(false)
 
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editForm, setEditForm] = useState<EditFormState>(emptyEditForm)
   const [editError, setEditError] = useState<string | null>(null)
+  const [editSubmitAttempt, setEditSubmitAttempt] = useState(0)
 
   const [resettingId, setResettingId] = useState<number | null>(null)
   const [resetPassword, setResetPassword] = useState('')
   const [resetError, setResetError] = useState<string | null>(null)
+  const [resetSubmitAttempt, setResetSubmitAttempt] = useState(0)
 
   function loadUsers() {
     setLoading(true)
@@ -99,6 +102,7 @@ export function UserList() {
 
   async function handleCreateSubmit(event: FormEvent) {
     event.preventDefault()
+    setCreateSubmitAttempt((current) => current + 1)
     setCreateError(null)
     setSuccessMessage(null)
 
@@ -156,6 +160,7 @@ export function UserList() {
 
   async function handleEditSubmit(event: FormEvent, id: number) {
     event.preventDefault()
+    setEditSubmitAttempt((current) => current + 1)
     setEditError(null)
     setSuccessMessage(null)
 
@@ -237,6 +242,7 @@ export function UserList() {
 
   async function handleResetSubmit(event: FormEvent, id: number) {
     event.preventDefault()
+    setResetSubmitAttempt((current) => current + 1)
     setResetError(null)
     setSuccessMessage(null)
 
@@ -289,7 +295,7 @@ export function UserList() {
 
       {creating && (
         <form onSubmit={handleCreateSubmit} className="max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
-          <FormAlert message={createError} className="mb-4" />
+          <FormAlert message={createError} signal={createSubmitAttempt} className="mb-4" />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-fg-muted">姓名 *</label>
@@ -442,7 +448,7 @@ export function UserList() {
                     <tr key={user.id} className="bg-surface-2">
                       <td colSpan={7} className="px-4 py-4">
                         <form onSubmit={(e) => handleEditSubmit(e, user.id)} className="flex flex-col gap-4">
-                          <FormAlert message={editError} />
+                          <FormAlert message={editError} signal={editSubmitAttempt} />
                           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
                               <label className="mb-1 block text-sm font-medium text-fg-muted">姓名 *</label>
@@ -528,7 +534,7 @@ export function UserList() {
                     <tr key={user.id} className="bg-surface-2">
                       <td colSpan={7} className="px-4 py-4">
                         <form onSubmit={(e) => handleResetSubmit(e, user.id)} className="flex flex-col gap-4">
-                          <FormAlert message={resetError} />
+                          <FormAlert message={resetError} signal={resetSubmitAttempt} />
                           <div className="max-w-sm">
                             <label className="mb-1 block text-sm font-medium text-fg-muted">{user.name} 的新密碼</label>
                             <input
