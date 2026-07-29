@@ -6,7 +6,7 @@ v1.3 薪資結算的功能實作、自動測試、真實 MariaDB 並發／時區
 
 v1.4 資訊架構與 UI／UX 改版第 0～14 部分已完成。Dashboard、Vehicle Card Grid、URL Filter、Mobile Drawer、RWD、light／dark mode 與 Safe Area 均通過工程驗證及 Browser Manual Smoke。最終 backend regression 為 519 tests（504 passed、15 environment-gated skipped）／2516 assertions；第 10 部分另於可拋棄 MariaDB 10.11 schema 完成 3 個時區邊界測試／35 assertions。Frontend 14 tests、lint、typecheck 與 production build 通過；Firefox 獨立環境完成三角色、Action／KPI 導流、Filter、320／375／390／768／Desktop 與鍵盤操作，使用者亦以真實手機確認中文輸入法及 iPhone Safari Sidebar、Safe Area、light／dark mode。封板前 follow-up 已修正 CustomerSelect 空白搜尋後編輯卡住狀態，以及 MoneyEntry 載入期間短暫顯示過期分頁資訊；runtime 與 follow-up 基準為 `a10dd0c`，完成文件已對齊。完整證據與部署邊界見 `docs/v1.4-smoke-report.md` 與 `docs/v1.4-handoff.md`；已以 `v1.4-smoke-passed` tag 封板，tag 指向 `d4ea978`。
 
-v1.5 帳號自助管理與系統識別集中化第 0～16 部分已完成。管理員建立員工或重設密碼後，員工必須以預設密碼登入並先完成強制改密碼；一般營運 API 由後端 fail-closed gate 阻擋，不能只靠前端導頁。使用者可在「我的帳號」修改顯示名稱、username 與密碼，但不能自行修改 Email、角色或啟用狀態。登入接受 username 或 Email，兩個 alias 共用同一實際帳號的 limiter。系統名稱集中在 `frontend/src/config/app.ts`，沒有新增線上 Settings 模組。完整自動回歸、Firefox／Desktop Chrome 工程預驗證、使用者 Desktop Chrome／Mobile Safari manual smoke 與封板審查均已通過；證據見 `docs/v1.5-smoke-report.md` 與 `docs/v1.5-handoff.md`。v1.5 已以 `v1.5-smoke-passed` annotated tag 封板；tag 尚未推送至 origin。
+v1.5 帳號自助管理與系統識別集中化第 0～16 部分已完成。管理員建立員工或重設密碼後，員工必須以預設密碼登入並先完成強制改密碼；一般營運 API 由後端 fail-closed gate 阻擋，不能只靠前端導頁。使用者可在「我的帳號」修改顯示名稱、username 與密碼，但不能自行修改 Email、角色或啟用狀態。登入接受 username 或 Email，兩個 alias 共用同一實際帳號的 limiter。系統名稱集中在 `frontend/src/config/app.ts`，沒有新增線上 Settings 模組。完整自動回歸、Firefox／Desktop Chrome 工程預驗證、使用者 Desktop Chrome／Mobile Safari manual smoke 與封板審查均已通過；證據見 `docs/v1.5-smoke-report.md` 與 `docs/v1.5-handoff.md`。v1.5 已以 `v1.5-smoke-passed` annotated tag 封板；main 與 tag 已推送至 origin。
 
 ### v1.3 薪資公式
 

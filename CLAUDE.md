@@ -14,7 +14,8 @@ v1.1：實務工作流補強已完成 smoke，並以 `v1.1-smoke-passed` tag 封
 v1.2：車輛圖片與官網公開車輛資料前置階段已完成 smoke，並以 `v1.2-smoke-passed` tag 封版。
 v1.3：薪資結算工程實作、自動回歸、RWD／dark mode 驗證與使用者 browser manual smoke 已通過，並以 `v1.3-smoke-passed` tag 封板。
 v1.4：資訊架構與 UI／UX 改版、自動回歸、三角色 browser manual smoke 與真實 iPhone Safari 複驗已完成，並以 `v1.4-smoke-passed` tag 封板；tag 指向 `d4ea978`，runtime 與封板前修正基準為 `a10dd0c`。
-v1.5：帳號自助管理與系統識別集中化工程實作、自動回歸、Desktop Chrome／Mobile Safari browser manual smoke、封板審查與文件交接已完成，並以 `v1.5-smoke-passed` annotated tag 封板；tag 尚未推送至 origin。
+v1.5：帳號自助管理與系統識別集中化工程實作、自動回歸、Desktop Chrome／Mobile Safari browser manual smoke、封板審查與文件交接已完成，並以 `v1.5-smoke-passed` annotated tag 封板；main 與 tag 已推送至 origin。
+v1.6：介面文案精簡與資訊層級優化已完成企劃與 PLAN，尚未開始 runtime 實作；限純前端 UX Copy cleanup，不新增功能或修改後端契約。
 ```
 
 核心目標不是擴張成完整 ERP，而是讓中古車行日常營運能穩定落地：車輛進來、建檔、整備、上架、保留、收款、成交、列印收支明細與查看營運摘要。
@@ -119,6 +120,18 @@ v1.5 任務必須閱讀：
 5. `docs/current-state.md`
 6. `backend/API.md`
 7. 相關 Auth／User migration、Model、Request、Controller、Service、Resource、middleware、routes、tests、前端 API、Auth Context、頁面與 app config
+
+### v1.6 介面文案精簡文件
+
+v1.6 任務必須閱讀：
+
+1. `企劃書_v1.6.md`
+2. `PLAN_v1.6.md`
+3. `UI.md`
+4. `docs/current-state.md`
+5. `docs/v1.5-smoke-report.md`
+6. `docs/v1.5-handoff.md`
+7. 所有受影響的 frontend pages、components、tests 與 accessibility attributes
 
 不得只看單一檔案就直接大量改碼。實作前必須先檢查既有目錄、路由、Service、Request、Resource、測試與前端 API 型別。
 
@@ -240,6 +253,37 @@ v1.3 重要邊界：
 * 薪資資料初版只開放 admin；manager／sales 不得讀取任何薪資 API 或畫面。
 
 v1.3 不代表開放完整 HR、打卡、排班、請假、官方勞健保級距計算、所得稅扣繳、銀行薪轉檔或正式會計。
+
+---
+
+## v1.6 實作範圍
+
+v1.6 只做 `企劃書_v1.6.md` 與 `PLAN_v1.6.md` 明確列出的介面文案精簡與資訊層級優化。
+
+v1.6 允許：
+
+* 移除重述頁名、按鈕用途、狀態或控制位置的副標與教學句。
+* 縮短常駐 help text。
+* 依既有前端狀態將提示改為條件式顯示。
+* 將只供 assistive technology 使用的非關鍵描述改為 `sr-only`。
+* 調整因文案刪減造成的 spacing、typography 與 Card 高度。
+* 更新 frontend tests、`UI.md`、README、current-state、smoke report 與 handoff。
+
+v1.6 必須保留：
+
+* approved-only、成交月份、期末餘額等金額與統計口徑。
+* 薪資月份鎖定、方案唯讀、發薪與公司分配等非直覺規則。
+* 重設密碼、Session 失效、首次改密碼與不可逆操作後果。
+* Error、success、warning、empty state 與 disabled reason。
+* visible labels、required marker、per-field error、heading hierarchy 與有效的 `aria-describedby`。
+
+v1.6 禁止：
+
+* 修改 backend、migration、API contract、Business Logic、Workflow、roles、permissions 或 Resource 遮蔽。
+* 修改 Dashboard 統計、URL Filter、薪資公式、車輛流程或收支審核規則。
+* 新增頁面、路由、KPI、圖表、報表、通知、Onboarding、Tooltip／Popover 平台或 runtime dependency。
+* 把重要規則只藏在 hover `title` 或 tooltip。
+* 以縮小字體、壓縮 line-height 或破壞無障礙來達成「少字」。
 
 ---
 
@@ -495,6 +539,16 @@ UI 風格遵守 `UI.md`：
 * per-field error message
 * 成功提示
 
+v1.6 UI Copy 額外原則：
+
+* 正常狀態保持安靜；例外、限制、風險與錯誤才說明。
+* 頁面副標若只重述頁名或說明「可以在這裡管理」，應移除。
+* 不言自明的 Card description 與按鈕教學應移除。
+* 高風險與金額口徑文案可以縮短，但不得消失。
+* 重要資訊不得只靠 hover；keyboard、touch 與 screen reader 必須可取得。
+* 刪除 help text 時同步檢查 `aria-describedby` 與測試 selector。
+* 不把企劃書完整規格直接傾倒到 UI。
+
 桌機優先，手機需可基本操作。
 
 ---
@@ -559,6 +613,8 @@ UI 風格遵守 `UI.md`：
 4. 修改範圍限於視覺階層、排版、間距、響應式、元件呈現、互動回饋與色彩。
 5. 不得使用假資料掩飾功能缺口，不得把 UI 任務擴張成後端或資料庫修改。
 6. 修改後至少執行前端型別檢查、lint 或 build 中可用且相關的驗證。
+7. v1.6 文案任務需逐頁確認刪除資訊已由標題、控制項、狀態、錯誤或條件式提示承接；不得只以「看起來太多」作為刪除理由。
+8. v1.6 不得要求把所有被刪文字改放 Tooltip，也不得把 UX Copy cleanup 擴張成全站視覺重做。
 
 ### 例外：使用者明確要求 Claude 實作
 
@@ -658,7 +714,9 @@ UI 風格遵守 `UI.md`：
 
 v1.4 對立性審查必須維持 Presentation Layer 邊界：不得新增 migration、schema、商業公式、Workflow、角色或權限；Dashboard 只能總覽與導流，不得加入 Table、車輛列表、展開明細、通知或薪資 KPI；Vehicle List 不得回傳收購價、毛利、完整相簿或其他敏感資料；sales 的 Dashboard 原始 JSON 必須真正移除財務欄位。Filter 的 URL 還原、`sold_month` 台北月份半開區間、approved-only 統計及 iOS Safe Area 行為不可在收尾時回歸。
 
-v1.5 第 0～16 部分已完成。審查證據見 `docs/v1.5-smoke-report.md` 與 `docs/v1.5-handoff.md`。v1.5 對立性審查必須維持帳號自助管理邊界：密碼值不得進入 API、Audit 或 log；username／Email 必須共用 canonical account limiter；所有 authenticated 營運路由預設受 `must_change_password` gate 保護，只有 `/api/me`、self profile、self password 與登出流程可用；self endpoint 不可修改 Email、role、is_admin、is_active 或其他管理欄位；前端 app config 只能是 source-controlled presentation config，不得擴張成 Database settings、線上設定頁、MFA、SSO、Email reset 或裝置／Session 管理。Annotated tag 仍須使用者明確授權。
+v1.5 第 0～16 部分已完成。審查證據見 `docs/v1.5-smoke-report.md` 與 `docs/v1.5-handoff.md`。v1.5 對立性審查必須維持帳號自助管理邊界：密碼值不得進入 API、Audit 或 log；username／Email 必須共用 canonical account limiter；所有 authenticated 營運路由預設受 `must_change_password` gate 保護，只有 `/api/me`、self profile、self password 與登出流程可用；self endpoint 不可修改 Email、role、is_admin、is_active 或其他管理欄位；前端 app config 只能是 source-controlled presentation config，不得擴張成 Database settings、線上設定頁、MFA、SSO、Email reset 或裝置／Session 管理。`v1.5-smoke-passed` annotated tag 已獲使用者授權並推送至 origin。
+
+v1.6 已完成企劃與 PLAN，尚未開始 runtime 實作。v1.6 review 目標是證明文案精簡沒有刪除關鍵業務資訊、破壞 accessibility 或改變既有功能。Review 必須檢查 approved-only／成交月份／期末餘額等口徑、薪資與成交鎖定、重設密碼與 Session 失效後果、條件式 warning、disabled reason、broken `aria-describedby`、Mobile overflow，以及是否偷偷新增 backend、API、schema、dependency、頁面、KPI、報表、通知或 Tooltip 平台。純文案偏好且沒有可觀察失敗模式的意見，不應列為 finding。
 
 Claude 審查時必須特別檢查：
 

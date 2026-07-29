@@ -14,7 +14,8 @@ v1.1：實務工作流補強已完成 smoke，並以 `v1.1-smoke-passed` tag 封
 v1.2：車輛圖片與官網公開資料前置已完成 smoke，並以 `v1.2-smoke-passed` tag 封版。
 v1.3：薪資結算工程實作、自動回歸與使用者 browser manual smoke 已通過，並以 `v1.3-smoke-passed` tag 封版。
 v1.4：資訊架構與 UI／UX 改版、自動回歸、三角色 browser manual smoke 與真實 iPhone Safari 複驗已完成，並以 `v1.4-smoke-passed` tag 封板；tag 指向 `d4ea978`，runtime 與封板前修正基準為 `a10dd0c`。
-v1.5：帳號自助管理與系統識別集中化工程實作、自動回歸、Desktop Chrome／Mobile Safari browser manual smoke、封板審查與文件交接已完成，並以 `v1.5-smoke-passed` annotated tag 封板；tag 尚未推送至 origin。
+v1.5：帳號自助管理與系統識別集中化工程實作、自動回歸、Desktop Chrome／Mobile Safari browser manual smoke、封板審查與文件交接已完成，並以 `v1.5-smoke-passed` annotated tag 封板；main 與 tag 已推送至 origin。
+v1.6：介面文案精簡與資訊層級優化已完成企劃與 PLAN，尚未開始 runtime 實作。此版本限純前端 UX Copy cleanup，不新增功能或修改後端契約。
 ```
 
 ---
@@ -56,6 +57,7 @@ Codex 應完成使用者授權範圍內的實作，不把主要工程工作轉�
 - v1.3：`企劃書_v1.3.md`、`PLAN_v1.3.md`、`docs/v1.3-smoke-report.md`、`docs/v1.3-handoff.md`
 - v1.4：`企劃書_v1.4.md`、`PLAN_v1.4.md`、`docs/v1.4-smoke-report.md`、`docs/v1.4-handoff.md`、`docs/current-state.md`、`backend/API.md`
 - v1.5：`企劃書_v1.5.md`、`PLAN_v1.5.md`、`docs/v1.5-smoke-report.md`、`docs/v1.5-handoff.md`、`docs/current-state.md`、`backend/API.md`
+- v1.6：`企劃書_v1.6.md`、`PLAN_v1.6.md`、`UI.md`、`docs/current-state.md`；實作完成後再建立 `docs/v1.6-smoke-report.md` 與 `docs/v1.6-handoff.md`
 
 不得只看完成報告或單一檔案就直接大量改碼。先搜尋並確認既有路由、Controller、FormRequest、Service、Model、Policy、Resource、migration、tests、前端 API、types 與相關頁面。
 
@@ -171,11 +173,15 @@ preparing → listed → reserved → sold
 
 v1.1、v1.2、v1.3、v1.4、v1.5 均已完成既定工程範圍。除非使用者明確要求 hotfix，否則不得回開舊版或繼續塞入新功能。
 
+v1.6 已完成規劃但尚未實作。只依 `企劃書_v1.6.md` 與 `PLAN_v1.6.md` 進行介面文案精簡與資訊層級優化，不得將「減少副標與註解」擴張成新功能、整站重新設計或後端變更。
+
 v1.3 薪資結算必須維持既有範圍與資料保護，包括薪資設定、收／賣車歸屬、版本化獎金方案、approved-only 毛利、整月跨級獎金、薪資草稿／鎖定／發薪與專用 MoneyEntry 保護。
 
 v1.4 必須維持 Presentation Layer 邊界：Dashboard 只做總覽與 URL Filter 導流；Vehicle List 使用 Card Grid 與封面縮圖；Filter 支援 URL 還原與 Mobile Drawer；不得藉 UI 收尾新增 schema、商業公式、Workflow、角色、權限、通知或報表。
 
 v1.5 必須維持帳號體驗補強邊界：username／Email 雙登入需共用 alias-safe limiter；`must_change_password` 必須由後端 fail-closed gate 強制；self endpoint 只能修改 name、username 與 password；系統識別維持 source-controlled 前端 config。不得擴張為自助註冊、Email reset／驗證、MFA、SSO、裝置／Session 管理、Database settings、線上設定頁或多公司品牌切換。
+
+v1.6 必須維持純前端 UX Copy 邊界：移除重複教學、縮短常駐 help text、將只在特定狀態成立的資訊改為條件式顯示；金額口徑、不可逆後果、錯誤、warning 與無障礙描述仍須保留。不得修改 schema、API、Business Logic、Workflow、角色、權限、Dashboard 統計、URL Filter 或既有操作流程；不得新增 Tooltip／Popover 平台、Onboarding、通知、頁面、路由、KPI、圖表、報表或 runtime dependency。
 
 禁止擴張為：
 
@@ -204,6 +210,16 @@ API 呼叫集中在 `frontend/src/api` 對應模組，不得在元件內散落 U
 - 沿用既有語意色彩 token
 - 表單有 visible labels、required marker 與 per-field error
 - 不使用假資料
+
+v1.6 UI Copy 額外遵守：
+
+- 正常狀態保持安靜；例外、限制、風險與錯誤才說明。
+- 頁面副標若只重述頁名或說明「可以在這裡管理」，應移除。
+- 不言自明的 Card description、按鈕教學與控制位置說明應移除。
+- 金額口徑、approved-only、成交月份、期末餘額、薪資鎖定、Session 失效與不可逆後果不得為了少字而刪除。
+- 重要資訊不得只放在 hover `title` 或 tooltip；Mobile、keyboard 與 screen reader 必須能取得。
+- 刪除 help text 時同步檢查 `aria-describedby`，不得留下失效 ID。
+- 不以縮小字體或壓縮 line-height 取代真正的資訊減法。
 
 若任務是功能實作，Codex 同時負責必要 UI。若使用者明確把純 UI 設計或調色交給 Claude，Codex 應保留 API、資料流、權限與驗證邊界，避免與 Claude 的視覺修改互相覆蓋。
 
