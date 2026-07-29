@@ -541,68 +541,68 @@ v1.6 不修改 backend，但封板前仍建立完整回歸證據。
 
 ### 13.1 環境
 
-- [ ] 使用真實 Laravel API
-- [ ] 使用真實資料或專用 smoke fixtures，不使用假前端資料
-- [ ] 準備 admin／manager／sales 三角色
-- [ ] 準備 Dashboard 有值、空值、pending 與不同車輛狀態的資料
-- [ ] 準備薪資當月、已確認／已發薪或可安全模擬的狀態
+- [x] 使用真實 Laravel API
+- [x] 使用真實資料或專用 smoke fixtures，不使用假前端資料
+- [x] 準備 admin／manager／sales 三角色
+- [x] 準備 Dashboard 有值、空值、pending 與不同車輛狀態的資料
+- [x] 準備薪資當月、已確認／已發薪或可安全模擬的狀態
 
 ### 13.2 Desktop
 
-- [ ] 1440px light mode
-- [ ] 1440px dark mode
-- [ ] Dashboard 所有區塊
-- [ ] Account／User
-- [ ] Vehicle／MoneyEntry／Customer
-- [ ] Salary／Audit／Cash Account
-- [ ] 車輛建檔／成交結案紙本與 PDF 預覽
-- [ ] Keyboard-only 主要操作
-- [ ] 真實 screen reader 驗證 error live region 與 focus 不會重複朗讀
-- [ ] 真實 screen reader 抽查既有 sibling visible label 的欄位名稱與操作理解
-- [ ] 錯誤、warning、success、empty state
+- [x] 1440px light mode
+- [x] 1440px dark mode
+- [x] Dashboard 所有區塊
+- [x] Account／User
+- [x] Vehicle／MoneyEntry／Customer
+- [x] Salary／Audit／Cash Account
+- [x] 車輛建檔／成交結案紙本與 PDF 預覽
+- [x] Keyboard-only 主要操作
+- [x] 真實 screen reader 驗證 error live region 與 focus 不會重複朗讀
+- [x] 真實 screen reader 抽查既有 sibling visible label 的欄位名稱與操作理解
+- [x] 錯誤、warning、success、empty state
 
 ### 13.3 Tablet／Mobile
 
-- [ ] 768px light／dark
-- [ ] 390px light／dark
-- [ ] 375px light／dark
-- [ ] 320px light／dark
-- [ ] 頁面 Header 與主要 action 不擁擠
-- [ ] 刪除副標後沒有不合理大空白
-- [ ] 長 warning 只在需要時出現且不造成整頁 overflow
-- [ ] Form label／error 不被截斷
-- [ ] 新增收支送出多欄錯誤後，320～390px 仍可感知並修正第一個錯誤
-- [ ] 員工／資金帳戶等寬表格可橫向捲動，self 短句換行不破版
-- [ ] Modal／Drawer 可操作
-- [ ] Safe Area 與底部空間不回歸
+- [x] 768px light／dark
+- [x] 390px light／dark
+- [x] 375px light／dark
+- [x] 320px light／dark
+- [x] 頁面 Header 與主要 action 不擁擠
+- [x] 刪除副標後沒有不合理大空白
+- [x] 長 warning 只在需要時出現且不造成整頁 overflow
+- [x] Form label／error 不被截斷
+- [x] 新增收支送出多欄錯誤後，320～390px 仍可感知並修正第一個錯誤
+- [x] 員工／資金帳戶等寬表格可橫向捲動，self 短句換行不破版
+- [x] Modal／Drawer 可操作
+- [x] Safe Area 與底部空間不回歸
 
 ### 13.4 三角色
 
 Admin：
 
-- [ ] Dashboard 財務與待審核 KPI
-- [ ] 員工管理
-- [ ] 資金帳戶
-- [ ] 薪資與 Audit
-- [ ] 高風險文案仍完整
+- [x] Dashboard 財務與待審核 KPI
+- [x] 員工管理
+- [x] 資金帳戶
+- [x] 薪資與 Audit
+- [x] 高風險文案仍完整
 
 Manager：
 
-- [ ] Dashboard 財務 KPI
-- [ ] 車輛、收支、客戶流程
-- [ ] 不出現 admin-only 教學或入口
+- [x] Dashboard 財務 KPI
+- [x] 車輛、收支、客戶流程
+- [x] 不出現 admin-only 教學或入口
 
 Sales：
 
-- [ ] Dashboard 不出現財務 KPI
-- [ ] 車輛、客戶、銷售收款流程可理解
-- [ ] 不因文案刪減誤導權限或敏感金額
+- [x] Dashboard 不出現財務 KPI
+- [x] 車輛、客戶、銷售收款流程可理解
+- [x] 不因文案刪減誤導權限或敏感金額
 
 ### 13.5 工程 smoke 紀錄
 
-- [ ] 建立 `docs/v1.6-phase-smoke-report.md` 或直接累積於正式 smoke report
-- [ ] 記錄瀏覽器版本、寬度、角色、測試資料與結果
-- [ ] 截圖只作輔助證據，不取代操作驗證
+- [x] 建立 `docs/v1.6-phase-smoke-report.md` 或直接累積於正式 smoke report
+- [x] 記錄瀏覽器版本、寬度、角色、測試資料與結果
+- [x] 截圖只作輔助證據，不取代操作驗證
 
 ---
 

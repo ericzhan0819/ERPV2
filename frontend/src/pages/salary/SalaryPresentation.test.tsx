@@ -237,6 +237,42 @@ describe('salary copy presentation', () => {
     ).toBe(false)
   })
 
+  it('keeps the adjustment dialog keyboard-operable and returns focus', async () => {
+    const period = salaryPeriod('draft')
+    period.settlements = [{
+      id: 1,
+      user_id: 2,
+      user: { id: 2, name: '測試員工' },
+      eligible_sales_count: 0,
+      sales_bonus_bps: 0,
+      base_salary: 30000,
+      fixed_allowance: 0,
+      labor_insurance_deduction: 0,
+      health_insurance_deduction: 0,
+      purchase_bonus_total: 0,
+      sales_bonus_total: 0,
+      manual_addition_total: 0,
+      manual_deduction_total: 0,
+      gross_pay: 30000,
+      deduction_total: 0,
+      net_pay: 30000,
+      has_payment_entry: false,
+      items: [],
+    }]
+    const interaction = userEvent.setup()
+    renderSalaryDetail(period)
+
+    const trigger = await screen.findByRole('button', { name: '新增加扣項' })
+    await interaction.click(trigger)
+    const dialog = screen.getByRole('dialog', { name: '新增手動加扣項' })
+    expect(dialog.getAttribute('aria-modal')).toBe('true')
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: '取消' }))
+
+    await interaction.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: '新增手動加扣項' })).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+  })
+
   it.each([
     ['confirmed', '本月已確認，薪資快照與車輛歸屬已鎖定。'],
     ['paid', '已於 2026-07-02 由 營運帳戶 發薪；薪資快照與車輛歸屬已鎖定，本月份唯讀。'],

@@ -13,7 +13,7 @@ describe('FormAlert', () => {
 
     const alert = screen.getByRole('alert')
     expect(alert.textContent).toBe('儲存失敗')
-    expect(alert.getAttribute('aria-live')).toBe('assertive')
+    expect(alert.getAttribute('aria-live')).toBe('off')
     expect(alert.getAttribute('tabindex')).toBe('-1')
     expect(document.activeElement).toBe(alert)
   })
@@ -48,6 +48,7 @@ describe('FormAlert', () => {
     )
 
     expect(screen.getByRole('alert').textContent).toBe('列表載入失敗')
+    expect(screen.getByRole('alert').getAttribute('aria-live')).toBe('assertive')
     expect(document.activeElement).toBe(screen.getByRole('textbox', { name: '搜尋' }))
   })
 })

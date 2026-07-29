@@ -23,7 +23,7 @@ export function FormAlert({
     <p
       ref={alertRef}
       role="alert"
-      aria-live="assertive"
+      aria-live={focusOnShow ? 'off' : 'assertive'}
       tabIndex={-1}
       className={`text-sm text-error ${className}`}
     >

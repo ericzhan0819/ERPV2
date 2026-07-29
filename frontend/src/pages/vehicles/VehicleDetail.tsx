@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { isAxiosError } from 'axios'
@@ -29,6 +29,7 @@ import { ApprovalStatusBadge } from '../../components/ApprovalStatusBadge'
 import { CustomerSelect } from '../../components/CustomerSelect'
 import { FormAlert } from '../../components/FormAlert'
 import { useAuth } from '../../hooks/useAuth'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
 import {
   canManageVehicles,
   canManageVehiclePhotos,
@@ -69,12 +70,21 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const { dialogRef, initialFocusRef } = useDialogFocus<HTMLDivElement>(onClose)
+  const titleId = useId()
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-surface p-6 shadow-lg">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-surface p-6 shadow-lg"
+      >
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-base font-semibold text-fg">{title}</h3>
-          <button onClick={onClose} className="text-sm text-fg-subtle hover:text-fg-muted">
+          <h3 id={titleId} className="text-base font-semibold text-fg">{title}</h3>
+          <button ref={initialFocusRef} onClick={onClose} className="text-sm text-fg-subtle hover:text-fg-muted">
             關閉
           </button>
         </div>

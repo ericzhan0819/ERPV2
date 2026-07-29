@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { listCashAccounts } from '../../api/cashAccounts'
 import { FormAlert } from '../../components/FormAlert'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
 import { listSalaryProfiles } from '../../api/salaryProfiles'
 import {
   addSalaryAdjustment,
@@ -512,10 +513,18 @@ function AdjustmentModal({ form, busy, onChange, onSave, onCancel }: {
   onSave: () => void
   onCancel: () => void
 }) {
+  const { dialogRef, initialFocusRef } = useDialogFocus<HTMLDivElement>(onCancel)
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-3 sm:p-4">
-      <div className="max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-4 shadow-lg sm:p-6">
-        <h2 className="font-semibold">新增手動加扣項</h2>
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="salary-adjustment-dialog-title"
+        className="max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-4 shadow-lg sm:p-6"
+      >
+        <h2 id="salary-adjustment-dialog-title" className="font-semibold">新增手動加扣項</h2>
         <div className="mt-4 grid gap-3">
           <label className="text-sm">
             類型 <span className="text-error">*</span>
@@ -556,7 +565,7 @@ function AdjustmentModal({ form, busy, onChange, onSave, onCancel }: {
           >
             新增
           </button>
-          <button onClick={onCancel} className="min-h-11 rounded-lg border border-border-strong px-4 py-2 text-sm">取消</button>
+          <button ref={initialFocusRef} onClick={onCancel} className="min-h-11 rounded-lg border border-border-strong px-4 py-2 text-sm">取消</button>
         </div>
       </div>
     </div>

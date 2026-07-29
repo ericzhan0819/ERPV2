@@ -56,7 +56,10 @@ export function MoneyEntryCreate() {
 
   useEffect(() => {
     if (validationAttempt === 0) return
-    formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
+    const timeout = window.setTimeout(() => {
+      formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
+    }, 100)
+    return () => window.clearTimeout(timeout)
   }, [validationAttempt])
 
   const categoryOptions = categoriesForDirection(direction)

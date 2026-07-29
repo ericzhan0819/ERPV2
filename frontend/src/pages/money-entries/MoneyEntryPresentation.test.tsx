@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -119,7 +119,9 @@ describe('Money entry presentation', () => {
       expect(field.getAttribute('aria-invalid')).toBe('true')
       expect(document.getElementById(errorId)?.textContent).toBe(message)
     }
-    expect(document.activeElement).toBe(screen.getByLabelText('日期'))
+    await waitFor(() => {
+      expect(document.activeElement).toBe(screen.getByLabelText('日期'))
+    })
     expect(moneyEntriesApi.createMoneyEntry).not.toHaveBeenCalled()
 
     const amount = screen.getByLabelText('金額') as HTMLInputElement

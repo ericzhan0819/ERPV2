@@ -293,17 +293,22 @@ describe('Vehicle presentation', () => {
     renderDetail()
 
     await screen.findByRole('heading', { name: '車輛照片' })
-    await interaction.click(screen.getByRole('button', { name: '成交結案' }))
-    const modalPanel = screen.getByRole('heading', { name: '成交結案' }).parentElement?.parentElement
+    const closeSaleTrigger = screen.getByRole('button', { name: '成交結案' })
+    await interaction.click(closeSaleTrigger)
+    const modalPanel = screen.getByRole('dialog', { name: '成交結案' })
     expect(modalPanel?.className).toContain('max-h-[calc(100dvh-2rem)]')
     expect(modalPanel?.className).toContain('overflow-y-auto')
+    expect(modalPanel.getAttribute('aria-modal')).toBe('true')
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: '關閉' }))
     expect(
       screen.getByText('成交日期決定薪資獎金月份；已確認或已發薪月份不能新增成交。收款日期不影響成交月份。'),
     ).toBeTruthy()
     const soldDateLabel = screen.getByText('成交日期（預設今天）')
     expect(soldDateLabel.nextElementSibling).toHaveProperty('type', 'date')
 
-    await interaction.click(screen.getByRole('button', { name: '關閉' }))
+    await interaction.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: '成交結案' })).toBeNull()
+    expect(document.activeElement).toBe(closeSaleTrigger)
     await interaction.click(screen.getByRole('button', { name: '上報整備支出' }))
     expect(screen.getByText('送出後直接計入正式支出。')).toBeTruthy()
     const descriptionLabel = screen.getAllByText('說明').find((element) => element.tagName === 'LABEL')

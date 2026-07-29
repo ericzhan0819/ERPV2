@@ -206,8 +206,9 @@ export function CashAccountList() {
           <FormAlert message={createError} signal={createSubmitAttempt} focusOnShow className="mb-4" />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">帳戶名稱</label>
+              <label htmlFor="cash-account-create-name" className="mb-1 block text-sm font-medium text-fg-muted">帳戶名稱</label>
               <input
+                id="cash-account-create-name"
                 type="text"
                 required
                 value={createForm.name}
@@ -216,8 +217,9 @@ export function CashAccountList() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">類型</label>
+              <label htmlFor="cash-account-create-type" className="mb-1 block text-sm font-medium text-fg-muted">類型</label>
               <select
+                id="cash-account-create-type"
                 value={createForm.type}
                 onChange={(e) => setCreateForm((f) => ({ ...f, type: e.target.value as CashAccountType }))}
                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
@@ -228,8 +230,9 @@ export function CashAccountList() {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">期初餘額</label>
+              <label htmlFor="cash-account-create-opening-balance" className="mb-1 block text-sm font-medium text-fg-muted">期初餘額</label>
               <input
+                id="cash-account-create-opening-balance"
                 type="number"
                 required
                 min={0}
@@ -300,8 +303,9 @@ export function CashAccountList() {
                         <FormAlert message={editError} signal={editSubmitAttempt} focusOnShow />
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                           <div>
-                            <label className="mb-1 block text-sm font-medium text-fg-muted">帳戶名稱</label>
+                            <label htmlFor={`cash-account-${account.id}-name`} className="mb-1 block text-sm font-medium text-fg-muted">帳戶名稱</label>
                             <input
+                              id={`cash-account-${account.id}-name`}
                               type="text"
                               required
                               value={editForm.name}
@@ -310,8 +314,9 @@ export function CashAccountList() {
                             />
                           </div>
                           <div>
-                            <label className="mb-1 block text-sm font-medium text-fg-muted">類型</label>
+                            <label htmlFor={`cash-account-${account.id}-type`} className="mb-1 block text-sm font-medium text-fg-muted">類型</label>
                             <select
+                              id={`cash-account-${account.id}-type`}
                               value={editForm.type}
                               onChange={(e) => setEditForm((f) => ({ ...f, type: e.target.value as CashAccountType }))}
                               className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
@@ -322,8 +327,9 @@ export function CashAccountList() {
                             </select>
                           </div>
                           <div>
-                            <label className="mb-1 block text-sm font-medium text-fg-muted">期初餘額</label>
+                            <label htmlFor={`cash-account-${account.id}-opening-balance`} className="mb-1 block text-sm font-medium text-fg-muted">期初餘額</label>
                             <input
+                              id={`cash-account-${account.id}-opening-balance`}
                               type="number"
                               required
                               min={0}
