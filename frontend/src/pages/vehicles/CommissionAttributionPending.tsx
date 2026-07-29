@@ -69,10 +69,7 @@ export function CommissionAttributionPending() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold text-fg">待補獎金歸屬</h1>
-          <p className="mt-1 text-sm text-fg-muted">補齊歷史已售車輛的實際收車人與賣車人</p>
-        </div>
+        <h1 className="min-w-0 text-xl font-semibold text-fg">待補獎金歸屬</h1>
         <Link to="/vehicles" className="flex min-h-11 items-center rounded-lg border border-border-strong px-4 py-2 text-sm text-fg-muted hover:bg-surface-2">
           返回車輛列表
         </Link>

@@ -356,10 +356,7 @@ export function VehicleList() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-fg">車輛管理</h1>
-          <p className="mt-1 text-sm text-fg-muted">車輛庫存與銷售狀態總覽</p>
-        </div>
+        <h1 className="text-xl font-semibold text-fg">車輛管理</h1>
         <div className="flex flex-wrap gap-3">
           {user?.role === 'admin' && (
             <Link

@@ -210,10 +210,7 @@ export function VehicleCreate() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-semibold text-fg">新增買入車輛</h1>
-        <p className="mt-1 text-sm text-fg-muted">建立後系統會自動產生庫存編號，狀態為整備中</p>
-      </div>
+      <h1 className="text-xl font-semibold text-fg">新增買入車輛</h1>
 
       <form onSubmit={handleSubmit} className="max-w-3xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <SectionTitle>基本車輛資料</SectionTitle>

@@ -42,7 +42,6 @@ export function Login() {
         className="w-full max-w-sm rounded-2xl border border-border bg-surface p-8 shadow-sm"
       >
         <h1 className="text-xl font-semibold text-fg">{appConfig.systemName}</h1>
-        <p className="mt-1 text-sm text-fg-muted">{appConfig.loginSubtitle}</p>
         <p
           role="status"
           aria-live="polite"

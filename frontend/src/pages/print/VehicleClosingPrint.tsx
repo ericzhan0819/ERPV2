@@ -43,7 +43,7 @@ export function VehicleClosingPrint() {
         </button>
       </div>
 
-      <div className="print-title">成交結案收支明細</div>
+      <h1 className="print-title">成交結案收支明細</h1>
       <div className="print-meta">列印日期：{formatBusinessDateTime(printedAt)}</div>
 
       <div className="print-section">

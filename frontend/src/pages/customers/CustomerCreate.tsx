@@ -95,10 +95,7 @@ export function CustomerCreate() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-semibold text-fg">新增客戶</h1>
-        <p className="mt-1 text-sm text-fg-muted">建立買方、賣方、同行或介紹客的基本資料</p>
-      </div>
+      <h1 className="text-xl font-semibold text-fg">新增客戶</h1>
 
       <form onSubmit={handleSubmit} className="max-w-3xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

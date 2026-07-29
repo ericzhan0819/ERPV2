@@ -123,7 +123,6 @@ describe('app config source contract', () => {
     const loginProperties = appConfigProperties(`${sourceRoot}/pages/Login.tsx`)
 
     expect(loginProperties).toContain('systemName')
-    expect(loginProperties).toContain('loginSubtitle')
     expect(
       appConfigProperties(`${sourceRoot}/layouts/AppLayout.tsx`),
     ).toContain('systemShortName')

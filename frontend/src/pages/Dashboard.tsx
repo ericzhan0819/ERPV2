@@ -133,10 +133,7 @@ export function Dashboard() {
   return (
     <div className="flex flex-col gap-8">
       <header className="flex flex-col gap-5 rounded-xl border border-border bg-surface p-5 shadow-sm sm:p-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-fg">營運總覽</h1>
-          <p className="mt-1 text-sm text-fg-muted">掌握今日工作、本月經營與近 30 天趨勢</p>
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">營運總覽</h1>
         {actions.length > 0 && (
           <nav aria-label="快捷操作" className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {actions.map((action) => (

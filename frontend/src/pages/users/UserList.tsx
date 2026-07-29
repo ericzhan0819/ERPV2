@@ -272,10 +272,7 @@ export function UserList() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-fg">員工/帳號管理</h1>
-          <p className="mt-1 text-sm text-fg-muted">建立與管理員工帳號、角色與基本資料</p>
-        </div>
+        <h1 className="text-xl font-semibold text-fg">員工/帳號管理</h1>
         <button
           onClick={() => {
             setSuccessMessage(null)

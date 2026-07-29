@@ -311,10 +311,7 @@ export function MoneyEntryList() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-fg">收支管理</h1>
-          <p className="mt-1 text-sm text-fg-muted">一般營運與單車收支紀錄</p>
-        </div>
+        <h1 className="text-xl font-semibold text-fg">收支管理</h1>
         <div className="flex flex-wrap gap-3">
           <Link
             to="/money-entries/create?direction=income"

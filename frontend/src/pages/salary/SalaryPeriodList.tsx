@@ -41,10 +41,7 @@ export function SalaryPeriodList() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold text-fg">薪資結算</h1>
-          <p className="mt-1 text-sm text-fg-muted">建立、確認與發放每月薪資</p>
-        </div>
+        <h1 className="min-w-0 text-xl font-semibold text-fg">薪資結算</h1>
         <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-end">
           <label className="text-sm text-fg-muted sm:min-w-44">
             結算月份 <span className="text-error">*</span>

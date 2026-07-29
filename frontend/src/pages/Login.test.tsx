@@ -76,7 +76,6 @@ describe('Login', () => {
     renderLogin()
 
     expect(screen.getByText(appConfig.systemName)).toBeTruthy()
-    expect(screen.getByText(appConfig.loginSubtitle)).toBeTruthy()
     const loginInput = screen.getByLabelText(/帳號名稱或 Email/)
     expect(loginInput.getAttribute('type')).toBe('text')
     expect(loginInput.getAttribute('name')).toBe('login')

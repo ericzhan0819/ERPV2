@@ -42,10 +42,7 @@ export function CustomerList() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-fg">客戶管理</h1>
-          <p className="mt-1 text-sm text-fg-muted">買方、賣方、同行、介紹客等基本資料</p>
-        </div>
+        <h1 className="text-xl font-semibold text-fg">客戶管理</h1>
         <Link
           to="/customers/create"
           className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover"

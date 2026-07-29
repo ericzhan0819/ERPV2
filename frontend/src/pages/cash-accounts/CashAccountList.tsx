@@ -177,10 +177,7 @@ export function CashAccountList() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-fg">資金帳戶</h1>
-          <p className="mt-1 text-sm text-fg-muted">現金／銀行／其他帳戶與即時餘額</p>
-        </div>
+        <h1 className="text-xl font-semibold text-fg">資金帳戶</h1>
         {isAdmin && (
           <button
             onClick={() => {

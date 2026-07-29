@@ -42,7 +42,7 @@ export function VehicleIntakePrint() {
         </button>
       </div>
 
-      <div className="print-title">車輛建檔資料</div>
+      <h1 className="print-title">車輛建檔資料</h1>
       <div className="print-meta">列印日期：{formatBusinessDateTime(printedAt)}</div>
 
       <div className="print-section">
