@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -229,6 +229,19 @@ describe('Vehicle presentation', () => {
     expect(screen.queryByText('尚無符合條件的車輛')).toBeNull()
   })
 
+  it('keeps the out-of-range page state and route back to the first page', async () => {
+    vi.mocked(vehiclesApi.listVehicles).mockResolvedValue({
+      data: [],
+      meta: { current_page: 3, last_page: 2, per_page: 20, total: 40 },
+    })
+
+    renderList('/vehicles?page=3')
+
+    expect(await screen.findByText('此頁沒有資料')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '回到第 1 頁' })).toBeTruthy()
+    expect(screen.getByText('至少保留一個車輛狀態。')).toBeTruthy()
+  })
+
   it('keeps the no-photo state and sales role price masking on vehicle cards', async () => {
     setRole('sales')
     const listItem: VehicleListItem = { ...vehicle, status: 'listed', cover_photo: null }
@@ -288,6 +301,18 @@ describe('Vehicle presentation', () => {
     expect(descriptionLabel?.nextElementSibling?.tagName).toBe('TEXTAREA')
   })
 
+  it('keeps the pending approval outcome for non-admin vehicle expenses', async () => {
+    setRole('manager')
+    const interaction = userEvent.setup()
+    renderDetail()
+
+    await screen.findByRole('heading', { name: '車輛照片' })
+    await interaction.click(screen.getByRole('button', { name: '上報整備支出' }))
+
+    expect(screen.getByText('送出後為待審核狀態，需老闆核准後才計入正式支出。')).toBeTruthy()
+    expect(screen.queryByText('送出後直接計入正式支出。')).toBeNull()
+  })
+
   it('keeps purchase-price locking and photo cover, order, retry and irreversible deletion outcomes', async () => {
     const interaction = userEvent.setup()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
@@ -295,6 +320,8 @@ describe('Vehicle presentation', () => {
       .mockRejectedValueOnce(new Error('network'))
       .mockResolvedValueOnce(photos)
     vi.mocked(vehiclePhotosApi.deleteVehiclePhoto).mockResolvedValue()
+    vi.mocked(vehiclePhotosApi.reorderVehiclePhotos).mockResolvedValue(photos)
+    vi.mocked(vehiclePhotosApi.setCoverVehiclePhoto).mockResolvedValue(photos[1])
     const { container } = render(
       <MemoryRouter initialEntries={['/vehicles/7']}>
         <Routes>
@@ -308,6 +335,15 @@ describe('Vehicle presentation', () => {
     expect(screen.getByRole('button', { name: '設封面' })).toBeTruthy()
     expect(screen.getAllByRole('button', { name: '←' })).toHaveLength(2)
     expect(screen.getAllByRole('button', { name: '→' })).toHaveLength(2)
+
+    await interaction.click(screen.getAllByRole('button', { name: '→' })[0])
+    await waitFor(() => {
+      expect(vehiclePhotosApi.reorderVehiclePhotos).toHaveBeenCalledWith(7, [2, 1])
+    })
+    const setCover = screen.getByRole('button', { name: '設封面' })
+    await waitFor(() => expect(setCover).toHaveProperty('disabled', false))
+    await interaction.click(setCover)
+    expect(vehiclePhotosApi.setCoverVehiclePhoto).toHaveBeenCalledWith(7, 2)
 
     const file = new File(['photo'], 'new.webp', { type: 'image/webp' })
     const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]')
