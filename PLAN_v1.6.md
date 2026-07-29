@@ -454,35 +454,35 @@ v1.6 是小型純前端 UX cleanup 版本：系統性移除重複副標與教學
 
 ### 10.1 Form
 
-- [ ] 所有 input／select／textarea 保留 visible label
-- [ ] required marker 保留
-- [ ] `aria-required`／原生 required 契約不變
-- [ ] per-field error 具唯一 ID
-- [ ] `aria-describedby` 只引用存在的 help／error ID
-- [ ] help 移除後同步更新 described-by 陣列
-- [ ] placeholder 不成為唯一欄位名稱
+- [x] 所有 input／select／textarea 保留 visible label
+- [x] required marker 保留
+- [x] `aria-required`／原生 required 契約不變
+- [x] per-field error 具唯一 ID
+- [x] `aria-describedby` 只引用存在的 help／error ID
+- [x] help 移除後同步更新 described-by 陣列
+- [x] placeholder 不成為唯一欄位名稱
 
 ### 10.2 Page／Section
 
-- [ ] 每頁只有一個 `h1`
-- [ ] section `h2` 不因刪副標被誤刪
-- [ ] Card Link／Button 仍有完整 accessible name
-- [ ] icon-only control 仍有 `aria-label`
+- [x] 每頁只有一個 `h1`
+- [x] section `h2` 不因刪副標被誤刪
+- [x] Card Link／Button 仍有完整 accessible name
+- [x] icon-only control 仍有 `aria-label`
 
 ### 10.3 Dynamic state
 
-- [ ] Error／success／loading 的 `aria-live` 不回歸
-- [ ] 條件式 warning 出現時不搶走 focus，除非現有流程要求
-- [ ] Modal／Drawer title、focus trap、Escape、focus return 不變
-- [ ] 圖表名稱、期間、數值與單位對 screen reader 仍可理解
-- [ ] Account／強制改密碼欄位的 help 先於 error，實際讀屏順序仍可理解
-- [ ] UserList self disabled controls 的限制原因可由可見短句與 screen reader 取得
+- [x] Error／success／loading 的 `aria-live` 不回歸
+- [x] 條件式 warning 出現時不搶走 focus，除非現有流程要求
+- [x] Modal／Drawer title、focus trap、Escape、focus return 不變
+- [x] 圖表名稱、期間、數值與單位對 screen reader 仍可理解
+- [x] Account／強制改密碼欄位的 help 先於 error，實際讀屏順序仍可理解
+- [x] UserList self disabled controls 的限制原因可由可見短句與 screen reader 取得
 
 ### 10.4 Automated accessibility contract
 
-- [ ] 為刪除 help text 後的 `aria-describedby` 補回歸測試
-- [ ] 測試優先使用 role／label，不只依賴精確文字
-- [ ] 不使用 snapshot 作為唯一驗證
+- [x] 為刪除 help text 後的 `aria-describedby` 補回歸測試
+- [x] 測試優先使用 role／label，不只依賴精確文字
+- [x] 不使用 snapshot 作為唯一驗證
 
 ---
 

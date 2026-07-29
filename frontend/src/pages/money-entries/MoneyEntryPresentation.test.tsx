@@ -118,6 +118,7 @@ describe('Money entry presentation', () => {
       expect(field.getAttribute('aria-invalid')).toBe('true')
       expect(document.getElementById(errorId)?.textContent).toBe(message)
     }
+    expect(document.activeElement).toBe(screen.getByLabelText('日期'))
     expect(moneyEntriesApi.createMoneyEntry).not.toHaveBeenCalled()
   })
 

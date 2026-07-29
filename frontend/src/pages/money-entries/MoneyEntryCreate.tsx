@@ -45,12 +45,18 @@ export function MoneyEntryCreate() {
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<'entryDate' | 'category' | 'cashAccountId' | 'amount', string>>>({})
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const formRef = useRef<HTMLFormElement>(null)
   const idempotencyKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     listCashAccountOptions().then((accounts) => setCashAccounts(accounts.filter((a) => a.is_active))).catch(() => setCashAccounts([]))
     listVehicleOptions().then(setVehicles).catch(() => setVehicles([]))
   }, [])
+
+  useEffect(() => {
+    if (Object.keys(fieldErrors).length === 0) return
+    formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
+  }, [fieldErrors])
 
   const categoryOptions = categoriesForDirection(direction)
 
@@ -102,7 +108,7 @@ export function MoneyEntryCreate() {
         <p className="mt-1 text-sm text-fg-muted">一般營運收支不綁車；單車收支必須選擇關聯車輛。</p>
       </div>
 
-      <form noValidate onSubmit={handleSubmit} className="max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
+      <form ref={formRef} noValidate onSubmit={handleSubmit} className="max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <FormAlert message={error} focusOnShow className="mb-4" />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
