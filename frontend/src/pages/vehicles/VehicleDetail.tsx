@@ -681,7 +681,7 @@ function PurchasePriceModal({
   return (
     <Modal title={currentPrice === null || currentPrice === undefined ? '補登收購價' : '修正收購價'} onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <FormAlert message={error} />
+        <FormAlert message={error} focusOnShow />
         <p className="text-sm leading-6 text-fg-muted">
           收購價影響單車毛利與薪資獎金；薪資月份確認或發薪後不可修改。
         </p>
@@ -722,7 +722,7 @@ function ListModal({
   return (
     <Modal title="整備完成並上架" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <FormAlert message={error} />
+        <FormAlert message={error} focusOnShow />
         <Field label="開價" value={asking_price} onChange={setAskingPrice} type="number" required />
         <Field label="底價" value={floor_price} onChange={setFloorPrice} type="number" />
         <Field label="上架日期" value={listing_date} onChange={setListingDate} type="date" />
@@ -807,7 +807,7 @@ function ReserveModal({
   return (
     <Modal title="收訂金並保留" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <FormAlert message={error} />
+        <FormAlert message={error} focusOnShow />
         <CustomerSelect
           nameLabel="買方姓名"
           phoneLabel="買方電話"
@@ -892,7 +892,7 @@ function FinalPaymentModal({
   return (
     <Modal title="收尾款" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <FormAlert message={error} />
+        <FormAlert message={error} focusOnShow />
         <Field label="尾款金額" value={amount} onChange={setAmount} type="number" required />
         <CashAccountField cashAccounts={cashAccounts} value={cash_account_id} onChange={setCashAccountId} />
         <div>
@@ -968,7 +968,7 @@ function ExpenseModal({
   return (
     <Modal title="上報整備支出" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <FormAlert message={error} />
+        <FormAlert message={error} focusOnShow />
         <div>
           <label className="mb-1 block text-sm font-medium text-fg-muted">
             分類<span className="text-error"> *</span>
@@ -1035,7 +1035,7 @@ function CloseSaleModal({
   return (
     <Modal title="成交結案" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <FormAlert message={error} />
+        <FormAlert message={error} focusOnShow />
         <Field label="成交日期（預設今天）" value={sold_at} onChange={setSoldAt} type="date" />
         <p className="text-xs text-fg-muted">
           成交日期決定薪資獎金月份；已確認或已發薪月份不能新增成交。收款日期不影響成交月份。
@@ -1072,6 +1072,7 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
   const pendingUploadRef = useRef<{ key: string; files: File[] } | null>(null)
   const [busyPhotoId, setBusyPhotoId] = useState<number | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [photoActionAttempt, setPhotoActionAttempt] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
   // 每次「屬於目前車輛」的載入都會遞增，非最新一次的回應在 resolve 時直接捨棄，避免
   // 連續操作時，較舊、較慢的回應覆蓋掉已經是最新的照片清單（race condition）。
@@ -1153,6 +1154,7 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
 
   async function handleDelete(photo: VehiclePhoto) {
     if (!window.confirm('確定要刪除這張照片嗎？此動作無法復原。')) return
+    setPhotoActionAttempt((current) => current + 1)
     setBusyPhotoId(photo.id)
     setActionError(null)
     try {
@@ -1166,6 +1168,7 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
   }
 
   async function handleSetCover(photo: VehiclePhoto) {
+    setPhotoActionAttempt((current) => current + 1)
     setBusyPhotoId(photo.id)
     setActionError(null)
     try {
@@ -1182,6 +1185,7 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
     const index = photos.findIndex((p) => p.id === photo.id)
     const targetIndex = direction === 'left' ? index - 1 : index + 1
     if (index === -1 || targetIndex < 0 || targetIndex >= photos.length) return
+    setPhotoActionAttempt((current) => current + 1)
     const reordered = [...photos]
     ;[reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]]
     setPhotos(reordered)
@@ -1239,7 +1243,12 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
         </div>
       )}
 
-      {actionError && <p className="mb-3 text-sm text-error">{actionError}</p>}
+      <FormAlert
+        message={actionError}
+        signal={photoActionAttempt}
+        focusOnShow
+        className="mb-3"
+      />
 
       {loadError && <p className="text-sm text-error">{loadError}</p>}
 

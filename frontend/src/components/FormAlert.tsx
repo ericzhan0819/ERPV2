@@ -3,17 +3,19 @@ import { useEffect, useRef } from 'react'
 export function FormAlert({
   message,
   signal,
+  focusOnShow = false,
   className = '',
 }: {
   message: string | null
   signal?: number
+  focusOnShow?: boolean
   className?: string
 }) {
   const alertRef = useRef<HTMLParagraphElement>(null)
 
   useEffect(() => {
-    if (message) alertRef.current?.focus()
-  }, [message, signal])
+    if (message && focusOnShow) alertRef.current?.focus()
+  }, [focusOnShow, message, signal])
 
   if (!message) return null
 

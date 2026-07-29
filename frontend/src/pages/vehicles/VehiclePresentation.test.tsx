@@ -328,7 +328,7 @@ describe('Vehicle presentation', () => {
     vi.mocked(vehiclePhotosApi.uploadVehiclePhotos)
       .mockRejectedValueOnce(new Error('network'))
       .mockResolvedValueOnce(photos)
-    vi.mocked(vehiclePhotosApi.deleteVehiclePhoto).mockResolvedValue()
+    vi.mocked(vehiclePhotosApi.deleteVehiclePhoto).mockRejectedValue(new Error('network'))
     vi.mocked(vehiclePhotosApi.reorderVehiclePhotos).mockResolvedValue(photos)
     vi.mocked(vehiclePhotosApi.setCoverVehiclePhoto).mockResolvedValue(photos[1])
     const { container } = render(
@@ -368,6 +368,9 @@ describe('Vehicle presentation', () => {
     await interaction.click(screen.getAllByRole('button', { name: '刪除' })[0])
     expect(confirm).toHaveBeenCalledWith('確定要刪除這張照片嗎？此動作無法復原。')
     expect(vehiclePhotosApi.deleteVehiclePhoto).toHaveBeenCalledWith(7, 1)
+    const photoActionAlert = await screen.findByRole('alert')
+    expect(photoActionAlert.textContent).toBe('刪除照片失敗，請稍後再試')
+    expect(document.activeElement).toBe(photoActionAlert)
 
     await interaction.click(screen.getByRole('button', { name: '修正收購價' }))
     expect(

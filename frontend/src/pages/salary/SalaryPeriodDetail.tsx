@@ -65,6 +65,7 @@ export function SalaryPeriodDetail() {
   const id = Number(useParams().id)
   const [period, setPeriod] = useState<SalaryPeriod | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [focusError, setFocusError] = useState(false)
   const [busy, setBusy] = useState(false)
   const actionInFlight = useRef(false)
   const [expanded, setExpanded] = useState<number | null>(null)
@@ -79,6 +80,7 @@ export function SalaryPeriodDetail() {
   })
 
   function load() {
+    setFocusError(false)
     setError(null)
     getSalaryPeriod(id)
       .then(setPeriod)
@@ -102,6 +104,7 @@ export function SalaryPeriodDetail() {
     if (actionInFlight.current) return
     actionInFlight.current = true
     setBusy(true)
+    setFocusError(true)
     setError(null)
     try {
       await action()
@@ -124,7 +127,7 @@ export function SalaryPeriodDetail() {
 
   if (!period) {
     return error
-      ? <FormAlert message={error} />
+      ? <FormAlert message={error} focusOnShow={focusError} />
       : <p className="text-fg-muted">載入中...</p>
   }
 
@@ -138,7 +141,7 @@ export function SalaryPeriodDetail() {
   return (
     <div className="flex flex-col gap-6">
       <PeriodHeader period={period} />
-      <FormAlert message={error} className="rounded-lg bg-error/10 p-3" />
+      <FormAlert message={error} focusOnShow={focusError} className="rounded-lg bg-error/10 p-3" />
       <CompanySummary period={period} />
 
       {period.status === 'draft' && (

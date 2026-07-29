@@ -24,10 +24,12 @@ export function CommissionPlans() {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [focusError, setFocusError] = useState(false)
   const [loading, setLoading] = useState(true)
 
   function load() {
     setLoading(true)
+    setFocusError(false)
     listCommissionPlans()
       .then(setPlans)
       .catch((caught) => setError(apiError(caught, '獎金方案載入失敗')))
@@ -38,6 +40,7 @@ export function CommissionPlans() {
 
   async function save() {
     setSaving(true)
+    setFocusError(true)
     setError(null)
     try {
       await createCommissionPlan(form)
@@ -58,7 +61,7 @@ export function CommissionPlans() {
         <Link to="/salary" className="flex min-h-11 items-center text-sm font-medium text-primary">返回薪資月份</Link>
       </div>
 
-      <FormAlert message={error} />
+      <FormAlert message={error} focusOnShow={focusError} />
       {loading && <p className="text-sm text-fg-muted">載入中...</p>}
       <button
         onClick={() => setShowForm((visible) => !visible)}

@@ -14,9 +14,11 @@ export function SalaryPeriodList() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [focusError, setFocusError] = useState(false)
 
   function load() {
     setLoading(true)
+    setFocusError(false)
     setError(null)
     listSalaryPeriods()
       .then(setPeriods)
@@ -28,6 +30,7 @@ export function SalaryPeriodList() {
 
   async function createDraft() {
     setSaving(true)
+    setFocusError(true)
     setError(null)
     try {
       await createSalaryPeriod(month)
@@ -73,7 +76,7 @@ export function SalaryPeriodList() {
         </Link>
       </div>
 
-      <FormAlert message={error} />
+      <FormAlert message={error} focusOnShow={focusError} />
       <div className="grid gap-3 sm:hidden" aria-live="polite">
         {loading && <StateCard message="載入中..." />}
         {!loading && periods.length === 0 && <StateCard message="尚未建立薪資月份，請選擇月份並建立草稿。" />}

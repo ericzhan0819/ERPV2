@@ -168,6 +168,7 @@ export function MoneyEntryList() {
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [focusPageError, setFocusPageError] = useState(false)
   const [reviewingId, setReviewingId] = useState<number | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false)
@@ -231,6 +232,7 @@ export function MoneyEntryList() {
   useEffect(() => {
     const requestSequence = ++requestSequenceRef.current
     setLoading(true)
+    setFocusPageError(false)
     setError(null)
     setMeta(null)
     listMoneyEntries({
@@ -274,6 +276,7 @@ export function MoneyEntryList() {
 
   async function handleApprove(id: number) {
     setReviewingId(id)
+    setFocusPageError(true)
     setError(null)
     try {
       await approveMoneyEntry(id)
@@ -287,6 +290,7 @@ export function MoneyEntryList() {
 
   async function handleReject(id: number) {
     setReviewingId(id)
+    setFocusPageError(true)
     setError(null)
     try {
       await rejectMoneyEntry(id)
@@ -401,7 +405,7 @@ export function MoneyEntryList() {
         />
       </MobileFilterDrawer>
 
-      <FormAlert message={error} />
+      <FormAlert message={error} focusOnShow={focusPageError} />
 
       <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
         <table className="min-w-full divide-y divide-border text-sm">

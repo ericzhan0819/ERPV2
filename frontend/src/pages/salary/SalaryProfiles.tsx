@@ -20,12 +20,14 @@ export function SalaryProfiles() {
   const [editing, setEditing] = useState<number | null>(null)
   const [form, setForm] = useState<SalaryProfilePayload | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [focusError, setFocusError] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
 
   function load() {
     setLoading(true)
+    setFocusError(false)
     Promise.all([listSalaryProfiles(), listUsers()])
       .then(([loadedProfiles, loadedUsers]) => {
         setProfiles(loadedProfiles)
@@ -53,6 +55,7 @@ export function SalaryProfiles() {
   async function save() {
     if (!editing || !form) return
     setSaving(true)
+    setFocusError(true)
     setError(null)
     setFieldErrors({})
     try {
@@ -81,7 +84,7 @@ export function SalaryProfiles() {
         <Link to="/salary" className="flex min-h-11 items-center text-sm font-medium text-primary">返回薪資月份</Link>
       </div>
 
-      <FormAlert message={error} />
+      <FormAlert message={error} focusOnShow={focusError} />
       {loading && <p className="text-sm text-fg-muted">載入中...</p>}
       {!loading && rows.length === 0 && <p className="text-sm text-fg-muted">目前沒有可設定的員工</p>}
       <div className="grid gap-4">

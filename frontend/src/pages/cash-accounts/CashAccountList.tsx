@@ -44,6 +44,7 @@ export function CashAccountList() {
   const [accounts, setAccounts] = useState<CashAccountBalance[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [focusPageError, setFocusPageError] = useState(false)
 
   const [creating, setCreating] = useState(false)
   const [createForm, setCreateForm] = useState<AccountFormState>(emptyForm)
@@ -58,6 +59,7 @@ export function CashAccountList() {
 
   function loadAccounts() {
     setLoading(true)
+    setFocusPageError(false)
     setError(null)
     listCashAccountBalances()
       .then(setAccounts)
@@ -161,6 +163,7 @@ export function CashAccountList() {
       return
     }
     setError(null)
+    setFocusPageError(true)
     try {
       await deleteCashAccount(account.id)
       loadAccounts()
@@ -171,6 +174,7 @@ export function CashAccountList() {
 
   async function toggleActive(account: CashAccountBalance) {
     setError(null)
+    setFocusPageError(true)
     try {
       await setCashAccountActive(account.id, !account.is_active)
       loadAccounts()
@@ -199,7 +203,7 @@ export function CashAccountList() {
 
       {isAdmin && creating && (
         <form onSubmit={handleCreateSubmit} className="max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
-          <FormAlert message={createError} signal={createSubmitAttempt} className="mb-4" />
+          <FormAlert message={createError} signal={createSubmitAttempt} focusOnShow className="mb-4" />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-fg-muted">帳戶名稱</label>
@@ -258,7 +262,7 @@ export function CashAccountList() {
         </form>
       )}
 
-      <FormAlert message={error} />
+      <FormAlert message={error} focusOnShow={focusPageError} />
 
       <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
         <table className="min-w-full divide-y divide-border text-sm">
@@ -293,7 +297,7 @@ export function CashAccountList() {
                   <tr key={account.id} className="bg-surface-2">
                     <td colSpan={6} className="px-4 py-4">
                       <form onSubmit={(e) => handleEditSubmit(e, account.id)} className="flex flex-col gap-4">
-                        <FormAlert message={editError} signal={editSubmitAttempt} />
+                        <FormAlert message={editError} signal={editSubmitAttempt} focusOnShow />
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                           <div>
                             <label className="mb-1 block text-sm font-medium text-fg-muted">帳戶名稱</label>

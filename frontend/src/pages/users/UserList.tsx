@@ -56,6 +56,7 @@ export function UserList() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [focusPageError, setFocusPageError] = useState(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   const [creating, setCreating] = useState(false)
@@ -76,6 +77,7 @@ export function UserList() {
 
   function loadUsers() {
     setLoading(true)
+    setFocusPageError(false)
     setError(null)
     listUsers()
       .then(setUsers)
@@ -200,6 +202,7 @@ export function UserList() {
       return
     }
     setError(null)
+    setFocusPageError(true)
     try {
       await deleteUser(user.id)
       loadUsers()
@@ -210,6 +213,7 @@ export function UserList() {
 
   async function toggleActive(user: User) {
     setError(null)
+    setFocusPageError(true)
     setSuccessMessage(null)
     try {
       await setUserActive(user.id, !user.is_active)
@@ -225,6 +229,7 @@ export function UserList() {
       return
     }
     setError(null)
+    setFocusPageError(true)
     try {
       await setUserRole(user.id, role)
       loadUsers()
@@ -295,7 +300,7 @@ export function UserList() {
 
       {creating && (
         <form onSubmit={handleCreateSubmit} className="max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
-          <FormAlert message={createError} signal={createSubmitAttempt} className="mb-4" />
+          <FormAlert message={createError} signal={createSubmitAttempt} focusOnShow className="mb-4" />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-fg-muted">姓名 *</label>
@@ -392,7 +397,7 @@ export function UserList() {
         </form>
       )}
 
-      <FormAlert message={error} />
+      <FormAlert message={error} focusOnShow={focusPageError} />
       <div role="status" aria-live="polite" className="empty:hidden">
         {successMessage && (
           <p className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-fg">
@@ -448,7 +453,7 @@ export function UserList() {
                     <tr key={user.id} className="bg-surface-2">
                       <td colSpan={7} className="px-4 py-4">
                         <form onSubmit={(e) => handleEditSubmit(e, user.id)} className="flex flex-col gap-4">
-                          <FormAlert message={editError} signal={editSubmitAttempt} />
+                          <FormAlert message={editError} signal={editSubmitAttempt} focusOnShow />
                           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
                               <label className="mb-1 block text-sm font-medium text-fg-muted">姓名 *</label>
@@ -534,7 +539,7 @@ export function UserList() {
                     <tr key={user.id} className="bg-surface-2">
                       <td colSpan={7} className="px-4 py-4">
                         <form onSubmit={(e) => handleResetSubmit(e, user.id)} className="flex flex-col gap-4">
-                          <FormAlert message={resetError} signal={resetSubmitAttempt} />
+                          <FormAlert message={resetError} signal={resetSubmitAttempt} focusOnShow />
                           <div className="max-w-sm">
                             <label className="mb-1 block text-sm font-medium text-fg-muted">{user.name} 的新密碼</label>
                             <input

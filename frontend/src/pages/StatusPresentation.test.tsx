@@ -93,4 +93,22 @@ describe('Global status presentation', () => {
     expect(await screen.findByText('尚無稽核紀錄')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '清除篩選條件' })).toBeNull()
   })
+
+  it('announces a passive filter reload failure without stealing input focus', async () => {
+    vi.mocked(auditLogsApi.listAuditLogs)
+      .mockResolvedValueOnce({
+        data: [],
+        meta: { current_page: 1, last_page: 1, per_page: 20, total: 0 },
+      })
+      .mockRejectedValueOnce(new Error('offline'))
+
+    render(<AuditLogList />)
+    await screen.findByText('尚無稽核紀錄')
+    const search = screen.getByPlaceholderText('搜尋操作者或操作對象')
+    search.focus()
+    fireEvent.change(search, { target: { value: 'abc' } })
+
+    expect((await screen.findByRole('alert')).textContent).toBe('稽核紀錄載入失敗')
+    expect(document.activeElement).toBe(search)
+  })
 })

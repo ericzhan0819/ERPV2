@@ -103,7 +103,7 @@ export function MoneyEntryCreate() {
       </div>
 
       <form noValidate onSubmit={handleSubmit} className="max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
-        <FormAlert message={error} className="mb-4" />
+        <FormAlert message={error} focusOnShow className="mb-4" />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="money-entry-date" className="mb-1 block text-sm font-medium text-fg-muted">日期</label>

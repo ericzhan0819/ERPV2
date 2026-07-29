@@ -206,7 +206,7 @@ export function CustomerDetail() {
       {editing ? (
         <Panel title="編輯客戶資料">
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <FormAlert message={formError} />
+            <FormAlert message={formError} focusOnShow />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm font-medium text-fg-muted">

@@ -464,7 +464,7 @@ function Feedback({
 }) {
   return (
     <>
-      <FormAlert message={error} />
+      <FormAlert message={error} focusOnShow />
       <p role="status" aria-live="polite" className="text-sm text-success empty:hidden">
         {success}
       </p>

@@ -98,7 +98,7 @@ export function PasswordChangeRequired() {
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
-            <FormAlert message={error} />
+            <FormAlert message={error} focusOnShow />
             <PasswordInput
               id="current-password"
               label="目前密碼"

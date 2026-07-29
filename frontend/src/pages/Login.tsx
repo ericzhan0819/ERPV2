@@ -50,7 +50,7 @@ export function Login() {
         >
           {notice}
         </p>
-        <FormAlert message={error} className="mt-4" />
+        <FormAlert message={error} focusOnShow className="mt-4" />
 
         <div className="mt-6 flex flex-col gap-4">
           <div>

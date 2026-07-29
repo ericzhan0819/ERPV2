@@ -78,7 +78,7 @@ export function CommissionAttributionPending() {
         </Link>
       </div>
 
-      <FormAlert message={error} signal={saveAttempt} />
+      <FormAlert message={error} signal={saveAttempt} focusOnShow={saveAttempt > 0} />
       {!loading && vehicles.length > 0 && (
         <p className="text-sm text-fg-muted">
           這些成交車輛缺少收車人或賣車人；補齊後請回薪資月份重算草稿。

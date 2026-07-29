@@ -99,7 +99,7 @@ export function CustomerCreate() {
       <h1 className="text-xl font-semibold text-fg">新增客戶</h1>
 
       <form onSubmit={handleSubmit} className="max-w-3xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
-        <FormAlert message={error} className="mb-4" />
+        <FormAlert message={error} focusOnShow className="mb-4" />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="姓名" value={form.name} onChange={(v) => set('name', v)} required />
           <Field label="電話" value={form.phone} onChange={(v) => set('phone', v)} />
