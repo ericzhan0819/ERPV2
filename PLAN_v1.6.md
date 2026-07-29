@@ -528,12 +528,12 @@ v1.6 是小型純前端 UX cleanup 版本：系統性移除重複副標與教學
 
 v1.6 不修改 backend，但封板前仍建立完整回歸證據。
 
-- [ ] 執行 `php artisan test`
-- [ ] 記錄 passed、skipped、assertions
-- [ ] 確認 skipped 仍是既有 environment-gated tests
-- [ ] 不將未執行的 MySQL-only tests 寫成通過
-- [ ] 確認本版本沒有 backend／schema／time zone／transaction diff，因此不需重跑 MariaDB 專用競態測試
-- [ ] 若 backend full suite 發現基準失敗，先判斷是否為既有環境問題，不以 v1.6 文案改動掩蓋
+- [x] 執行 `php artisan test`
+- [x] 記錄 passed、skipped、assertions
+- [x] 確認 skipped 仍是既有 environment-gated tests
+- [x] 不將未執行的 MySQL-only tests 寫成通過
+- [x] 確認本版本沒有 backend／schema／time zone／transaction diff，因此不需重跑 MariaDB 專用競態測試
+- [x] 若 backend full suite 發現基準失敗，先判斷是否為既有環境問題，不以 v1.6 文案改動掩蓋
 
 ---
 
