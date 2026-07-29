@@ -109,6 +109,7 @@ export function CustomerDetail() {
     getCustomer(customerId)
       .then((response) => {
         setDetail(response)
+        setError(null)
         setForm({
           name: response.customer.name,
           phone: response.customer.phone ?? '',
@@ -128,7 +129,7 @@ export function CustomerDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
-  if (error) {
+  if (error && !detail) {
     return <FormAlert message={error} />
   }
 
@@ -176,6 +177,7 @@ export function CustomerDetail() {
 
   return (
     <div className="flex flex-col gap-6">
+      <FormAlert message={error} />
       <FormAlert
         message={deleteError}
         signal={deleteAttempt}

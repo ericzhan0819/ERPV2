@@ -322,6 +322,23 @@ describe('Vehicle presentation', () => {
     expect(screen.queryByText('送出後直接計入正式支出。')).toBeNull()
   })
 
+  it('keeps vehicle details visible when a successful action refresh fails', async () => {
+    const interaction = userEvent.setup()
+    vi.mocked(vehiclesApi.getVehicle)
+      .mockResolvedValueOnce(detail)
+      .mockRejectedValueOnce(new Error('offline'))
+    vi.mocked(vehiclesApi.updateVehiclePurchasePrice).mockResolvedValue(undefined as never)
+    renderDetail()
+
+    await screen.findByRole('heading', { name: 'V2026070001' })
+    await interaction.click(screen.getByRole('button', { name: '修正收購價' }))
+    await interaction.click(screen.getByRole('button', { name: '儲存收購價' }))
+
+    expect((await screen.findByRole('alert')).textContent).toBe('車輛資料載入失敗')
+    expect(screen.getByRole('heading', { name: 'V2026070001' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: '列印建檔資料' })).toBeTruthy()
+  })
+
   it('keeps purchase-price locking and photo cover, order, retry and irreversible deletion outcomes', async () => {
     const interaction = userEvent.setup()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)

@@ -186,7 +186,10 @@ export function VehicleDetail() {
 
   function loadDetail() {
     getVehicle(vehicleId)
-      .then(setDetail)
+      .then((response) => {
+        setDetail(response)
+        setError(null)
+      })
       .catch(() => setError('車輛資料載入失敗'))
   }
 
@@ -204,8 +207,8 @@ export function VehicleDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
-  if (error) {
-    return <p className="text-sm text-error">{error}</p>
+  if (error && !detail) {
+    return <FormAlert message={error} />
   }
 
   if (!detail) {
@@ -352,6 +355,7 @@ export function VehicleDetail() {
 
   return (
     <div className="flex flex-col gap-6">
+      <FormAlert message={error} />
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3">

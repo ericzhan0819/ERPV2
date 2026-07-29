@@ -223,6 +223,29 @@ describe('Customer, audit and print presentation', () => {
     expect(screen.getByRole('link', { name: '返回列表' })).toBeTruthy()
   })
 
+  it('keeps customer details visible when a successful save refresh fails', async () => {
+    const interaction = userEvent.setup()
+    vi.mocked(customersApi.getCustomer)
+      .mockResolvedValueOnce(customerDetail)
+      .mockRejectedValueOnce(new Error('offline'))
+    vi.mocked(customersApi.updateCustomer).mockResolvedValue(customerDetail.customer)
+    render(
+      <MemoryRouter initialEntries={['/customers/1']}>
+        <Routes>
+          <Route path="/customers/:id" element={<CustomerDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: '王小明' })
+    await interaction.click(screen.getByRole('button', { name: '編輯' }))
+    await interaction.click(screen.getByRole('button', { name: '儲存' }))
+
+    expect((await screen.findByRole('alert')).textContent).toBe('客戶資料載入失敗')
+    expect(screen.getByRole('heading', { name: '王小明' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: '返回列表' })).toBeTruthy()
+  })
+
   it('keeps the audit read-only boundary, no-change state and request information', async () => {
     const interaction = userEvent.setup()
     const log: AuditLog = {
