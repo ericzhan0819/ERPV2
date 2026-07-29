@@ -38,7 +38,7 @@ describe('Global status presentation', () => {
     expect(screen.queryByText('受保護內容')).toBeNull()
   })
 
-  it('keeps the blocked logout consequence and a keyboard-accessible retry action', async () => {
+  it('keeps the blocked logout consequence and retry action', async () => {
     const retryLogout = vi.fn().mockResolvedValue(undefined)
     const interaction = userEvent.setup()
     vi.mocked(useAuth).mockReturnValue({

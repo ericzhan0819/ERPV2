@@ -6,6 +6,7 @@ import { deleteCustomer, getCustomer, updateCustomer } from '../../api/customers
 import type { CustomerDetailResponse, CustomerRelatedVehicle, CustomerType } from '../../types/customer'
 import { useAuth } from '../../hooks/useAuth'
 import { canDeleteCustomer, canViewSalesPricing } from '../../utils/permissions'
+import { FormAlert } from '../../components/FormAlert'
 
 const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', maximumFractionDigits: 0 })
 
@@ -205,7 +206,7 @@ export function CustomerDetail() {
       {editing ? (
         <Panel title="編輯客戶資料">
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            {formError && <p className="text-sm text-error">{formError}</p>}
+            <FormAlert message={formError} />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm font-medium text-fg-muted">

@@ -11,6 +11,7 @@ import type { Vehicle } from '../../types/vehicle'
 import { generateIdempotencyKey } from '../../utils/idempotency'
 import { formatBusinessDate } from '../../utils/dateTime'
 import { categoriesForDirection, directionLabels } from '../../utils/moneyEntryCategory'
+import { FormAlert } from '../../components/FormAlert'
 
 function extractErrorMessage(err: unknown, fallback: string): string {
   if (isAxiosError(err)) {
@@ -102,7 +103,7 @@ export function MoneyEntryCreate() {
       </div>
 
       <form noValidate onSubmit={handleSubmit} className="max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
-        {error && <p className="mb-4 text-sm text-error">{error}</p>}
+        <FormAlert message={error} className="mb-4" />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="money-entry-date" className="mb-1 block text-sm font-medium text-fg-muted">日期</label>

@@ -4,6 +4,7 @@ import { isAxiosError } from 'axios'
 import { createUser, deleteUser, listUsers, resetUserPassword, setUserActive, setUserRole, updateUser } from '../../api/users'
 import { useAuth } from '../../hooks/useAuth'
 import { ActiveStatusBadge } from '../../components/ActiveStatusBadge'
+import { FormAlert } from '../../components/FormAlert'
 import type { User, UserPayload, UserRole, UserUpdatePayload } from '../../types/user'
 
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
@@ -288,7 +289,7 @@ export function UserList() {
 
       {creating && (
         <form onSubmit={handleCreateSubmit} className="max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
-          {createError && <p className="mb-4 text-sm text-error">{createError}</p>}
+          <FormAlert message={createError} className="mb-4" />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-fg-muted">姓名 *</label>
@@ -441,7 +442,7 @@ export function UserList() {
                     <tr key={user.id} className="bg-surface-2">
                       <td colSpan={7} className="px-4 py-4">
                         <form onSubmit={(e) => handleEditSubmit(e, user.id)} className="flex flex-col gap-4">
-                          {editError && <p className="text-sm text-error">{editError}</p>}
+                          <FormAlert message={editError} />
                           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
                               <label className="mb-1 block text-sm font-medium text-fg-muted">姓名 *</label>
@@ -527,7 +528,7 @@ export function UserList() {
                     <tr key={user.id} className="bg-surface-2">
                       <td colSpan={7} className="px-4 py-4">
                         <form onSubmit={(e) => handleResetSubmit(e, user.id)} className="flex flex-col gap-4">
-                          {resetError && <p className="text-sm text-error">{resetError}</p>}
+                          <FormAlert message={resetError} />
                           <div className="max-w-sm">
                             <label className="mb-1 block text-sm font-medium text-fg-muted">{user.name} 的新密碼</label>
                             <input

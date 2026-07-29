@@ -5,6 +5,7 @@ import { isAxiosError } from 'axios'
 import { createVehicle, listCommissionAgentOptions } from '../../api/vehicles'
 import { listCashAccountOptions } from '../../api/cashAccounts'
 import { CustomerSelect } from '../../components/CustomerSelect'
+import { FormAlert } from '../../components/FormAlert'
 import type { CommissionAgent, CreateVehiclePayload } from '../../types/vehicle'
 import type { CashAccountOption } from '../../types/cashAccount'
 import { generateIdempotencyKey } from '../../utils/idempotency'
@@ -213,7 +214,7 @@ export function VehicleCreate() {
       <h1 className="text-xl font-semibold text-fg">新增買入車輛</h1>
 
       <form onSubmit={handleSubmit} className="max-w-3xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
-        {error && <p className="mb-4 text-sm text-error">{error}</p>}
+        <FormAlert message={error} className="mb-4" />
         <SectionTitle>基本車輛資料</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="廠牌" value={form.brand} onChange={(v) => set('brand', v)} required />

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { appConfig } from '../config/app'
+import { FormAlert } from '../components/FormAlert'
 import { useAuth } from '../hooks/useAuth'
 import { apiErrorMessage, loginSuccessPath } from './authFormState'
 
@@ -49,9 +50,7 @@ export function Login() {
         >
           {notice}
         </p>
-        <p role="alert" aria-live="polite" className="mt-4 text-sm text-error empty:hidden">
-          {error}
-        </p>
+        <FormAlert message={error} className="mt-4" />
 
         <div className="mt-6 flex flex-col gap-4">
           <div>

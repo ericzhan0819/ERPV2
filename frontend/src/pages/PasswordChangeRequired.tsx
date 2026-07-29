@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { isAxiosError } from 'axios'
 import { ThemeToggle } from '../components/ThemeToggle'
+import { FormAlert } from '../components/FormAlert'
 import { useAuth } from '../hooks/useAuth'
 import {
   PASSWORD_UPDATED_RELOGIN_NOTICE,
@@ -97,9 +98,7 @@ export function PasswordChangeRequired() {
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
-            <p role="alert" aria-live="polite" className="text-sm text-error empty:hidden">
-              {error}
-            </p>
+            <FormAlert message={error} />
             <PasswordInput
               id="current-password"
               label="目前密碼"

@@ -278,7 +278,9 @@ describe('Vehicle presentation', () => {
     const submit = screen.getByRole('button', { name: '建立車輛' })
     fireEvent.submit(submit.closest('form')!)
 
-    expect(await screen.findByText('已勾選同步購車付款，請填寫付款金額與付款帳戶')).toBeTruthy()
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('已勾選同步購車付款，請填寫付款金額與付款帳戶')
+    expect(document.activeElement).toBe(alert)
     expect(vehiclesApi.createVehicle).not.toHaveBeenCalled()
   })
 

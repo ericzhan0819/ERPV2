@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { isAxiosError } from 'axios'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
+import { FormAlert } from '../../components/FormAlert'
 import {
   PASSWORD_UPDATED_RELOGIN_NOTICE,
   PROFILE_UPDATED_RELOGIN_NOTICE,
@@ -463,9 +464,7 @@ function Feedback({
 }) {
   return (
     <>
-      <p role="alert" aria-live="assertive" className="text-sm text-error empty:hidden">
-        {error}
-      </p>
+      <FormAlert message={error} />
       <p role="status" aria-live="polite" className="text-sm text-success empty:hidden">
         {success}
       </p>

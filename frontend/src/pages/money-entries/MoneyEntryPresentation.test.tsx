@@ -121,7 +121,7 @@ describe('Money entry presentation', () => {
     expect(moneyEntriesApi.createMoneyEntry).not.toHaveBeenCalled()
   })
 
-  it('keeps a general API error at the top of the form without replacing field validation', async () => {
+  it('keeps field validation before exposing and focusing a general API error', async () => {
     const interaction = userEvent.setup()
     vi.mocked(moneyEntriesApi.createMoneyEntry).mockRejectedValue(new Error('network'))
     render(
@@ -131,15 +131,21 @@ describe('Money entry presentation', () => {
     )
 
     await screen.findByRole('option', { name: '營運現金' })
-    await interaction.selectOptions(screen.getByLabelText('分類'), '一般收入')
     await interaction.type(screen.getByLabelText('金額'), '1000')
     await interaction.selectOptions(screen.getByLabelText('資金帳戶'), '1')
     await interaction.click(screen.getByRole('button', { name: '建立收支' }))
+    expect(document.getElementById('money-entry-category-error')?.textContent).toBe('請選擇分類')
+    expect(moneyEntriesApi.createMoneyEntry).not.toHaveBeenCalled()
 
-    const error = await screen.findByText('新增收支失敗，請稍後再試')
+    await interaction.selectOptions(screen.getByLabelText('分類'), '一般收入')
+    await interaction.click(screen.getByRole('button', { name: '建立收支' }))
+
+    const error = await screen.findByRole('alert')
+    expect(error.textContent).toBe('新增收支失敗，請稍後再試')
     const firstField = screen.getByLabelText('日期')
     expect(error.compareDocumentPosition(firstField) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(document.getElementById('money-entry-category-error')).toBeNull()
+    expect(document.activeElement).toBe(error)
   })
 
   it('preserves active filters and distinguishes filtered no-result from empty data', async () => {
