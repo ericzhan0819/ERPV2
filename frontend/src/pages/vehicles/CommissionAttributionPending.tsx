@@ -76,6 +76,11 @@ export function CommissionAttributionPending() {
       </div>
 
       {error && <p className="text-sm text-error">{error}</p>}
+      {!loading && vehicles.length > 0 && (
+        <p className="text-sm text-fg-muted">
+          這些成交車輛缺少收車人或賣車人；補齊後請回薪資月份重算草稿。
+        </p>
+      )}
 
       <div className="grid gap-3 md:hidden" aria-live="polite">
         {loading && <StateCard message="載入中..." />}

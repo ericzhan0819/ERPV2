@@ -75,7 +75,7 @@ export function SalaryPeriodList() {
       {error && <p className="text-sm text-error">{error}</p>}
       <div className="grid gap-3 sm:hidden" aria-live="polite">
         {loading && <StateCard message="載入中..." />}
-        {!loading && periods.length === 0 && <StateCard message="尚未建立薪資月份" />}
+        {!loading && periods.length === 0 && <StateCard message="尚未建立薪資月份，請選擇月份並建立草稿。" />}
         {periods.map((period) => <PeriodCard key={period.id} period={period} />)}
       </div>
 
@@ -90,7 +90,7 @@ export function SalaryPeriodList() {
           </thead>
           <tbody className="divide-y divide-border">
             {loading && <EmptyRow message="載入中..." />}
-            {!loading && periods.length === 0 && <EmptyRow message="尚未建立薪資月份" />}
+            {!loading && periods.length === 0 && <EmptyRow message="尚未建立薪資月份，請選擇月份並建立草稿。" />}
             {periods.map((period) => <PeriodRow key={period.id} period={period} />)}
           </tbody>
         </table>

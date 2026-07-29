@@ -149,23 +149,28 @@ export function SalaryPeriodDetail() {
       )}
 
       {period.status === 'confirmed' && (
-        <PaymentPanel
-          period={period}
-          accounts={accounts}
-          form={payment}
-          busy={busy}
-          onChange={setPayment}
-          onPay={() => runAction(() => paySalaryPeriod(id, {
-            cash_account_id: Number(payment.cash_account_id),
-            payment_date: payment.payment_date,
-            idempotency_key: payment.idempotency_key,
-          }))}
-        />
+        <>
+          <p className="rounded-lg bg-primary/10 p-3 text-sm text-fg">
+            本月已確認，薪資快照與車輛歸屬已鎖定。
+          </p>
+          <PaymentPanel
+            period={period}
+            accounts={accounts}
+            form={payment}
+            busy={busy}
+            onChange={setPayment}
+            onPay={() => runAction(() => paySalaryPeriod(id, {
+              cash_account_id: Number(payment.cash_account_id),
+              payment_date: payment.payment_date,
+              idempotency_key: payment.idempotency_key,
+            }))}
+          />
+        </>
       )}
 
       {period.status === 'paid' && (
         <p className="rounded-lg bg-success/10 p-3 text-sm text-success">
-          已於 {period.payment_date} 由 {period.cash_account?.name ?? '指定帳戶'} 發薪，本月份唯讀。
+          已於 {period.payment_date} 由 {period.cash_account?.name ?? '指定帳戶'} 發薪；薪資快照與車輛歸屬已鎖定，本月份唯讀。
         </p>
       )}
 
@@ -271,7 +276,7 @@ function DraftActions({ periodMonth, busy, blocked, onRecalculate, onConfirm }: 
       </div>
       {monthStillOpen && (
         <p className="text-sm text-warning">
-          {periodMonth} 尚未結束，目前只能預覽與重算；請於下個月再確認，避免鎖定後漏掉本月後續成交。
+          {periodMonth} 尚未結束；請於下個月確認結算，以免漏掉後續成交。
         </p>
       )}
     </div>

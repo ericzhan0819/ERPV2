@@ -53,10 +53,7 @@ export function CommissionPlans() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold text-fg">獎金方案</h1>
-          <p className="mt-1 text-sm text-fg-muted">已使用方案永久唯讀；規則變更請建立新版本。</p>
-        </div>
+        <h1 className="min-w-0 text-xl font-semibold text-fg">獎金方案</h1>
         <Link to="/salary" className="flex min-h-11 items-center text-sm font-medium text-primary">返回薪資月份</Link>
       </div>
 
@@ -189,6 +186,11 @@ function CommissionPlanCard({ plan }: { plan: CommissionPlan }) {
           </span>
         ))}
       </div>
+      {plan.is_used && (
+        <p className="mt-4 text-sm text-fg-muted">
+          規則已鎖定；變更請建立新版本。
+        </p>
+      )}
     </section>
   )
 }

@@ -75,7 +75,7 @@ export function SalaryProfiles() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h1 className="text-xl font-semibold text-fg">員工薪資設定</h1>
-          <p className="mt-1 text-sm text-fg-muted">變更只影響未確認月份，不會回改歷史薪資快照。</p>
+          <p className="mt-1 text-sm text-fg-muted">只影響未確認月份；歷史薪資快照不變。</p>
         </div>
         <Link to="/salary" className="flex min-h-11 items-center text-sm font-medium text-primary">返回薪資月份</Link>
       </div>
