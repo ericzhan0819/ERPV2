@@ -75,13 +75,13 @@ export function UserList() {
   const [resetError, setResetError] = useState<string | null>(null)
   const [resetSubmitAttempt, setResetSubmitAttempt] = useState(0)
 
-  function loadUsers() {
+  function loadUsers(refreshErrorMessage = '使用者載入失敗') {
     setLoading(true)
     setFocusPageError(false)
     setError(null)
     listUsers()
       .then(setUsers)
-      .catch(() => setError('使用者載入失敗'))
+      .catch(() => setError(refreshErrorMessage))
       .finally(() => setLoading(false))
   }
 
@@ -138,7 +138,7 @@ export function UserList() {
       setCreating(false)
       setCreateForm(emptyCreateForm)
       setSuccessMessage('員工已建立；首次登入需使用 Email 與預設密碼，並立即修改密碼。')
-      loadUsers()
+      loadUsers('操作已送出，但員工列表可能不是最新；請重新整理後確認。')
     } catch (err) {
       setCreateError(extractErrorMessage(err, '新增使用者失敗，請稍後再試'))
     } finally {
@@ -188,7 +188,7 @@ export function UserList() {
     try {
       await updateUser(id, payload)
       setEditingId(null)
-      loadUsers()
+      loadUsers('操作已送出，但員工列表可能不是最新；請重新整理後確認。')
     } catch (err) {
       setEditError(extractErrorMessage(err, '更新使用者失敗，請稍後再試'))
     } finally {
@@ -205,7 +205,7 @@ export function UserList() {
     setFocusPageError(true)
     try {
       await deleteUser(user.id)
-      loadUsers()
+      loadUsers('操作已送出，但員工列表可能不是最新；請重新整理後確認。')
     } catch (err) {
       setError(extractErrorMessage(err, '刪除使用者失敗'))
     }
@@ -217,7 +217,7 @@ export function UserList() {
     setSuccessMessage(null)
     try {
       await setUserActive(user.id, !user.is_active)
-      loadUsers()
+      loadUsers('操作已送出，但員工列表可能不是最新；請重新整理後確認。')
     } catch (err) {
       setError(extractErrorMessage(err, '更新使用者狀態失敗'))
     }
@@ -232,7 +232,7 @@ export function UserList() {
     setFocusPageError(true)
     try {
       await setUserRole(user.id, role)
-      loadUsers()
+      loadUsers('操作已送出，但員工列表可能不是最新；請重新整理後確認。')
     } catch (err) {
       setError(extractErrorMessage(err, '更新角色失敗'))
     }
@@ -262,7 +262,7 @@ export function UserList() {
       setResettingId(null)
       setResetPassword('')
       setSuccessMessage('密碼已重設；員工既有登入會失效，需以新密碼重新登入並修改密碼。')
-      loadUsers()
+      loadUsers('操作已送出，但員工列表可能不是最新；請重新整理後確認。')
     } catch (err) {
       setResetError(extractErrorMessage(err, '重設密碼失敗'))
     } finally {
@@ -427,7 +427,7 @@ export function UserList() {
                 </td>
               </tr>
             )}
-            {!loading && users.length === 0 && (
+            {!loading && !error && users.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-4 py-6 text-center text-fg-muted">
                   <div className="flex flex-col items-center gap-2">

@@ -57,13 +57,13 @@ export function CashAccountList() {
   const [editError, setEditError] = useState<string | null>(null)
   const [editSubmitAttempt, setEditSubmitAttempt] = useState(0)
 
-  function loadAccounts() {
+  function loadAccounts(refreshErrorMessage = '資金帳戶載入失敗') {
     setLoading(true)
     setFocusPageError(false)
     setError(null)
     listCashAccountBalances()
       .then(setAccounts)
-      .catch(() => setError('資金帳戶載入失敗'))
+      .catch(() => setError(refreshErrorMessage))
       .finally(() => setLoading(false))
   }
 
@@ -107,7 +107,7 @@ export function CashAccountList() {
       await createCashAccount(payload)
       setCreating(false)
       setCreateForm(emptyForm)
-      loadAccounts()
+      loadAccounts('操作已送出，但資金帳戶列表可能不是最新；請重新整理後確認。')
     } catch (err) {
       setCreateError(extractErrorMessage(err, '新增帳戶失敗，請稍後再試'))
     } finally {
@@ -150,7 +150,7 @@ export function CashAccountList() {
     try {
       await updateCashAccount(id, payload)
       setEditingId(null)
-      loadAccounts()
+      loadAccounts('操作已送出，但資金帳戶列表可能不是最新；請重新整理後確認。')
     } catch (err) {
       setEditError(extractErrorMessage(err, '更新帳戶失敗，請稍後再試'))
     } finally {
@@ -166,7 +166,7 @@ export function CashAccountList() {
     setFocusPageError(true)
     try {
       await deleteCashAccount(account.id)
-      loadAccounts()
+      loadAccounts('操作已送出，但資金帳戶列表可能不是最新；請重新整理後確認。')
     } catch (err) {
       setError(extractErrorMessage(err, '刪除帳戶失敗'))
     }
@@ -177,7 +177,7 @@ export function CashAccountList() {
     setFocusPageError(true)
     try {
       await setCashAccountActive(account.id, !account.is_active)
-      loadAccounts()
+      loadAccounts('操作已送出，但資金帳戶列表可能不是最新；請重新整理後確認。')
     } catch (err) {
       setError(extractErrorMessage(err, '更新帳戶狀態失敗'))
     }
@@ -284,7 +284,7 @@ export function CashAccountList() {
                 </td>
               </tr>
             )}
-            {!loading && accounts.length === 0 && (
+            {!loading && !error && accounts.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-6 text-center text-fg-muted">
                   尚無資金帳戶

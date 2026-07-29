@@ -25,15 +25,16 @@ export function SalaryProfiles() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  function load() {
+  function load(refreshErrorMessage = '薪資設定載入失敗') {
     setLoading(true)
     setFocusError(false)
+    setError(null)
     Promise.all([listSalaryProfiles(), listUsers()])
       .then(([loadedProfiles, loadedUsers]) => {
         setProfiles(loadedProfiles)
         setUsers(loadedUsers)
       })
-      .catch((caught) => setError(apiError(caught, '薪資設定載入失敗')))
+      .catch((caught) => setError(apiError(caught, refreshErrorMessage)))
       .finally(() => setLoading(false))
   }
 
@@ -61,7 +62,7 @@ export function SalaryProfiles() {
     try {
       await updateSalaryProfile(editing, form)
       setEditing(null)
-      load()
+      load('薪資設定已儲存，但列表可能不是最新；請重新整理後確認。')
     } catch (caught) {
       setFieldErrors(apiValidationErrors(caught))
       setError(apiError(caught, '儲存薪資設定失敗'))
@@ -86,7 +87,7 @@ export function SalaryProfiles() {
 
       <FormAlert message={error} focusOnShow={focusError} />
       {loading && <p className="text-sm text-fg-muted">載入中...</p>}
-      {!loading && rows.length === 0 && <p className="text-sm text-fg-muted">目前沒有可設定的員工</p>}
+      {!loading && !error && rows.length === 0 && <p className="text-sm text-fg-muted">目前沒有可設定的員工</p>}
       <div className="grid gap-4">
         {rows.map((profile) => (
           <SalaryProfileCard

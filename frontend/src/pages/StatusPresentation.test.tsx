@@ -110,5 +110,7 @@ describe('Global status presentation', () => {
 
     expect((await screen.findByRole('alert')).textContent).toBe('稽核紀錄載入失敗')
     expect(document.activeElement).toBe(search)
+    expect(screen.queryByText('尚無稽核紀錄')).toBeNull()
+    expect(screen.queryByText('尚無符合條件的稽核紀錄')).toBeNull()
   })
 })

@@ -27,12 +27,13 @@ export function CommissionPlans() {
   const [focusError, setFocusError] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  function load() {
+  function load(refreshErrorMessage = '獎金方案載入失敗') {
     setLoading(true)
     setFocusError(false)
+    setError(null)
     listCommissionPlans()
       .then(setPlans)
-      .catch((caught) => setError(apiError(caught, '獎金方案載入失敗')))
+      .catch((caught) => setError(apiError(caught, refreshErrorMessage)))
       .finally(() => setLoading(false))
   }
 
@@ -46,7 +47,7 @@ export function CommissionPlans() {
       await createCommissionPlan(form)
       setShowForm(false)
       setForm({ ...initialForm, name: '' })
-      load()
+      load('方案已建立，但列表可能不是最新；請重新整理後確認。')
     } catch (caught) {
       setError(apiError(caught, '建立獎金方案失敗'))
     } finally {
@@ -75,7 +76,7 @@ export function CommissionPlans() {
       )}
 
       <div className="grid gap-4">
-        {!loading && plans.length === 0 && <p className="text-sm text-fg-muted">尚未建立獎金方案</p>}
+        {!loading && !error && plans.length === 0 && <p className="text-sm text-fg-muted">尚未建立獎金方案</p>}
         {plans.map((plan) => <CommissionPlanCard key={plan.id} plan={plan} />)}
       </div>
     </div>

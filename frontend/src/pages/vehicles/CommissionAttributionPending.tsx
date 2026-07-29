@@ -28,7 +28,7 @@ export function CommissionAttributionPending() {
   const [saveAttempt, setSaveAttempt] = useState(0)
   const [loading, setLoading] = useState(true)
 
-  function load() {
+  function load(refreshErrorMessage = '待補獎金歸屬資料載入失敗') {
     setLoading(true)
     setError(null)
     Promise.all([listPendingCommissionAttribution(), listCommissionAgentOptions()])
@@ -40,7 +40,7 @@ export function CommissionAttributionPending() {
           sales: vehicle.sales_agent_id?.toString() ?? '',
         }])))
       })
-      .catch(() => setError('待補獎金歸屬資料載入失敗'))
+      .catch(() => setError(refreshErrorMessage))
       .finally(() => setLoading(false))
   }
 
@@ -61,7 +61,7 @@ export function CommissionAttributionPending() {
         purchase_agent_id: Number(values.purchase),
         sales_agent_id: Number(values.sales),
       })
-      load()
+      load('歸屬已儲存，但列表可能不是最新；請重新整理後確認。')
     } catch (caught) {
       setError(errorMessage(caught))
     } finally {
@@ -87,7 +87,7 @@ export function CommissionAttributionPending() {
 
       <div className="grid gap-3 md:hidden" aria-live="polite">
         {loading && <StateCard message="載入中..." />}
-        {!loading && vehicles.length === 0 && <StateCard message="目前沒有待補資料" />}
+        {!loading && !error && vehicles.length === 0 && <StateCard message="目前沒有待補資料" />}
         {!loading && vehicles.map((vehicle) => {
           const values = selection[vehicle.id] ?? { purchase: '', sales: '' }
           return (
@@ -145,7 +145,7 @@ export function CommissionAttributionPending() {
             {loading && (
               <tr><td colSpan={5} className="px-4 py-8 text-center text-fg-muted">載入中...</td></tr>
             )}
-            {!loading && vehicles.length === 0 && (
+            {!loading && !error && vehicles.length === 0 && (
               <tr><td colSpan={5} className="px-4 py-8 text-center text-fg-muted">目前沒有待補資料</td></tr>
             )}
             {!loading && vehicles.map((vehicle) => {

@@ -246,7 +246,7 @@ export function AuditLogList() {
                   <td colSpan={7} className="px-4 py-8 text-center text-fg-muted">載入中...</td>
                 </tr>
               )}
-              {!loading && logs.length === 0 && (
+              {!loading && !error && logs.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-fg-muted">
                     {hasActiveFilters ? (

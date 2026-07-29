@@ -77,6 +77,9 @@ describe('CashAccountList presentation', () => {
   })
 
   it('removes edit control-position teaching while preserving status actions', async () => {
+    vi.mocked(cashAccountsApi.listCashAccountBalances)
+      .mockResolvedValueOnce([account])
+      .mockRejectedValueOnce(new Error('offline'))
     vi.mocked(cashAccountsApi.setCashAccountActive).mockResolvedValue({
       ...account,
       is_active: false,
@@ -94,6 +97,10 @@ describe('CashAccountList presentation', () => {
     const restoredRow = screen.getByText('營運現金').closest('tr')
     await interaction.click(within(restoredRow!).getByRole('button', { name: '停用' }))
     expect(cashAccountsApi.setCashAccountActive).toHaveBeenCalledWith(1, false)
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      '操作已送出，但資金帳戶列表可能不是最新；請重新整理後確認。',
+    )
+    expect(screen.getByText('營運現金')).toBeTruthy()
   })
 
   it('keeps the irreversible delete confirmation', async () => {

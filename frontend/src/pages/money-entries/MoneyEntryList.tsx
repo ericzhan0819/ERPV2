@@ -442,7 +442,7 @@ export function MoneyEntryList() {
                 </td>
               </tr>
             )}
-            {!loading && entries.length === 0 && (
+            {!loading && !error && entries.length === 0 && (
               <tr>
                 <td colSpan={columnCount} className="px-4 py-6 text-center text-fg-muted">
                   {isPageOutOfRange ? (
