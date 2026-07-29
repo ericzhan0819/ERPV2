@@ -123,7 +123,9 @@ export function SalaryPeriodDetail() {
   }
 
   if (!period) {
-    return <p className={error ? 'text-error' : 'text-fg-muted'}>{error ?? '載入中...'}</p>
+    return error
+      ? <FormAlert message={error} />
+      : <p className="text-fg-muted">載入中...</p>
   }
 
   const tiers = [...period.commission_plan.tiers].sort((a, b) => a.min_sales_count - b.min_sales_count)

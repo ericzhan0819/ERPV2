@@ -557,6 +557,7 @@ v1.6 不修改 backend，但封板前仍建立完整回歸證據。
 - [ ] Salary／Audit／Cash Account
 - [ ] 車輛建檔／成交結案紙本與 PDF 預覽
 - [ ] Keyboard-only 主要操作
+- [ ] 真實 screen reader 驗證 error live region 與 focus 不會重複朗讀
 - [ ] 錯誤、warning、success、empty state
 
 ### 13.3 Tablet／Mobile

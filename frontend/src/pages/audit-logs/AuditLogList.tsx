@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { listAuditLogs } from '../../api/auditLogs'
+import { FormAlert } from '../../components/FormAlert'
 import type {
   AuditAction,
   AuditLog,
@@ -223,7 +224,7 @@ export function AuditLogList() {
         />
       </div>
 
-      {error && <p className="text-sm text-error">{error}</p>}
+      <FormAlert message={error} />
 
       <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
         <div className="overflow-x-auto">

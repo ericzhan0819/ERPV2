@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { createSalaryPeriod, listSalaryPeriods } from '../../api/salaryPeriods'
+import { FormAlert } from '../../components/FormAlert'
 import type { SalaryPeriodListItem } from '../../types/salary'
 import { SalaryStatusBadge } from './shared'
 import { apiError, formatCurrency } from './salaryUtils'
@@ -72,7 +73,7 @@ export function SalaryPeriodList() {
         </Link>
       </div>
 
-      {error && <p className="text-sm text-error">{error}</p>}
+      <FormAlert message={error} />
       <div className="grid gap-3 sm:hidden" aria-live="polite">
         {loading && <StateCard message="載入中..." />}
         {!loading && periods.length === 0 && <StateCard message="尚未建立薪資月份，請選擇月份並建立草稿。" />}

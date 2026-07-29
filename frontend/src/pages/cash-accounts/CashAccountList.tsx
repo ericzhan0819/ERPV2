@@ -258,7 +258,7 @@ export function CashAccountList() {
         </form>
       )}
 
-      {error && <p className="text-sm text-error">{error}</p>}
+      <FormAlert message={error} />
 
       <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
         <table className="min-w-full divide-y divide-border text-sm">

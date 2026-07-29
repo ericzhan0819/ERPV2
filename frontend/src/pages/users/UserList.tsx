@@ -392,7 +392,7 @@ export function UserList() {
         </form>
       )}
 
-      {error && <p className="text-sm text-error">{error}</p>}
+      <FormAlert message={error} />
       <div role="status" aria-live="polite" className="empty:hidden">
         {successMessage && (
           <p className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-fg">

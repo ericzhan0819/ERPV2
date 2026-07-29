@@ -14,6 +14,7 @@ import { ApprovalStatusBadge } from '../../components/ApprovalStatusBadge'
 import { ActiveFilterChip } from '../../components/ActiveFilterChip'
 import { DebouncedSearchInput } from '../../components/DebouncedSearchInput'
 import { MobileFilterDrawer } from '../../components/MobileFilterDrawer'
+import { FormAlert } from '../../components/FormAlert'
 import { canApproveMoneyEntries, canViewFinancials } from '../../utils/permissions'
 import {
   hasActiveMoneyEntryListFilters,
@@ -273,6 +274,7 @@ export function MoneyEntryList() {
 
   async function handleApprove(id: number) {
     setReviewingId(id)
+    setError(null)
     try {
       await approveMoneyEntry(id)
       setRefreshToken((token) => token + 1)
@@ -285,6 +287,7 @@ export function MoneyEntryList() {
 
   async function handleReject(id: number) {
     setReviewingId(id)
+    setError(null)
     try {
       await rejectMoneyEntry(id)
       setRefreshToken((token) => token + 1)
@@ -398,7 +401,7 @@ export function MoneyEntryList() {
         />
       </MobileFilterDrawer>
 
-      {error && <p className="text-sm text-error">{error}</p>}
+      <FormAlert message={error} />
 
       <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
         <table className="min-w-full divide-y divide-border text-sm">

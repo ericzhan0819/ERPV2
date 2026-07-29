@@ -6,6 +6,7 @@ import {
   listPendingCommissionAttribution,
   updateCommissionAttribution,
 } from '../../api/vehicles'
+import { FormAlert } from '../../components/FormAlert'
 import type { CommissionAgent, Vehicle } from '../../types/vehicle'
 
 function errorMessage(error: unknown): string {
@@ -24,6 +25,7 @@ export function CommissionAttributionPending() {
   const [selection, setSelection] = useState<Record<number, { purchase: string; sales: string }>>({})
   const [savingId, setSavingId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [saveAttempt, setSaveAttempt] = useState(0)
   const [loading, setLoading] = useState(true)
 
   function load() {
@@ -45,6 +47,7 @@ export function CommissionAttributionPending() {
   useEffect(load, [])
 
   async function save(vehicle: Vehicle) {
+    setSaveAttempt((current) => current + 1)
     const values = selection[vehicle.id]
     if (!values?.purchase || !values.sales) {
       setError('請完整指定收車人與賣車人')
@@ -75,7 +78,7 @@ export function CommissionAttributionPending() {
         </Link>
       </div>
 
-      {error && <p className="text-sm text-error">{error}</p>}
+      <FormAlert message={error} signal={saveAttempt} />
       {!loading && vehicles.length > 0 && (
         <p className="text-sm text-fg-muted">
           這些成交車輛缺少收車人或賣車人；補齊後請回薪資月份重算草稿。

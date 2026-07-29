@@ -130,6 +130,32 @@ describe('salary copy presentation', () => {
     expect(screen.getByRole('button', { name: '建立月份草稿' })).toBeTruthy()
   })
 
+  it('announces salary list and detail failures', async () => {
+    vi.mocked(salaryPeriodsApi.listSalaryPeriods).mockResolvedValue([])
+    vi.mocked(salaryPeriodsApi.createSalaryPeriod).mockRejectedValue(new Error('conflict'))
+    const interaction = userEvent.setup()
+    const listView = render(
+      <MemoryRouter>
+        <SalaryPeriodList />
+      </MemoryRouter>,
+    )
+
+    await screen.findAllByText('尚未建立薪資月份，請選擇月份並建立草稿。')
+    await interaction.click(screen.getByRole('button', { name: '建立月份草稿' }))
+    expect((await screen.findByRole('alert')).textContent).toBe('建立薪資草稿失敗')
+
+    listView.unmount()
+    vi.mocked(salaryPeriodsApi.getSalaryPeriod).mockRejectedValue(new Error('offline'))
+    render(
+      <MemoryRouter initialEntries={['/salary/periods/1']}>
+        <Routes>
+          <Route path="/salary/periods/:id" element={<SalaryPeriodDetail />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    expect((await screen.findByRole('alert')).textContent).toBe('薪資月份載入失敗')
+  })
+
   it('shows the plan-version rule only on used plans', async () => {
     vi.mocked(commissionPlansApi.listCommissionPlans).mockResolvedValue([
       commissionPlan,
@@ -261,6 +287,15 @@ describe('salary copy presentation', () => {
         '這些成交車輛缺少收車人或賣車人；補齊後請回薪資月份重算草稿。',
       ),
     ).toBeTruthy()
+    const saveButton = screen.getAllByRole('button', { name: '儲存歸屬' })[0]
+    await interaction.click(saveButton)
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('請完整指定收車人與賣車人')
+    saveButton.focus()
+    await interaction.click(saveButton)
+    expect(document.activeElement).toBe(alert)
+    expect(vehiclesApi.updateCommissionAttribution).not.toHaveBeenCalled()
+
     const selects = screen.getAllByRole('combobox')
     await interaction.selectOptions(selects[0], '1')
     await interaction.selectOptions(selects[1], '2')

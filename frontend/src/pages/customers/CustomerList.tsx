@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listCustomers } from '../../api/customers'
+import { FormAlert } from '../../components/FormAlert'
 import type { Customer, CustomerListMeta, CustomerType } from '../../types/customer'
 
 const typeOptions: { value: CustomerType | ''; label: string }[] = [
@@ -78,7 +79,7 @@ export function CustomerList() {
         </select>
       </div>
 
-      {error && <p className="text-sm text-error">{error}</p>}
+      <FormAlert message={error} />
 
       <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
         <table className="min-w-full divide-y divide-border text-sm">
