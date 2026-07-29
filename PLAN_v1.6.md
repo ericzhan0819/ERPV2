@@ -475,6 +475,7 @@ v1.6 是小型純前端 UX cleanup 版本：系統性移除重複副標與教學
 - [ ] 條件式 warning 出現時不搶走 focus，除非現有流程要求
 - [ ] Modal／Drawer title、focus trap、Escape、focus return 不變
 - [ ] 圖表名稱、期間、數值與單位對 screen reader 仍可理解
+- [ ] Account／強制改密碼欄位的 help 先於 error，實際讀屏順序仍可理解
 
 ### 10.4 Automated accessibility contract
 
