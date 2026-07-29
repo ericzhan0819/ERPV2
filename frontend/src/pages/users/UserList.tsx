@@ -435,6 +435,7 @@ export function UserList() {
             {!loading &&
               users.map((user) => {
                 const isSelf = currentUser?.id === user.id
+                const selfRestrictionId = `user-${user.id}-self-restrictions`
 
                 if (editingId === user.id) {
                   return (
@@ -499,10 +500,6 @@ export function UserList() {
                               />
                             </div>
                           </div>
-                          <p className="text-xs text-fg-muted">
-                            角色請使用列表中的角色下拉選單；啟用／停用請使用「停用／啟用」按鈕；密碼請使用「重設密碼」。
-                          </p>
-
                           {editError && <p className="text-sm text-error">{editError}</p>}
 
                           <div className="flex gap-3">
@@ -581,7 +578,8 @@ export function UserList() {
                         value={user.role}
                         disabled={isSelf}
                         onChange={(e) => handleRoleChange(user, e.target.value as UserRole)}
-                        title={isSelf ? '無法變更自己的角色' : roleLabel(user.role)}
+                        aria-label={`${user.name}的角色：${roleLabel(user.role)}`}
+                        aria-describedby={isSelf ? selfRestrictionId : undefined}
                         className="rounded-lg border border-border-strong px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {ROLE_OPTIONS.map((option) => (
@@ -609,7 +607,7 @@ export function UserList() {
                         <button
                           onClick={() => startReset(user)}
                           disabled={isSelf}
-                          title={isSelf ? '不可從管理頁重設自己的密碼' : undefined}
+                          aria-describedby={isSelf ? selfRestrictionId : undefined}
                           className="text-sm font-medium text-fg-muted hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline"
                         >
                           重設密碼
@@ -617,6 +615,7 @@ export function UserList() {
                         <button
                           onClick={() => toggleActive(user)}
                           disabled={isSelf && user.is_active}
+                          aria-describedby={isSelf ? selfRestrictionId : undefined}
                           className="text-sm font-medium text-fg-muted hover:underline disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           {user.is_active ? '停用' : '啟用'}
@@ -624,13 +623,14 @@ export function UserList() {
                         <button
                           onClick={() => handleDelete(user)}
                           disabled={isSelf}
+                          aria-describedby={isSelf ? selfRestrictionId : undefined}
                           className="text-sm font-medium text-error hover:underline disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           刪除
                         </button>
                         {isSelf && (
-                          <span className="basis-full text-xs text-fg-muted">
-                            自己的密碼請至「我的帳號」修改
+                          <span id={selfRestrictionId} className="basis-full text-xs text-fg-muted">
+                            不可變更自己的角色、停用或刪除自己的帳號；密碼請至「我的帳號」。
                           </span>
                         )}
                       </div>

@@ -324,8 +324,6 @@ export function CashAccountList() {
                             />
                           </div>
                         </div>
-                        <p className="text-xs text-fg-muted">啟用／停用請使用列表中的「停用／啟用」按鈕。</p>
-
                         {editError && <p className="text-sm text-error">{editError}</p>}
 
                         <div className="flex gap-3">
