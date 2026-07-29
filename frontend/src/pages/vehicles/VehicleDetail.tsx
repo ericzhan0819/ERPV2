@@ -681,7 +681,7 @@ function PurchasePriceModal({
     <Modal title={currentPrice === null || currentPrice === undefined ? '補登收購價' : '修正收購價'} onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <p className="text-sm leading-6 text-fg-muted">
-          收購價會影響單車毛利與薪資獎金。薪資月份確認或發薪後，系統將禁止修改。
+          收購價影響單車毛利與薪資獎金；薪資月份確認或發薪後不可修改。
         </p>
         <Field label="收購價" value={purchasePrice} onChange={setPurchasePrice} type="number" required />
         {error && <p className="text-sm text-error">{error}</p>}
@@ -1036,7 +1036,7 @@ function CloseSaleModal({
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <Field label="成交日期（預設今天）" value={sold_at} onChange={setSoldAt} type="date" />
         <p className="text-xs text-fg-muted">
-          成交日期會決定薪資獎金月份；已確認或已發薪的月份不能再新增成交。訂金與尾款可先收取，因為收款日期不等於成交月份。
+          成交日期決定薪資獎金月份；已確認或已發薪月份不能新增成交。收款日期不影響成交月份。
         </p>
         {error && <p className="text-sm text-error">{error}</p>}
         <button

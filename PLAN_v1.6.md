@@ -333,41 +333,41 @@ v1.6 是小型純前端 UX cleanup 版本：系統性移除重複副標與教學
 
 ### 7.1 車輛列表
 
-- [ ] 檢查頁面副標與 Filter 說明
-- [ ] 保留 active filter chips 與 empty／no result 差異
-- [ ] 保留「尚無照片」空圖狀態
-- [ ] 不改 Vehicle Card 欄位、角色遮蔽與 URL Filter
+- [x] 檢查頁面副標與 Filter 說明
+- [x] 保留 active filter chips 與 empty／no result 差異
+- [x] 保留「尚無照片」空圖狀態
+- [x] 不改 Vehicle Card 欄位、角色遮蔽與 URL Filter
 
 ### 7.2 新增車輛
 
-- [ ] 移除與 label／required 重複的說明
-- [ ] 保留同步購車付款的非直覺後果
-- [ ] 保留付款金額與帳戶缺失錯誤
-- [ ] 不改 purchase payment transaction 或 payload
+- [x] 移除與 label／required 重複的說明
+- [x] 保留同步購車付款的非直覺後果
+- [x] 保留付款金額與帳戶缺失錯誤
+- [x] 不改 purchase payment transaction 或 payload
 
 ### 7.3 車輛詳情與 Workflow Modal
 
-- [ ] 檢查上架、收訂金、尾款、整備支出與成交 Modal 的常駐說明
-- [ ] 保留成交日期影響薪資獎金月份的提示
-- [ ] 將成交日期提示縮成原因＋結果
-- [ ] 保留已確認／已發薪月份不能新增成交的阻擋原因
-- [ ] 保留送出中、錯誤與成功狀態
-- [ ] 保留說明欄位 label；不因「說明文字太多」誤刪業務資料欄位
-- [ ] 不改按鈕可見條件、Workflow、idempotency 與 approved-only 檢查
+- [x] 檢查上架、收訂金、尾款、整備支出與成交 Modal 的常駐說明
+- [x] 保留成交日期影響薪資獎金月份的提示
+- [x] 將成交日期提示縮成原因＋結果
+- [x] 保留已確認／已發薪月份不能新增成交的阻擋原因
+- [x] 保留送出中、錯誤與成功狀態
+- [x] 保留說明欄位 label；不因「說明文字太多」誤刪業務資料欄位
+- [x] 不改按鈕可見條件、Workflow、idempotency 與 approved-only 檢查
 
 ### 7.4 車輛照片
 
-- [ ] 保留上傳限制、失敗與重試必要資訊
-- [ ] 移除只重述按鈕用途的文字
-- [ ] 保留封面、排序與刪除結果
-- [ ] 不改 photo API、upload batch、fencing 或 public URL
+- [x] 保留上傳限制、失敗與重試必要資訊
+- [x] 移除只重述按鈕用途的文字
+- [x] 保留封面、排序與刪除結果
+- [x] 不改 photo API、upload batch、fencing 或 public URL
 
 ### 7.5 Tests
 
-- [ ] 更新 Vehicle page tests
-- [ ] 保留 Filter／Card／role presentation tests
-- [ ] 驗證成交高風險提示仍存在
-- [ ] 驗證 empty state 與 no result 不混淆
+- [x] 更新 Vehicle page tests
+- [x] 保留 Filter／Card／role presentation tests
+- [x] 驗證成交高風險提示仍存在
+- [x] 驗證 empty state 與 no result 不混淆
 
 ---
 

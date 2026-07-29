@@ -272,7 +272,7 @@ export function VehicleCreate() {
 
         <SectionTitle>購車付款</SectionTitle>
         <Checkbox
-          label="是否建立時同步記錄購車付款"
+          label="建立時同步記錄購車付款"
           checked={form.create_purchase_payment}
           onChange={(v) => set('create_purchase_payment', v)}
         />
@@ -329,23 +329,23 @@ export function VehicleCreate() {
         <SectionTitle>入庫檢核</SectionTitle>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Checkbox
-            label="是否有行照"
+            label="有行照"
             checked={form.has_registration_document}
             onChange={(v) => set('has_registration_document', v)}
           />
-          <Checkbox label="是否有鑰匙 / 備用鑰匙" checked={form.has_spare_key} onChange={(v) => set('has_spare_key', v)} />
+          <Checkbox label="有鑰匙 / 備用鑰匙" checked={form.has_spare_key} onChange={(v) => set('has_spare_key', v)} />
           <Checkbox
-            label="是否已過戶"
+            label="已過戶"
             checked={form.is_transfer_completed}
             onChange={(v) => set('is_transfer_completed', v)}
           />
           <Checkbox
-            label="是否已驗車"
+            label="已驗車"
             checked={form.is_inspection_completed}
             onChange={(v) => set('is_inspection_completed', v)}
           />
           <Checkbox
-            label="是否已整備"
+            label="已整備"
             checked={form.is_preparation_completed}
             onChange={(v) => set('is_preparation_completed', v)}
           />
