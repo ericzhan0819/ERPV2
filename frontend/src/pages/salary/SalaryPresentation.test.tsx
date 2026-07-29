@@ -143,6 +143,9 @@ describe('salary copy presentation', () => {
     await screen.findAllByText('尚未建立薪資月份，請選擇月份並建立草稿。')
     await interaction.click(screen.getByRole('button', { name: '建立月份草稿' }))
     expect((await screen.findByRole('alert')).textContent).toBe('建立薪資草稿失敗')
+    expect(
+      screen.getAllByText('尚未建立薪資月份，請選擇月份並建立草稿。'),
+    ).toHaveLength(2)
 
     listView.unmount()
     vi.mocked(salaryPeriodsApi.getSalaryPeriod).mockRejectedValue(new Error('offline'))

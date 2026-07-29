@@ -15,14 +15,19 @@ export function SalaryPeriodList() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [focusError, setFocusError] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
 
   function load(refreshErrorMessage = '薪資月份載入失敗') {
     setLoading(true)
     setFocusError(false)
+    setLoadFailed(false)
     setError(null)
     listSalaryPeriods()
       .then(setPeriods)
-      .catch((caught) => setError(apiError(caught, refreshErrorMessage)))
+      .catch((caught) => {
+        setLoadFailed(true)
+        setError(apiError(caught, refreshErrorMessage))
+      })
       .finally(() => setLoading(false))
   }
 
@@ -36,6 +41,7 @@ export function SalaryPeriodList() {
       await createSalaryPeriod(month)
       load('薪資草稿已建立，但列表可能不是最新；請重新整理後確認。')
     } catch (caught) {
+      setLoadFailed(false)
       setError(apiError(caught, '建立薪資草稿失敗'))
     } finally {
       setSaving(false)
@@ -79,7 +85,7 @@ export function SalaryPeriodList() {
       <FormAlert message={error} focusOnShow={focusError} />
       <div className="grid gap-3 sm:hidden" aria-live="polite">
         {loading && <StateCard message="載入中..." />}
-        {!loading && !error && periods.length === 0 && <StateCard message="尚未建立薪資月份，請選擇月份並建立草稿。" />}
+        {!loading && !loadFailed && periods.length === 0 && <StateCard message="尚未建立薪資月份，請選擇月份並建立草稿。" />}
         {periods.map((period) => <PeriodCard key={period.id} period={period} />)}
       </div>
 
@@ -94,7 +100,7 @@ export function SalaryPeriodList() {
           </thead>
           <tbody className="divide-y divide-border">
             {loading && <EmptyRow message="載入中..." />}
-            {!loading && !error && periods.length === 0 && <EmptyRow message="尚未建立薪資月份，請選擇月份並建立草稿。" />}
+            {!loading && !loadFailed && periods.length === 0 && <EmptyRow message="尚未建立薪資月份，請選擇月份並建立草稿。" />}
             {periods.map((period) => <PeriodRow key={period.id} period={period} />)}
           </tbody>
         </table>

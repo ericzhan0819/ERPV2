@@ -179,6 +179,24 @@ describe('Customer, audit and print presentation', () => {
     expect(phone.getAttribute('aria-describedby')).toBeNull()
   })
 
+  it('distinguishes customer search failure from a genuine no-result', async () => {
+    vi.useFakeTimers()
+    vi.mocked(customersApi.listCustomers).mockRejectedValue(new Error('offline'))
+    render(<CustomerSelectHarness />)
+
+    const name = screen.getByLabelText('買方姓名 *')
+    fireEvent.focus(name)
+    fireEvent.change(name, { target: { value: '王小明' } })
+    await act(async () => {
+      vi.advanceTimersByTime(250)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(screen.getByRole('alert').textContent).toBe('客戶搜尋失敗，請稍後再試')
+    expect(screen.queryByText('查無相符客戶；填寫電話後將建立新客戶')).toBeNull()
+  })
+
   it('distinguishes filtered customer no-result and keeps the clear action', async () => {
     vi.mocked(customersApi.listCustomers).mockResolvedValue({
       data: [],

@@ -31,6 +31,7 @@ export function CustomerSelect({
   const [results, setResults] = useState<Customer[]>([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [searchError, setSearchError] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
   const containerRef = useRef<HTMLDivElement>(null)
   const latestRequestId = useRef(0)
@@ -49,12 +50,14 @@ export function CustomerSelect({
       setResults([])
       setActiveIndex(-1)
       setLoading(false)
+      setSearchError(false)
       return
     }
 
     setResults([])
     setActiveIndex(-1)
     setLoading(true)
+    setSearchError(false)
     const handle = window.setTimeout(() => {
       listCustomers({ search: trimmedQuery, per_page: 20 })
         .then((response) => {
@@ -65,6 +68,7 @@ export function CustomerSelect({
         .catch(() => {
           if (requestId !== latestRequestId.current) return
           setResults([])
+          setSearchError(true)
         })
         .finally(() => {
           if (requestId !== latestRequestId.current) return
@@ -100,6 +104,7 @@ export function CustomerSelect({
     setOpen(true)
     setResults([])
     setLoading(nextName.trim() !== '')
+    setSearchError(false)
     setActiveIndex(-1)
   }
 
@@ -110,12 +115,14 @@ export function CustomerSelect({
       phone: customer.phone ?? '',
     })
     setOpen(false)
+    setSearchError(false)
     setActiveIndex(-1)
   }
 
   function handleUseAsNewCustomer() {
     onChange({ customerId: '', name, phone })
     setOpen(false)
+    setSearchError(false)
     setActiveIndex(-1)
   }
 
@@ -193,10 +200,15 @@ export function CustomerSelect({
         {showListbox && (
           <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border-strong bg-surface shadow-lg">
             <div role="status" className="sr-only">
-              {!loading && results.length === 0 ? '查無相符客戶；填寫電話後將建立新客戶' : ''}
+              {!loading && !searchError && results.length === 0 ? '查無相符客戶；填寫電話後將建立新客戶' : ''}
             </div>
             {loading && <div className="px-3 py-2 text-sm text-fg-muted">搜尋中...</div>}
-            {!loading && results.length === 0 && (
+            {!loading && searchError && (
+              <div role="alert" className="px-3 py-2 text-sm text-error">
+                客戶搜尋失敗，請稍後再試
+              </div>
+            )}
+            {!loading && !searchError && results.length === 0 && (
               <div aria-hidden="true" className="px-3 py-2 text-sm text-fg-muted">
                 查無相符客戶；填寫電話後將建立新客戶
               </div>
