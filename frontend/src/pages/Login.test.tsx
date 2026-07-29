@@ -117,8 +117,10 @@ describe('Login', () => {
     await user.type(screen.getByLabelText(/密碼/), 'password')
     await user.click(screen.getByRole('button', { name: '登入' }))
 
-    expect((await screen.findByRole('alert')).textContent).toBe(
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe(
       '登入失敗，請稍後再試',
     )
+    expect(alert.compareDocumentPosition(loginInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })

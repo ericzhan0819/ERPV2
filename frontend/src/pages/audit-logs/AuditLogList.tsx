@@ -117,6 +117,7 @@ export function AuditLogList() {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const hasActiveFilters = Boolean(search || action || subjectType || dateFrom || dateTo)
 
   const reload = useCallback(() => {
     setLoading(true)
@@ -145,6 +146,15 @@ export function AuditLogList() {
   function resetPage() {
     setPage(1)
     setExpandedId(null)
+  }
+
+  function clearFilters() {
+    setSearch('')
+    setAction('')
+    setSubjectType('')
+    setDateFrom('')
+    setDateTo('')
+    resetPage()
   }
 
   return (
@@ -237,7 +247,22 @@ export function AuditLogList() {
               )}
               {!loading && logs.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-fg-muted">尚無符合條件的稽核紀錄</td>
+                  <td colSpan={7} className="px-4 py-8 text-center text-fg-muted">
+                    {hasActiveFilters ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <span>尚無符合條件的稽核紀錄</span>
+                        <button
+                          type="button"
+                          onClick={clearFilters}
+                          className="text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          清除篩選條件
+                        </button>
+                      </div>
+                    ) : (
+                      '尚無稽核紀錄'
+                    )}
+                  </td>
                 </tr>
               )}
               {!loading && logs.map((log) => {

@@ -416,37 +416,37 @@ v1.6 是小型純前端 UX cleanup 版本：系統性移除重複副標與教學
 
 ### 9.1 Loading
 
-- [ ] Loading 文案簡短
-- [ ] 不以假資料占位
-- [ ] 不因刪除說明造成 layout shift 過大
+- [x] Loading 文案簡短
+- [x] 不以假資料占位
+- [x] 不因刪除說明造成 layout shift 過大
 
 ### 9.2 Empty state
 
-- [ ] 區分「沒有任何資料」與「Filter 沒有結果」
-- [ ] 只有確實可採取下一步時才顯示 action
-- [ ] 不用長篇教學填滿空畫面
+- [x] 區分「沒有任何資料」與「Filter 沒有結果」
+- [x] 只有確實可採取下一步時才顯示 action
+- [x] 不用長篇教學填滿空畫面
 
 ### 9.3 Error
 
-- [ ] Per-field error 留在欄位下方
-- [ ] General error 留在表單或區塊頂部
-- [ ] 說明原因與修正方式
-- [ ] 不洩漏敏感資訊或帳號存在狀態
-- [ ] 不用「請稍後再試」取代可具體處理的驗證錯誤
+- [x] Per-field error 留在欄位下方
+- [x] General error 留在表單或區塊頂部
+- [x] 說明原因與修正方式
+- [x] 不洩漏敏感資訊或帳號存在狀態
+- [x] 不用「請稍後再試」取代可具體處理的驗證錯誤
 
 ### 9.4 Success
 
-- [ ] 成功訊息只保留重要結果
-- [ ] 會造成 Session 失效、重新登入或強制改密碼時明確說明
-- [ ] 一般 CRUD 成功避免過長
+- [x] 成功訊息只保留重要結果
+- [x] 會造成 Session 失效、重新登入或強制改密碼時明確說明
+- [x] 一般 CRUD 成功避免過長
 
 ### 9.5 Warning 與 Disabled reason
 
-- [ ] Warning 只在條件成立時顯示
-- [ ] 阻擋型與非阻擋型語意分開
-- [ ] Disabled control 的原因可由 keyboard／touch 使用者取得
-- [ ] 不把 `title` 當成唯一原因
-- [ ] 不重複顯示同一原因三次
+- [x] Warning 只在條件成立時顯示
+- [x] 阻擋型與非阻擋型語意分開
+- [x] Disabled control 的原因可由 keyboard／touch 使用者取得
+- [x] 不把 `title` 當成唯一原因
+- [x] 不重複顯示同一原因三次
 
 ---
 

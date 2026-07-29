@@ -194,6 +194,7 @@ export function CashAccountList() {
 
       {isAdmin && creating && (
         <form onSubmit={handleCreateSubmit} className="max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
+          {createError && <p className="mb-4 text-sm text-error">{createError}</p>}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-fg-muted">帳戶名稱</label>
@@ -239,8 +240,6 @@ export function CashAccountList() {
               </label>
             </div>
           </div>
-
-          {createError && <p className="mt-4 text-sm text-error">{createError}</p>}
 
           <div className="mt-6 flex gap-3">
             <button
@@ -289,6 +288,7 @@ export function CashAccountList() {
                   <tr key={account.id} className="bg-surface-2">
                     <td colSpan={6} className="px-4 py-4">
                       <form onSubmit={(e) => handleEditSubmit(e, account.id)} className="flex flex-col gap-4">
+                        {editError && <p className="text-sm text-error">{editError}</p>}
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                           <div>
                             <label className="mb-1 block text-sm font-medium text-fg-muted">帳戶名稱</label>
@@ -324,8 +324,6 @@ export function CashAccountList() {
                             />
                           </div>
                         </div>
-                        {editError && <p className="text-sm text-error">{editError}</p>}
-
                         <div className="flex gap-3">
                           <button
                             type="submit"

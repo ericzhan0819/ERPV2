@@ -126,6 +126,7 @@ function ProfileSection({
       <h2 className="text-lg font-semibold text-fg">個人資料</h2>
 
       <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
+        <Feedback error={error} success={success} />
         <FormField
           id="account-name"
           name="name"
@@ -190,8 +191,6 @@ function ProfileSection({
           <ReadOnlyValue label="Email" value={user.email} />
           <ReadOnlyValue label="角色" value={accountRoleLabel(user.role)} />
         </dl>
-
-        <Feedback error={error} success={success} />
 
         <button
           type="submit"
@@ -277,6 +276,7 @@ function PasswordSection({
       <h2 className="text-lg font-semibold text-fg">修改密碼</h2>
 
       <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
+        <Feedback error={error} success={success} />
         <PasswordField
           id="account-current-password"
           name="current_password"
@@ -319,8 +319,6 @@ function PasswordSection({
             setPasswordConfirmation(value)
           }}
         />
-
-        <Feedback error={error} success={success} />
 
         <button
           type="submit"

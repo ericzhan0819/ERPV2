@@ -49,6 +49,9 @@ export function Login() {
         >
           {notice}
         </p>
+        <p role="alert" aria-live="polite" className="mt-4 text-sm text-error empty:hidden">
+          {error}
+        </p>
 
         <div className="mt-6 flex flex-col gap-4">
           <div>
@@ -81,10 +84,6 @@ export function Login() {
               className="form-control-touch w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
-
-          <p role="alert" aria-live="polite" className="text-sm text-error empty:hidden">
-            {error}
-          </p>
 
           <button
             type="submit"

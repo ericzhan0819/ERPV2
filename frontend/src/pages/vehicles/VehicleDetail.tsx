@@ -680,11 +680,11 @@ function PurchasePriceModal({
   return (
     <Modal title={currentPrice === null || currentPrice === undefined ? '補登收購價' : '修正收購價'} onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {error && <p className="text-sm text-error">{error}</p>}
         <p className="text-sm leading-6 text-fg-muted">
           收購價影響單車毛利與薪資獎金；薪資月份確認或發薪後不可修改。
         </p>
         <Field label="收購價" value={purchasePrice} onChange={setPurchasePrice} type="number" required />
-        {error && <p className="text-sm text-error">{error}</p>}
         <button
           type="submit"
           disabled={submitting || purchasePrice === '' || Number(purchasePrice) < 0}
@@ -721,6 +721,7 @@ function ListModal({
   return (
     <Modal title="整備完成並上架" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {error && <p className="text-sm text-error">{error}</p>}
         <Field label="開價" value={asking_price} onChange={setAskingPrice} type="number" required />
         <Field label="底價" value={floor_price} onChange={setFloorPrice} type="number" />
         <Field label="上架日期" value={listing_date} onChange={setListingDate} type="date" />
@@ -733,7 +734,6 @@ function ListModal({
             className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
           />
         </div>
-        {error && <p className="text-sm text-error">{error}</p>}
         <button
           type="submit"
           disabled={submitting}
@@ -806,6 +806,7 @@ function ReserveModal({
   return (
     <Modal title="收訂金並保留" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {error && <p className="text-sm text-error">{error}</p>}
         <CustomerSelect
           nameLabel="買方姓名"
           phoneLabel="買方電話"
@@ -847,7 +848,6 @@ function ReserveModal({
             className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
           />
         </div>
-        {error && <p className="text-sm text-error">{error}</p>}
         <button
           type="submit"
           disabled={submitting}
@@ -891,6 +891,7 @@ function FinalPaymentModal({
   return (
     <Modal title="收尾款" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {error && <p className="text-sm text-error">{error}</p>}
         <Field label="尾款金額" value={amount} onChange={setAmount} type="number" required />
         <CashAccountField cashAccounts={cashAccounts} value={cash_account_id} onChange={setCashAccountId} />
         <div>
@@ -902,7 +903,6 @@ function FinalPaymentModal({
             className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
           />
         </div>
-        {error && <p className="text-sm text-error">{error}</p>}
         <button
           type="submit"
           disabled={submitting}
@@ -967,6 +967,7 @@ function ExpenseModal({
   return (
     <Modal title="上報整備支出" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {error && <p className="text-sm text-error">{error}</p>}
         <div>
           <label className="mb-1 block text-sm font-medium text-fg-muted">
             分類<span className="text-error"> *</span>
@@ -1000,7 +1001,6 @@ function ExpenseModal({
         <p className="text-xs text-fg-muted">
           {isAdmin ? '送出後直接計入正式支出。' : '送出後為待審核狀態，需老闆核准後才計入正式支出。'}
         </p>
-        {error && <p className="text-sm text-error">{error}</p>}
         <button
           type="submit"
           disabled={submitting}
@@ -1034,11 +1034,11 @@ function CloseSaleModal({
   return (
     <Modal title="成交結案" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {error && <p className="text-sm text-error">{error}</p>}
         <Field label="成交日期（預設今天）" value={sold_at} onChange={setSoldAt} type="date" />
         <p className="text-xs text-fg-muted">
           成交日期決定薪資獎金月份；已確認或已發薪月份不能新增成交。收款日期不影響成交月份。
         </p>
-        {error && <p className="text-sm text-error">{error}</p>}
         <button
           type="submit"
           disabled={submitting}

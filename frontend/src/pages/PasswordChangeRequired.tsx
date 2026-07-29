@@ -97,6 +97,9 @@ export function PasswordChangeRequired() {
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
+            <p role="alert" aria-live="polite" className="text-sm text-error empty:hidden">
+              {error}
+            </p>
             <PasswordInput
               id="current-password"
               label="目前密碼"
@@ -127,10 +130,6 @@ export function PasswordChangeRequired() {
               minLength={8}
               onChange={setPasswordConfirmation}
             />
-
-            <p role="alert" aria-live="polite" className="text-sm text-error empty:hidden">
-              {error}
-            </p>
 
             <button
               type="submit"

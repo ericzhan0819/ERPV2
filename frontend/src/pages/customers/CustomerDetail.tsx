@@ -205,6 +205,7 @@ export function CustomerDetail() {
       {editing ? (
         <Panel title="編輯客戶資料">
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            {formError && <p className="text-sm text-error">{formError}</p>}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1 block text-sm font-medium text-fg-muted">
@@ -275,7 +276,6 @@ export function CustomerDetail() {
                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
             </div>
-            {formError && <p className="text-sm text-error">{formError}</p>}
             <div className="flex gap-3">
               <button
                 type="submit"

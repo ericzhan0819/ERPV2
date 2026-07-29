@@ -213,6 +213,7 @@ export function VehicleCreate() {
       <h1 className="text-xl font-semibold text-fg">新增買入車輛</h1>
 
       <form onSubmit={handleSubmit} className="max-w-3xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        {error && <p className="mb-4 text-sm text-error">{error}</p>}
         <SectionTitle>基本車輛資料</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="廠牌" value={form.brand} onChange={(v) => set('brand', v)} required />
@@ -382,8 +383,6 @@ export function VehicleCreate() {
             className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
           />
         </div>
-
-        {error && <p className="mt-4 text-sm text-error">{error}</p>}
 
         <div className="mt-6 flex gap-3">
           <button
