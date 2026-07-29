@@ -95,6 +95,7 @@ describe('Money entry presentation', () => {
   })
 
   it('keeps the vehicle-binding rule concise and exposes validation beside each required field', async () => {
+    const interaction = userEvent.setup()
     render(
       <MemoryRouter>
         <MoneyEntryCreate />
@@ -120,6 +121,11 @@ describe('Money entry presentation', () => {
     }
     expect(document.activeElement).toBe(screen.getByLabelText('日期'))
     expect(moneyEntriesApi.createMoneyEntry).not.toHaveBeenCalled()
+
+    const amount = screen.getByLabelText('金額') as HTMLInputElement
+    await interaction.type(amount, '1000')
+    expect(amount.value).toBe('1000')
+    expect(document.activeElement).toBe(amount)
   })
 
   it('keeps field validation before exposing and focusing a general API error', async () => {

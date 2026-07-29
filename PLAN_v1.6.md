@@ -558,6 +558,7 @@ v1.6 不修改 backend，但封板前仍建立完整回歸證據。
 - [ ] 車輛建檔／成交結案紙本與 PDF 預覽
 - [ ] Keyboard-only 主要操作
 - [ ] 真實 screen reader 驗證 error live region 與 focus 不會重複朗讀
+- [ ] 真實 screen reader 抽查既有 sibling visible label 的欄位名稱與操作理解
 - [ ] 錯誤、warning、success、empty state
 
 ### 13.3 Tablet／Mobile

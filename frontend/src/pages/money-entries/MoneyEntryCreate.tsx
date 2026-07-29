@@ -43,6 +43,7 @@ export function MoneyEntryCreate() {
   const [description, setDescription] = useState('')
 
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<'entryDate' | 'category' | 'cashAccountId' | 'amount', string>>>({})
+  const [validationAttempt, setValidationAttempt] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
@@ -54,9 +55,9 @@ export function MoneyEntryCreate() {
   }, [])
 
   useEffect(() => {
-    if (Object.keys(fieldErrors).length === 0) return
+    if (validationAttempt === 0) return
     formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
-  }, [fieldErrors])
+  }, [validationAttempt])
 
   const categoryOptions = categoriesForDirection(direction)
 
@@ -71,6 +72,7 @@ export function MoneyEntryCreate() {
     if (!amount || Number(amount) <= 0) nextFieldErrors.amount = '金額必須大於 0'
     setFieldErrors(nextFieldErrors)
     if (Object.keys(nextFieldErrors).length > 0) {
+      setValidationAttempt((current) => current + 1)
       return
     }
 
