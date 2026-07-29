@@ -79,12 +79,12 @@ export function SalaryPeriodDetail() {
     idempotency_key: generateIdempotencyKey(),
   })
 
-  function load() {
+  function load(refreshErrorMessage = '薪資月份載入失敗') {
     setFocusError(false)
     setError(null)
     getSalaryPeriod(id)
       .then(setPeriod)
-      .catch((caught) => setError(apiError(caught, '薪資月份載入失敗')))
+      .catch((caught) => setError(apiError(caught, refreshErrorMessage)))
   }
 
   useEffect(load, [id])
@@ -108,7 +108,7 @@ export function SalaryPeriodDetail() {
     setError(null)
     try {
       await action()
-      load()
+      load('薪資操作已送出，但畫面可能不是最新；請重新整理後確認。')
     } catch (caught) {
       setError(apiError(caught, '薪資操作失敗'))
     } finally {

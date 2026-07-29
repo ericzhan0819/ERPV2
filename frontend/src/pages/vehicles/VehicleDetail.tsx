@@ -184,13 +184,13 @@ export function VehicleDetail() {
   const [warning, setWarning] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  function loadDetail() {
+  function loadDetail(refreshErrorMessage = '車輛資料載入失敗') {
     getVehicle(vehicleId)
       .then((response) => {
         setDetail(response)
         setError(null)
       })
-      .catch(() => setError('車輛資料載入失敗'))
+      .catch(() => setError(refreshErrorMessage))
   }
 
   useEffect(() => {
@@ -233,7 +233,7 @@ export function VehicleDetail() {
         sales_note: form.sales_note || undefined,
       })
       closeModal()
-      loadDetail()
+      loadDetail('操作已送出，但車輛資料可能不是最新；請重新整理後確認。')
     } catch (err) {
       setFormError(extractErrorMessage(err, '上架失敗，請稍後再試'))
     } finally {
@@ -267,7 +267,7 @@ export function VehicleDetail() {
         sales_agent_id: form.sales_agent_id ? Number(form.sales_agent_id) : undefined,
       })
       closeModal()
-      loadDetail()
+      loadDetail('操作已送出，但車輛資料可能不是最新；請重新整理後確認。')
     } catch (err) {
       setFormError(extractErrorMessage(err, '收訂金並保留失敗，請稍後再試'))
     } finally {
@@ -287,7 +287,7 @@ export function VehicleDetail() {
       })
       setWarning(result.warning)
       closeModal()
-      loadDetail()
+      loadDetail('操作已送出，但車輛資料可能不是最新；請重新整理後確認。')
     } catch (err) {
       setFormError(extractErrorMessage(err, '收尾款失敗，請稍後再試'))
     } finally {
@@ -301,7 +301,7 @@ export function VehicleDetail() {
     try {
       await closeSaleVehicle(vehicleId, { sold_at: form.sold_at || undefined })
       closeModal()
-      loadDetail()
+      loadDetail('操作已送出，但車輛資料可能不是最新；請重新整理後確認。')
     } catch (err) {
       setFormError(extractErrorMessage(err, '成交結案失敗，請稍後再試'))
     } finally {
@@ -331,7 +331,7 @@ export function VehicleDetail() {
         idempotency_key: form.idempotency_key,
       })
       closeModal()
-      loadDetail()
+      loadDetail('操作已送出，但車輛資料可能不是最新；請重新整理後確認。')
     } catch (err) {
       setFormError(extractErrorMessage(err, '上報整備支出失敗，請稍後再試'))
     } finally {
@@ -345,7 +345,7 @@ export function VehicleDetail() {
     try {
       await updateVehiclePurchasePrice(vehicle, Number(form.purchase_price))
       closeModal()
-      loadDetail()
+      loadDetail('操作已送出，但車輛資料可能不是最新；請重新整理後確認。')
     } catch (err) {
       setFormError(extractErrorMessage(err, '收購價更新失敗，請稍後再試'))
     } finally {
@@ -1262,13 +1262,13 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
 
       <FormAlert message={loadError} />
 
-      {!loadError && loading && <p className="text-sm text-fg-muted">載入中...</p>}
+      {loading && photos.length === 0 && <p className="text-sm text-fg-muted">載入中...</p>}
 
       {!loadError && !loading && photos.length === 0 && (
         <p className="text-sm text-fg-muted">尚無照片</p>
       )}
 
-      {!loadError && !loading && photos.length > 0 && (
+      {photos.length > 0 && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {photos.map((photo, index) => {
             const busy = busyPhotoId === photo.id

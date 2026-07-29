@@ -105,7 +105,7 @@ export function CustomerDetail() {
   const [deleteAttempt, setDeleteAttempt] = useState(0)
   const [submitting, setSubmitting] = useState(false)
 
-  function loadDetail() {
+  function loadDetail(refreshErrorMessage = '客戶資料載入失敗') {
     getCustomer(customerId)
       .then((response) => {
         setDetail(response)
@@ -120,7 +120,7 @@ export function CustomerDetail() {
           notes: response.customer.notes ?? '',
         })
       })
-      .catch(() => setError('客戶資料載入失敗'))
+      .catch(() => setError(refreshErrorMessage))
   }
 
   useEffect(() => {
@@ -153,7 +153,7 @@ export function CustomerDetail() {
         notes: form.notes || null,
       })
       setEditing(false)
-      loadDetail()
+      loadDetail('資料已儲存，但客戶資料可能不是最新；請重新整理後確認。')
     } catch (err) {
       setFormError(extractErrorMessage(err, '更新客戶失敗，請稍後再試'))
     } finally {

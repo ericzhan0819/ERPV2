@@ -334,9 +334,28 @@ describe('Vehicle presentation', () => {
     await interaction.click(screen.getByRole('button', { name: '修正收購價' }))
     await interaction.click(screen.getByRole('button', { name: '儲存收購價' }))
 
-    expect((await screen.findByRole('alert')).textContent).toBe('車輛資料載入失敗')
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      '操作已送出，但車輛資料可能不是最新；請重新整理後確認。',
+    )
     expect(screen.getByRole('heading', { name: 'V2026070001' })).toBeTruthy()
     expect(screen.getByRole('link', { name: '列印建檔資料' })).toBeTruthy()
+  })
+
+  it('keeps loaded photos visible when an action refresh fails', async () => {
+    const interaction = userEvent.setup()
+    vi.mocked(vehiclePhotosApi.listVehiclePhotos)
+      .mockResolvedValueOnce(photos)
+      .mockRejectedValueOnce(new Error('offline'))
+    vi.mocked(vehiclePhotosApi.setCoverVehiclePhoto).mockResolvedValue(photos[1])
+    renderDetail()
+
+    await screen.findByText('front.webp')
+    await interaction.click(screen.getByRole('button', { name: '設封面' }))
+
+    expect((await screen.findByRole('alert')).textContent).toBe('車輛照片載入失敗')
+    expect(screen.getByText('front.webp')).toBeTruthy()
+    expect(screen.getByText('rear.webp')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '設封面' })).toBeTruthy()
   })
 
   it('keeps purchase-price locking and photo cover, order, retry and irreversible deletion outcomes', async () => {

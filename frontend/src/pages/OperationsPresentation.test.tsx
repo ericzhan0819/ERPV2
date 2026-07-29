@@ -241,7 +241,9 @@ describe('Customer, audit and print presentation', () => {
     await interaction.click(screen.getByRole('button', { name: '編輯' }))
     await interaction.click(screen.getByRole('button', { name: '儲存' }))
 
-    expect((await screen.findByRole('alert')).textContent).toBe('客戶資料載入失敗')
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      '資料已儲存，但客戶資料可能不是最新；請重新整理後確認。',
+    )
     expect(screen.getByRole('heading', { name: '王小明' })).toBeTruthy()
     expect(screen.getByRole('link', { name: '返回列表' })).toBeTruthy()
   })
