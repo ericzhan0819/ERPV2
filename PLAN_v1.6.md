@@ -61,35 +61,35 @@ v1.6 是小型純前端 UX cleanup 版本：系統性移除重複副標與教學
 
 ### 1.1 `UI.md`
 
-- [ ] 新增「UI Copy 與輔助文字」正式章節
-- [ ] 寫入「正常狀態安靜；例外、限制、風險與錯誤才說明」
-- [ ] 定義頁面副標保留條件
-- [ ] 定義 section subtitle 保留條件
-- [ ] 定義 Card description 保留條件
-- [ ] 定義 form help text 保留條件
-- [ ] 定義 warning、error、success、empty state 的責任差異
-- [ ] 定義 A／B／C／D／E 五分類
-- [ ] 定義重要資訊不得只放在 hover tooltip
-- [ ] 定義 placeholder 不可取代 visible label
-- [ ] 定義刪除 help text 時必須同步檢查 `aria-describedby`
-- [ ] 定義文案風格：簡潔、直接、繁體中文、不行銷、不聊天、不責怪使用者
-- [ ] 定義同一概念的正式名詞一致性
-- [ ] 定義 Mobile 不得靠縮小字體解決資訊過多
+- [x] 新增「UI Copy 與輔助文字」正式章節
+- [x] 寫入「正常狀態安靜；例外、限制、風險與錯誤才說明」
+- [x] 定義頁面副標保留條件
+- [x] 定義 section subtitle 保留條件
+- [x] 定義 Card description 保留條件
+- [x] 定義 form help text 保留條件
+- [x] 定義 warning、error、success、empty state 的責任差異
+- [x] 定義 A／B／C／D／E 五分類
+- [x] 定義重要資訊不得只放在 hover tooltip
+- [x] 定義 placeholder 不可取代 visible label
+- [x] 定義刪除 help text 時必須同步檢查 `aria-describedby`
+- [x] 定義文案風格：簡潔、直接、繁體中文、不行銷、不聊天、不責怪使用者
+- [x] 定義同一概念的正式名詞一致性
+- [x] 定義 Mobile 不得靠縮小字體解決資訊過多
 
 ### 1.2 實作約束
 
-- [ ] 不建立巨大 Copy／HelpText 萬用元件
-- [ ] 只有至少兩個實際使用處具相同語意與行為時才抽共用元件
-- [ ] 不把企劃書完整規格直接複製到產品 UI
-- [ ] 不新增 Database-backed copy
-- [ ] 不新增 i18n 架構
-- [ ] 不新增 analytics 或 onboarding tracking
+- [x] 不建立巨大 Copy／HelpText 萬用元件
+- [x] 只有至少兩個實際使用處具相同語意與行為時才抽共用元件
+- [x] 不把企劃書完整規格直接複製到產品 UI
+- [x] 不新增 Database-backed copy
+- [x] 不新增 i18n 架構
+- [x] 不新增 analytics 或 onboarding tracking
 
 ### 1.3 文件 review
 
-- [ ] 確認新章節不與 v1.4 Design System 衝突
-- [ ] 確認不改既有品牌、色彩、spacing、RWD 與 Safe Area 契約
-- [ ] 確認新規則可由實際頁面驗收，不是抽象口號
+- [x] 確認新章節不與 v1.4 Design System 衝突
+- [x] 確認不改既有品牌、色彩、spacing、RWD 與 Safe Area 契約
+- [x] 確認新規則可由實際頁面驗收，不是抽象口號
 
 ---
 

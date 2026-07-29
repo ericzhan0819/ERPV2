@@ -311,3 +311,61 @@ App Layout 的 Safe Area 契約固定如下：
 - 不以 Modal 複製車輛、收支、客戶或整備既有流程。
 - 不增加 Dashboard Table、車輛列表、展開明細、薪資 KPI 或未指定圖表。
 - 不因 UI 改版修改 Database Schema、Business Logic、Workflow、角色或權限。
+
+---
+
+## 15. UI Copy 與輔助文字
+
+正式原則：
+
+```text
+正常狀態保持安靜
+例外、限制、風險與錯誤才說明
+```
+
+UI 文案只回答使用者當下需要知道的用途、可執行動作、不可操作原因、重要後果與錯誤修正方式。開發規格、後端實作細節與完整驗證規則不直接傾倒到畫面。
+
+### 15.1 資訊層級
+
+- 每頁保留唯一且清楚的 `h1`。副標只有在包含非直覺範圍、期間、權限或操作前必須知道的規則時才保留；重述頁名或「可在此管理」型副標直接移除。
+- Section subtitle 只補充該區塊共同且必要的口徑，不重述 `h2` 或逐張 Card 再說一次相同資訊。
+- Card description 只保留會影響數值理解、狀態判斷或操作結果的內容；可由 Card label、value、unit、Badge 或 Link 清楚表達時移除。
+- Form help text 只保留提交前必須知道、且無法由 visible label、required marker、控制狀態或 per-field error 承接的規則。
+- 同一概念在同一區塊只說明一次；優先順序為清楚標題、正式內容、必要短句、條件成立才出現的 warning／error。
+
+### 15.2 A／B／C／D／E 分類
+
+| 類別 | 判斷與處理 |
+|---|---|
+| A：直接刪除 | 重述頁名、label、按鈕、Badge、Card 導向或控制位置 |
+| B：縮短保留 | 操作前確實需要知道，但現有文字混入重複、格式細節或實作資訊 |
+| C：條件式顯示 | 只在特定狀態、限制、權限、異常或 stale 狀態成立 |
+| D：必須保留 | 金額／統計口徑、不可逆後果、鎖定、停用、駁回、重設密碼、發薪、錯誤、成功重要結果與 empty state |
+| E：無障礙專用 | 視覺可省略，但 assistive technology 仍需取得的非關鍵描述 |
+
+刪除文案不能只以「看起來太多」為理由；必須確認資訊已由標題、控制項、狀態、錯誤或條件式提示承接。D 類可以縮短，但不能消失、只放在 `sr-only`，或只靠 hover 才能取得。
+
+### 15.3 狀態文案責任
+
+- Warning：只在風險或限制成立時顯示，說明主要原因與下一步；阻擋型與非阻擋型語意必須分開。
+- Error：per-field error 留在欄位下方，general error 留在表單或區塊頂部；說明可採取的修正方式，不責怪使用者，也不洩漏敏感資訊。
+- Success：只保留重要結果；若操作造成 Session 失效、重新登入、強制改密碼、資料鎖定或其他非直覺後果，必須明確說明。
+- Empty state：區分尚無資料與 Filter 無結果；只有確實可採取下一步時才提供 action，不用長篇教學填滿空畫面。
+- Disabled reason：原因必須可由 keyboard、touch 與 screen reader 使用者取得，不得只放在 `title`。
+
+### 15.4 Form 與無障礙
+
+- Placeholder 只提供範例，不得取代 visible label、required marker 或格式規則。
+- 重要資訊不得只放在 hover tooltip。v1.6 不建立 Tooltip／Popover 平台，也不把被刪文字全部搬入資訊 icon。
+- 刪除 help text 時同步檢查 `aria-describedby`；不得保留指向不存在 ID 的引用。圖表或其他元件若使用 `aria-labelledby`，同樣必須保證所有引用 ID 存在。
+- Per-field error 維持唯一 ID、`aria-invalid` 與欄位關聯；條件式 warning 不任意搶走 focus。
+- `sr-only` 只承接 assistive technology 需要的非關鍵描述；一般使用者也需要知道的風險、限制與後果必須直接可見。
+
+### 15.5 文案風格與實作邊界
+
+- 使用簡潔、直接的繁體中文與一致正式名詞；不行銷、不聊天、不使用驚嘆號製造強度、不責怪使用者。
+- 一次只表達一個主要意思，避免固定以「您可以在這裡」「請注意」起句。
+- Mobile 優先移除重複資訊；不得以縮小中文字體或壓縮 line-height 取代資訊減法。
+- 只有至少兩個實際使用處具有相同語意與行為時才抽共用元件；不得建立巨大 Copy／HelpText 萬用元件。
+- UI Copy 不使用 Database-backed copy、不新增 i18n、analytics、onboarding tracking 或 runtime dependency。
+- 本章不改既有品牌、色彩、spacing、RWD、Safe Area、API、Business Logic、Workflow、角色或權限契約。
