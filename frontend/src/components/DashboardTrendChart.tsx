@@ -5,7 +5,7 @@ interface TrendPoint {
 
 interface DashboardTrendChartProps {
   title: string
-  description: string
+  description?: string
   unit: string
   points: TrendPoint[]
   formatValue: (value: number) => string
@@ -53,7 +53,9 @@ export function DashboardTrendChart({
     <figure className="min-w-0 rounded-xl border border-border bg-surface p-4 shadow-sm sm:p-5">
       <figcaption>
         <h3 id={`${titleId}-title`} className="text-base font-semibold text-fg">{title}</h3>
-        <p id={`${titleId}-description`} className="mt-1 text-xs text-fg-muted">{description}・單位：{unit}</p>
+        <p id={`${titleId}-description`} className="mt-1 text-xs text-fg-muted">
+          {description ? `${description}・` : ''}單位：{unit}
+        </p>
       </figcaption>
 
       <svg

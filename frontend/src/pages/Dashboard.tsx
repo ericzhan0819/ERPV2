@@ -66,15 +66,14 @@ interface KpiCardProps {
   to: string
   label: string
   value: string
-  description: string
   icon: ComponentType<{ className?: string; 'aria-hidden'?: boolean }>
 }
 
-function KpiCard({ to, label, value, description, icon: Icon }: KpiCardProps) {
+function KpiCard({ to, label, value, icon: Icon }: KpiCardProps) {
   return (
     <Link
       to={to}
-      className="group flex min-h-40 flex-col rounded-xl border border-border bg-surface p-5 shadow-sm transition-colors hover:border-border-strong hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+      className="group flex min-h-36 flex-col rounded-xl border border-border bg-surface p-5 shadow-sm transition-colors hover:border-border-strong hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
     >
       <div className="flex items-start justify-between gap-3">
         <span className="rounded-lg bg-surface-2 p-2 text-primary group-hover:bg-surface">
@@ -84,7 +83,6 @@ function KpiCard({ to, label, value, description, icon: Icon }: KpiCardProps) {
       </div>
       <p className="mt-4 text-sm font-medium text-fg-muted">{label}</p>
       <p className="mt-1 text-3xl font-bold text-fg tabular-nums">{value}</p>
-      <p className="mt-2 text-xs text-fg-muted">{description}</p>
     </Link>
   )
 }
@@ -166,19 +164,16 @@ export function Dashboard() {
       )}
 
       <section aria-labelledby="work-overview-title">
-        <div className="mb-4">
-          <h2 id="work-overview-title" className="text-lg font-semibold text-fg">工作概況</h2>
-          <p className="mt-1 text-sm text-fg-muted">點選卡片前往對應工作區處理</p>
-        </div>
+        <h2 id="work-overview-title" className="mb-4 text-lg font-semibold text-fg">工作概況</h2>
         {stateMessage ? (
           <SectionState message={stateMessage} />
         ) : work && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <KpiCard to="/vehicles?status=preparing&is_preparation_completed=false" label="待整備" value={`${numberFormatter.format(work.preparation_pending_count)} 台`} description="整備尚未完成" icon={Wrench} />
-            <KpiCard to="/vehicles?status=preparing&is_preparation_completed=true" label="待上架" value={`${numberFormatter.format(work.listing_pending_count)} 台`} description="整備完成，等待上架" icon={ClipboardCheck} />
-            <KpiCard to="/vehicles?status=reserved" label="待交車" value={`${numberFormatter.format(work.delivery_pending_count)} 台`} description="已保留，等待完成交車" icon={CarFront} />
+            <KpiCard to="/vehicles?status=preparing&is_preparation_completed=false" label="待整備" value={`${numberFormatter.format(work.preparation_pending_count)} 台`} icon={Wrench} />
+            <KpiCard to="/vehicles?status=preparing&is_preparation_completed=true" label="待上架" value={`${numberFormatter.format(work.listing_pending_count)} 台`} icon={ClipboardCheck} />
+            <KpiCard to="/vehicles?status=reserved" label="待交車" value={`${numberFormatter.format(work.delivery_pending_count)} 台`} icon={CarFront} />
             {canApproveMoney && work.pending_money_entry_count !== undefined && (
-              <KpiCard to="/money-entries?approval=pending" label="待審核收支" value={`${numberFormatter.format(work.pending_money_entry_count)} 筆`} description="等待核准或駁回" icon={ReceiptText} />
+              <KpiCard to="/money-entries?approval=pending" label="待審核收支" value={`${numberFormatter.format(work.pending_money_entry_count)} 筆`} icon={ReceiptText} />
             )}
           </div>
         )}
@@ -187,27 +182,27 @@ export function Dashboard() {
       <section aria-labelledby="business-overview-title">
         <div className="mb-4">
           <h2 id="business-overview-title" className="text-lg font-semibold text-fg">經營概況</h2>
-          <p className="mt-1 text-sm text-fg-muted">月份 KPI 依完整當月口徑；現金為正式帳面餘額</p>
+          <p className="mt-1 text-sm text-fg-muted">本月涵蓋完整月份；金額僅計已核准收支，現金為正式帳面餘額。</p>
         </div>
         {stateMessage ? (
           <SectionState message={stateMessage} />
         ) : business && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <KpiCard to="/vehicles?status=preparing,listed,reserved" label="在庫數" value={`${numberFormatter.format(business.inventory_count)} 台`} description="整備中、上架中與保留中" icon={CarFront} />
+            <KpiCard to="/vehicles?status=preparing,listed,reserved" label="在庫數" value={`${numberFormatter.format(business.inventory_count)} 台`} icon={CarFront} />
             {canViewFinance && business.cash_balance !== undefined && (
-              <KpiCard to="/cash-accounts" label="現金帳面餘額" value={currencyFormatter.format(business.cash_balance)} description="所有已核准現金收支" icon={Banknote} />
+              <KpiCard to="/cash-accounts" label="現金帳面餘額" value={currencyFormatter.format(business.cash_balance)} icon={Banknote} />
             )}
             {canViewFinance && business.sold_month && business.monthly_income !== undefined && (
-              <KpiCard to={dashboardMoneyEntriesLink('income', business.sold_month)} label="本月收入" value={currencyFormatter.format(business.monthly_income)} description="完整當月・僅計已核准" icon={ArrowDownToLine} />
+              <KpiCard to={dashboardMoneyEntriesLink('income', business.sold_month)} label="本月收入" value={currencyFormatter.format(business.monthly_income)} icon={ArrowDownToLine} />
             )}
             {canViewFinance && business.sold_month && business.monthly_expense !== undefined && (
-              <KpiCard to={dashboardMoneyEntriesLink('expense', business.sold_month)} label="本月支出" value={currencyFormatter.format(business.monthly_expense)} description="完整當月・僅計已核准" icon={HandCoins} />
+              <KpiCard to={dashboardMoneyEntriesLink('expense', business.sold_month)} label="本月支出" value={currencyFormatter.format(business.monthly_expense)} icon={HandCoins} />
             )}
             {canViewFinance && business.sold_month && business.monthly_gross_profit !== undefined && (
-              <KpiCard to={dashboardSoldVehiclesLink(business.sold_month)} label="本月毛利" value={currencyFormatter.format(business.monthly_gross_profit)} description="完整當月成交・僅計已核准收支" icon={TrendingUp} />
+              <KpiCard to={dashboardSoldVehiclesLink(business.sold_month)} label="本月毛利" value={currencyFormatter.format(business.monthly_gross_profit)} icon={TrendingUp} />
             )}
             {canViewFinance && business.sold_month && business.monthly_sold_count !== undefined && (
-              <KpiCard to={dashboardSoldVehiclesLink(business.sold_month)} label="本月成交" value={`${numberFormatter.format(business.monthly_sold_count)} 台`} description="依完整當月成交日期統計" icon={CircleDollarSign} />
+              <KpiCard to={dashboardSoldVehiclesLink(business.sold_month)} label="本月成交" value={`${numberFormatter.format(business.monthly_sold_count)} 台`} icon={CircleDollarSign} />
             )}
           </div>
         )}
@@ -216,7 +211,7 @@ export function Dashboard() {
       <section aria-labelledby="trends-title">
         <div className="mb-4">
           <h2 id="trends-title" className="text-lg font-semibold text-fg">趨勢分析</h2>
-          <p className="mt-1 text-sm text-fg-muted">近 30 個連續日，包含今天且截至今日</p>
+          <p className="mt-1 text-sm text-fg-muted">近 30 天（含今天）</p>
         </div>
         {stateMessage ? (
           <SectionState message={stateMessage} />
@@ -224,7 +219,6 @@ export function Dashboard() {
           <div className={`grid min-w-0 grid-cols-1 gap-4 ${trendGridClass}`}>
             <DashboardTrendChart
               title="近 30 天成交量"
-              description="依車輛成交日期每日統計"
               unit="台"
               points={summary.trends.sales_count.map((point) => ({ date: point.date, value: point.count }))}
               formatValue={(value) => `${numberFormatter.format(value)} 台`}
@@ -241,7 +235,7 @@ export function Dashboard() {
             {canViewFinance && summary.trends.cash_balance && (
               <DashboardTrendChart
                 title="現金變化"
-                description="現金帳戶每日期末帳面餘額"
+                description="每日期末帳面餘額"
                 unit="新台幣"
                 points={summary.trends.cash_balance.map((point) => ({ date: point.date, value: point.balance }))}
                 formatValue={(value) => currencyFormatter.format(value)}

@@ -143,44 +143,44 @@ v1.6 是小型純前端 UX cleanup 版本：系統性移除重複副標與教學
 
 ### 3.1 工作概況
 
-- [ ] 保留「工作概況」區塊標題
-- [ ] 移除「點選卡片前往對應工作區處理」
-- [ ] 移除「待整備」卡片的「整備尚未完成」
-- [ ] 移除「待上架」卡片的「整備完成，等待上架」
-- [ ] 移除「待交車」卡片的「已保留，等待完成交車」
-- [ ] 移除「待審核收支」卡片的「等待核准或駁回」
-- [ ] 確認 Card 仍有 label、value、unit、icon 與完整 Link
-- [ ] 確認移除 description 後 Card 高度與 Grid 對齊
+- [x] 保留「工作概況」區塊標題
+- [x] 移除「點選卡片前往對應工作區處理」
+- [x] 移除「待整備」卡片的「整備尚未完成」
+- [x] 移除「待上架」卡片的「整備完成，等待上架」
+- [x] 移除「待交車」卡片的「已保留，等待完成交車」
+- [x] 移除「待審核收支」卡片的「等待核准或駁回」
+- [x] 確認 Card 仍有 label、value、unit、icon 與完整 Link
+- [x] 確認移除 description 後 Card 高度與 Grid 對齊
 
 ### 3.2 經營概況
 
-- [ ] 將 approved-only／月份口徑整合為一個區塊級短說明
-- [ ] 移除與「本月」重複的「完整當月」文字
-- [ ] 檢查「在庫數」是否需要 description；若 label 已清楚則移除
-- [ ] 檢查「現金帳面餘額」是否需保留 approved-only 短說明
-- [ ] 本月收入只保留必要口徑
-- [ ] 本月支出只保留必要口徑
-- [ ] 本月毛利保留成交月份與 approved-only 的必要定義，但不重複
-- [ ] 本月成交不重複「完整當月成交日期」
-- [ ] 不修改 KPI 欄位、值、角色可見性與 URL Filter
+- [x] 將 approved-only／月份口徑整合為一個區塊級短說明
+- [x] 移除與「本月」重複的「完整當月」文字
+- [x] 檢查「在庫數」是否需要 description；若 label 已清楚則移除
+- [x] 檢查「現金帳面餘額」是否需保留 approved-only 短說明
+- [x] 本月收入只保留必要口徑
+- [x] 本月支出只保留必要口徑
+- [x] 本月毛利保留成交月份與 approved-only 的必要定義，但不重複
+- [x] 本月成交不重複「完整當月成交日期」
+- [x] 不修改 KPI 欄位、值、角色可見性與 URL Filter
 
 ### 3.3 趨勢分析
 
-- [ ] 檢查區塊副標「近 30 個連續日，包含今天且截至今日」是否可縮短
-- [ ] 圖表視覺上保留 title、date range、unit
-- [ ] 「依車輛成交日期每日統計」視情況移除或轉 `sr-only`
-- [ ] 毛利 approved-only 定義以單一位置保留
-- [ ] 現金圖表的「每日期末帳面餘額」屬非直覺定義，縮短後保留
-- [ ] 不修改 SVG、points、empty state、tooltip、formatValue
-- [ ] 不修改三角色財務欄位遮蔽
+- [x] 檢查區塊副標「近 30 個連續日，包含今天且截至今日」是否可縮短
+- [x] 圖表視覺上保留 title、date range、unit
+- [x] 「依車輛成交日期每日統計」視情況移除或轉 `sr-only`
+- [x] 毛利 approved-only 定義以單一位置保留
+- [x] 現金圖表的「每日期末帳面餘額」屬非直覺定義，縮短後保留
+- [x] 不修改 SVG、points、empty state、tooltip、formatValue
+- [x] 不修改三角色財務欄位遮蔽
 
 ### 3.4 Dashboard tests
 
-- [ ] 更新受 description 移除影響的測試
-- [ ] 保留 KPI Link 與 query string 測試
-- [ ] 保留 admin／manager／sales 可見性測試
-- [ ] 補測區塊級 approved-only 說明只出現一次
-- [ ] 確認圖表 accessible description 仍有效
+- [x] 更新受 description 移除影響的測試
+- [x] 保留 KPI Link 與 query string 測試
+- [x] 保留 admin／manager／sales 可見性測試
+- [x] 補測區塊級 approved-only 說明只出現一次
+- [x] 確認圖表 accessible description 仍有效
 
 ---
 
