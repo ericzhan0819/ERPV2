@@ -476,6 +476,7 @@ v1.6 是小型純前端 UX cleanup 版本：系統性移除重複副標與教學
 - [ ] Modal／Drawer title、focus trap、Escape、focus return 不變
 - [ ] 圖表名稱、期間、數值與單位對 screen reader 仍可理解
 - [ ] Account／強制改密碼欄位的 help 先於 error，實際讀屏順序仍可理解
+- [ ] UserList self disabled controls 的限制原因可由可見短句與 screen reader 取得
 
 ### 10.4 Automated accessibility contract
 
@@ -567,6 +568,7 @@ v1.6 不修改 backend，但封板前仍建立完整回歸證據。
 - [ ] 刪除副標後沒有不合理大空白
 - [ ] 長 warning 只在需要時出現且不造成整頁 overflow
 - [ ] Form label／error 不被截斷
+- [ ] 員工／資金帳戶等寬表格可橫向捲動，self 短句換行不破版
 - [ ] Modal／Drawer 可操作
 - [ ] Safe Area 與底部空間不回歸
 
