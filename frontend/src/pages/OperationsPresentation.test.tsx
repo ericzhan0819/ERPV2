@@ -216,7 +216,11 @@ describe('Customer, audit and print presentation', () => {
     expect(await screen.findAllByText('尚無相關車輛')).toHaveLength(2)
     await interaction.click(screen.getByRole('button', { name: '刪除' }))
     expect(confirm).toHaveBeenCalledWith('確定要刪除此客戶嗎？')
-    expect(await screen.findByText('刪除客戶失敗')).toBeTruthy()
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('刪除客戶失敗')
+    expect(document.activeElement).toBe(alert)
+    expect(screen.getByRole('heading', { name: '王小明' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: '返回列表' })).toBeTruthy()
   })
 
   it('keeps the audit read-only boundary, no-change state and request information', async () => {

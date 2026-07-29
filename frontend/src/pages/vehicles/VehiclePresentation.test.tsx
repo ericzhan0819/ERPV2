@@ -358,7 +358,9 @@ describe('Vehicle presentation', () => {
     const fileInput = container.querySelector<HTMLInputElement>('input[type="file"]')
     expect(fileInput).not.toBeNull()
     fireEvent.change(fileInput!, { target: { files: [file] } })
-    expect(await screen.findByText('上傳照片失敗，請稍後再試')).toBeTruthy()
+    const uploadAlert = await screen.findByRole('alert')
+    expect(uploadAlert.textContent).toBe('上傳照片失敗，請稍後再試')
+    await waitFor(() => expect(document.activeElement).toBe(uploadAlert))
     await interaction.click(screen.getByRole('button', { name: '重試上傳' }))
     expect(vehiclePhotosApi.uploadVehiclePhotos).toHaveBeenCalledTimes(2)
     expect(vi.mocked(vehiclePhotosApi.uploadVehiclePhotos).mock.calls[1][2]).toBe(

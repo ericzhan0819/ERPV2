@@ -101,6 +101,8 @@ export function CustomerDetail() {
     notes: '',
   })
   const [formError, setFormError] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleteAttempt, setDeleteAttempt] = useState(0)
   const [submitting, setSubmitting] = useState(false)
 
   function loadDetail() {
@@ -127,7 +129,7 @@ export function CustomerDetail() {
   }, [id])
 
   if (error) {
-    return <p className="text-sm text-error">{error}</p>
+    return <FormAlert message={error} />
   }
 
   if (!detail) {
@@ -160,11 +162,13 @@ export function CustomerDetail() {
 
   async function handleDelete() {
     if (!window.confirm('確定要刪除此客戶嗎？')) return
+    setDeleteAttempt((current) => current + 1)
+    setDeleteError(null)
     try {
       await deleteCustomer(customerId)
       navigate('/customers')
     } catch (err) {
-      setError(extractErrorMessage(err, '刪除客戶失敗'))
+      setDeleteError(extractErrorMessage(err, '刪除客戶失敗'))
     }
   }
 
@@ -172,6 +176,11 @@ export function CustomerDetail() {
 
   return (
     <div className="flex flex-col gap-6">
+      <FormAlert
+        message={deleteError}
+        signal={deleteAttempt}
+        focusOnShow
+      />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-fg">{customer.name}</h1>

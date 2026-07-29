@@ -1064,6 +1064,7 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
   const [loadError, setLoadError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [uploadAttempt, setUploadAttempt] = useState(0)
   const [canRetryUpload, setCanRetryUpload] = useState(false)
   // 保留失敗嘗試的 idempotency_key 與 File 物件，讓「重試上傳」能用同一把 key 重送
   // 同一批檔案。若不保留、逼使用者透過檔案選擇器重新選檔，會產生新的 key：若上一次
@@ -1120,6 +1121,7 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
   }, [vehicleId])
 
   async function runUpload(idempotencyKey: string, files: File[]) {
+    setUploadAttempt((current) => current + 1)
     setUploading(true)
     setUploadError(null)
     try {
@@ -1227,7 +1229,11 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
           </button>
           {uploadError && (
             <div className="flex items-center gap-2">
-              <p className="text-sm text-error">{uploadError}</p>
+              <FormAlert
+                message={uploadError}
+                signal={uploadAttempt}
+                focusOnShow
+              />
               {canRetryUpload && (
                 <button
                   type="button"
@@ -1250,7 +1256,7 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
         className="mb-3"
       />
 
-      {loadError && <p className="text-sm text-error">{loadError}</p>}
+      <FormAlert message={loadError} />
 
       {!loadError && loading && <p className="text-sm text-fg-muted">載入中...</p>}
 
