@@ -37,6 +37,7 @@ export function CustomerSelect({
   const nameInputId = useId()
   const phoneInputId = useId()
   const listboxId = useId()
+  const selectedCustomerHintId = useId()
   const trimmedQuery = name.trim()
   const showListbox = open && trimmedQuery !== ''
   const activeCustomer = activeIndex >= 0 ? results[activeIndex] : undefined
@@ -178,7 +179,7 @@ export function CustomerSelect({
 
         {customerId && (
           <div className="mt-1 flex items-center justify-between gap-2 text-xs">
-            <span className="text-success">已選擇既有客戶，電話由客戶資料帶入</span>
+            <span id={selectedCustomerHintId} className="text-success">已選擇既有客戶，電話由客戶資料帶入</span>
             <button
               type="button"
               onClick={handleUseAsNewCustomer}
@@ -234,6 +235,7 @@ export function CustomerSelect({
           required={required && !customerId}
           readOnly={Boolean(customerId)}
           value={phone}
+          aria-describedby={customerId ? selectedCustomerHintId : undefined}
           onChange={(event) => onChange({ customerId: '', name, phone: event.target.value })}
           className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30 read-only:bg-surface-2 read-only:text-fg-muted"
         />

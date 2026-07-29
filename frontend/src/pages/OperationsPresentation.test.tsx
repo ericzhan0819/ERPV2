@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as auditLogsApi from '../api/auditLogs'
 import * as customersApi from '../api/customers'
 import * as vehiclesApi from '../api/vehicles'
@@ -138,14 +138,20 @@ describe('Customer, audit and print presentation', () => {
     vi.mocked(useAuth).mockReturnValue({ user: admin } as ReturnType<typeof useAuth>)
   })
 
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
   it('keeps visible customer labels, selected-data reason and removes the redundant phone placeholder', () => {
     render(<CustomerSelectHarness selected />)
 
     expect(screen.getByLabelText('買方姓名 *')).toBeTruthy()
     const phone = screen.getByLabelText('買方電話')
+    const selectedHint = screen.getByText('已選擇既有客戶，電話由客戶資料帶入')
     expect(phone.getAttribute('readonly')).not.toBeNull()
     expect(phone.getAttribute('placeholder')).toBeNull()
-    expect(screen.getByText('已選擇既有客戶，電話由客戶資料帶入')).toBeTruthy()
+    expect(phone.getAttribute('aria-describedby')).toBe(selectedHint.id)
   })
 
   it('keeps customer search loading and no-result next step concise for sighted and screen-reader users', async () => {
@@ -169,7 +175,6 @@ describe('Customer, audit and print presentation', () => {
 
     expect(screen.getAllByText('查無相符客戶；填寫電話後將建立新客戶')).toHaveLength(2)
     expect(screen.getByLabelText('買方電話 *').getAttribute('placeholder')).toBeNull()
-    vi.useRealTimers()
   })
 
   it('distinguishes filtered customer no-result and keeps the clear action', async () => {
@@ -278,9 +283,12 @@ describe('Customer, audit and print presentation', () => {
 
     expect(await screen.findByRole('heading', { name: '成交結案收支明細' })).toBeTruthy()
     expect(screen.getAllByRole('columnheader', { name: '說明' })).toHaveLength(2)
-    expect(screen.getByText('成交訂金')).toBeTruthy()
-    expect(screen.getByText(/收入合計：/)).toBeTruthy()
-    expect(screen.getByText(/單車毛利：/)).toBeTruthy()
+    const incomeRow = screen.getByText('成交訂金').closest('tr')
+    expect(incomeRow).not.toBeNull()
+    expect(within(incomeRow!).getByText('$10,000')).toBeTruthy()
+    expect(screen.getByText('收入合計：$510,000')).toBeTruthy()
+    expect(screen.getByText('支出合計：$400,000')).toBeTruthy()
+    expect(screen.getByText('單車毛利：$110,000')).toBeTruthy()
     expect(screen.getByText('紙本備註')).toBeTruthy()
   })
 
@@ -302,6 +310,7 @@ describe('Customer, audit and print presentation', () => {
     expect(await screen.findByRole('heading', { name: '車輛建檔資料' })).toBeTruthy()
     expect(screen.getByText('貸款 / 權利問題備註')).toBeTruthy()
     expect(screen.getByText('收購價')).toBeTruthy()
+    expect(screen.getByText('$400,000')).toBeTruthy()
     expect(screen.getByText('經辦人簽名')).toBeTruthy()
     expect(screen.getByText('主管簽名')).toBeTruthy()
   })
