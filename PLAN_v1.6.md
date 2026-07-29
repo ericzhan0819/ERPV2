@@ -608,7 +608,7 @@ Sales：
 
 ## 14. Adversarial Review
 
-### 14.1 Review 目標
+### 14.1 Codex 自審與 Claude Review 目標
 
 - [x] 審查完整 v1.6 diff
 - [x] 確認沒有刪除關鍵業務規則
@@ -619,21 +619,21 @@ Sales：
 - [x] 確認 Mobile 沒有因文字條件式出現造成 overflow
 - [x] 確認沒有新增功能、API、schema、dependency 或平行元件系統
 
-### 14.2 Reviewer 邊界
+### 14.2 Reviewer 契約
 
-- [x] Reviewer 不得要求把所有被刪文字改放 tooltip
-- [x] Reviewer 不得以個人文案偏好提出無可觀察影響的 finding
-- [x] Reviewer 不得把 v1.6 擴張成整站視覺改版
-- [x] Reviewer 不得要求 backend／schema 配合純 copy cleanup
-- [x] 有效 finding 必須指出具體頁面、缺失資訊與失敗模式
+- Reviewer 不得要求把所有被刪文字改放 tooltip
+- Reviewer 不得以個人文案偏好提出無可觀察影響的 finding
+- Reviewer 不得把 v1.6 擴張成整站視覺改版
+- Reviewer 不得要求 backend／schema 配合純 copy cleanup
+- 有效 finding 必須指出具體頁面、缺失資訊與失敗模式
 
 ### 14.3 Follow-up
 
-- [ ] Codex 逐項回到程式碼查證 finding
-- [ ] 有效 finding 以最小變更修正
-- [ ] 補對應 regression test
-- [ ] 重新執行相關 frontend tests／lint／typecheck／build
-- [ ] 若 finding 涉及範圍擴張，停止並交由使用者決策
+- [x] Codex 逐項回到程式碼查證 finding
+- [x] 有效 finding 以最小變更修正
+- [x] 補對應 regression test（本輪只有文件 finding，無 runtime regression test）
+- [x] 重新執行相關 frontend tests／lint／typecheck／build
+- [x] 若 finding 涉及範圍擴張，停止並交由使用者決策
 
 ---
 
