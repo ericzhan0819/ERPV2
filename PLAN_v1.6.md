@@ -188,50 +188,50 @@ v1.6 是小型純前端 UX cleanup 版本：系統性移除重複副標與教學
 
 ### 4.1 Login
 
-- [ ] 檢查頁面副標與登入 placeholder 是否重複
-- [ ] 保留 username／Email 雙登入必要資訊
-- [ ] 保留通用登入錯誤，不洩漏帳號存在狀態
-- [ ] 不新增忘記密碼、自助註冊或管理員聯絡說明
-- [ ] 不修改 login payload、rate limiter 或 Auth Context
+- [x] 檢查頁面副標與登入 placeholder 是否重複
+- [x] 保留 username／Email 雙登入必要資訊
+- [x] 保留通用登入錯誤，不洩漏帳號存在狀態
+- [x] 不新增忘記密碼、自助註冊或管理員聯絡說明
+- [x] 不修改 login payload、rate limiter 或 Auth Context
 
 ### 4.2 強制改密碼
 
-- [ ] 縮短「管理員建立或重設的預設密碼」說明
-- [ ] 明確保留「完成修改後才能進入營運功能」
-- [ ] 保留目前密碼、新密碼、確認密碼 labels
-- [ ] 保留密碼格式必要提示或 per-field error
-- [ ] 保留成功、失敗、Session stale 與重新登入結果
-- [ ] 不修改後端 fail-closed gate
+- [x] 縮短「管理員建立或重設的預設密碼」說明
+- [x] 明確保留「完成修改後才能進入營運功能」
+- [x] 保留目前密碼、新密碼、確認密碼 labels
+- [x] 保留密碼格式必要提示或 per-field error
+- [x] 保留成功、失敗、Session stale 與重新登入結果
+- [x] 不修改後端 fail-closed gate
 
 ### 4.3 我的帳號：個人資料
 
-- [ ] 縮短頁面或區塊副標
-- [ ] username 常駐 help 只保留與 Email 登入的關係
-- [ ] 已設定 username 時，清除後果只在相關狀態顯示
-- [ ] 未設定 username 時，不重複顯示兩次 Email fallback
-- [ ] 字數、允許字元與轉小寫規則改由具體錯誤承接，或保留最短必要格式提示
-- [ ] 保留 `aria-describedby` 的正確關聯
-- [ ] 移除 help 後不得留下不存在的 ID
-- [ ] Email、角色 read-only 呈現不變
-- [ ] 不修改 self profile payload
+- [x] 縮短頁面或區塊副標
+- [x] username 常駐 help 只保留與 Email 登入的關係
+- [x] 已設定 username 時，清除後果只在相關狀態顯示
+- [x] 未設定 username 時，不重複顯示兩次 Email fallback
+- [x] 字數、允許字元與轉小寫規則改由具體錯誤承接，或保留最短必要格式提示
+- [x] 保留 `aria-describedby` 的正確關聯
+- [x] 移除 help 後不得留下不存在的 ID
+- [x] Email、角色 read-only 呈現不變
+- [x] 不修改 self profile payload
 
 ### 4.4 我的帳號：修改密碼
 
-- [ ] 將密碼規則移至最接近新密碼欄的位置
-- [ ] 避免區塊副標與 per-field error 重複
-- [ ] 保留至少 8 字元的必要資訊
-- [ ] 確認「不可與目前密碼相同」在提交錯誤時可理解
-- [ ] 不修改 self password endpoint、Session invalidation 與 stale response handling
+- [x] 將密碼規則移至最接近新密碼欄的位置
+- [x] 避免區塊副標與 per-field error 重複
+- [x] 保留至少 8 字元的必要資訊
+- [x] 確認「不可與目前密碼相同」在提交錯誤時可理解
+- [x] 不修改 self password endpoint、Session invalidation 與 stale response handling
 
 ### 4.5 Tests
 
-- [ ] 更新 Login tests
-- [ ] 更新 Password Change Required tests
-- [ ] 更新 Account tests
-- [ ] 驗證 username help 在 null／已有 username 狀態的差異
-- [ ] 驗證 per-field error 與 `aria-describedby`
-- [ ] 驗證成功訊息仍存在
-- [ ] 驗證必要安全文案未被刪除
+- [x] 更新 Login tests
+- [x] 更新 Password Change Required tests
+- [x] 更新 Account tests
+- [x] 驗證 username help 在 null／已有 username 狀態的差異
+- [x] 驗證 per-field error 與 `aria-describedby`
+- [x] 驗證成功訊息仍存在
+- [x] 驗證必要安全文案未被刪除
 
 ---
 

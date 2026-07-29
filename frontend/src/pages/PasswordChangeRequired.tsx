@@ -93,7 +93,7 @@ export function PasswordChangeRequired() {
             請先修改密碼
           </h1>
           <p className="mt-3 text-sm leading-6 text-fg-muted">
-            此帳號目前使用管理員建立或重設的預設密碼。完成修改後，才能進入營運功能。
+            此帳號使用預設密碼。修改後才能進入營運功能。
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
@@ -114,6 +114,7 @@ export function PasswordChangeRequired() {
               error={fieldErrors.password}
               disabled={submitting}
               minLength={8}
+              help="至少 8 個字元，且不可與目前密碼相同。"
               onChange={setPassword}
             />
             <PasswordInput
@@ -161,6 +162,7 @@ function PasswordInput({
   error,
   disabled,
   minLength,
+  help,
   onChange,
 }: {
   id: string
@@ -170,8 +172,10 @@ function PasswordInput({
   error?: string
   disabled: boolean
   minLength?: number
+  help?: string
   onChange: (value: string) => void
 }) {
+  const helpId = `${id}-help`
   const errorId = `${id}-error`
 
   return (
@@ -189,10 +193,18 @@ function PasswordInput({
         value={value}
         disabled={disabled}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
+        aria-describedby={[
+          help ? helpId : null,
+          error ? errorId : null,
+        ].filter(Boolean).join(' ') || undefined}
         onChange={(event) => onChange(event.target.value)}
         className="form-control-touch w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
       />
+      {help && (
+        <p id={helpId} className="mt-1 text-sm leading-5 text-fg-muted">
+          {help}
+        </p>
+      )}
       {error && (
         <p id={errorId} className="mt-1 text-sm text-error">
           {error}

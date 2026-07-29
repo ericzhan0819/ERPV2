@@ -37,14 +37,9 @@ export function Account() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-fg">
-          我的帳號
-        </h1>
-        <p className="mt-2 text-sm leading-6 text-fg-muted">
-          維護登入名稱與密碼。Email 與角色由管理員統一管理。
-        </p>
-      </div>
+      <h1 className="text-2xl font-semibold tracking-tight text-fg">
+        我的帳號
+      </h1>
 
       <div className="grid min-w-0 gap-6 lg:grid-cols-2 lg:items-start">
         <ProfileSection
@@ -129,11 +124,8 @@ function ProfileSection({
   return (
     <section className="min-w-0 rounded-2xl border border-border bg-surface p-5 shadow-sm sm:p-6">
       <h2 className="text-lg font-semibold text-fg">個人資料</h2>
-      <p className="mt-1 text-sm leading-6 text-fg-muted">
-        帳號名稱可用於登入；未設定時仍可使用 Email。
-      </p>
 
-      <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
         <FormField
           id="account-name"
           name="name"
@@ -183,9 +175,9 @@ function ProfileSection({
           />
           <p id={usernameHelpId} className="mt-1 text-sm leading-5 text-fg-muted">
             {user.username === null
-              ? '目前尚未設定。可留白繼續使用 Email 登入。'
-              : '留白並儲存即可清除，之後仍可使用 Email 登入。'}
-            {' '}限 3～30 字元，可使用英文字母、數字、句點、底線與連字號；儲存後會轉為小寫。
+              ? '未設定時使用 Email 登入。'
+              : '也可使用 Email 登入；清除帳號名稱後請改用 Email。'}
+            {' '}3～30 字元，可用英數、._-；儲存時轉小寫。
           </p>
           {fieldErrors.username && (
             <p id={usernameErrorId} className="mt-1 text-sm text-error">
@@ -283,11 +275,8 @@ function PasswordSection({
   return (
     <section className="min-w-0 rounded-2xl border border-border bg-surface p-5 shadow-sm sm:p-6">
       <h2 className="text-lg font-semibold text-fg">修改密碼</h2>
-      <p className="mt-1 text-sm leading-6 text-fg-muted">
-        新密碼至少 8 個字元，且不可與目前密碼相同。
-      </p>
 
-      <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
         <PasswordField
           id="account-current-password"
           name="current_password"
@@ -310,6 +299,7 @@ function PasswordSection({
           error={fieldErrors.password}
           disabled={submitting}
           minLength={8}
+          help="至少 8 個字元，且不可與目前密碼相同。"
           onChange={(value) => {
             setSuccess(null)
             setPassword(value)
@@ -404,6 +394,7 @@ function PasswordField({
   error,
   disabled,
   minLength,
+  help,
   onChange,
 }: {
   id: string
@@ -414,8 +405,10 @@ function PasswordField({
   error?: string
   disabled: boolean
   minLength?: number
+  help?: string
   onChange: (value: string) => void
 }) {
+  const helpId = `${id}-help`
   const errorId = `${id}-error`
 
   return (
@@ -433,10 +426,18 @@ function PasswordField({
         value={value}
         disabled={disabled}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? errorId : undefined}
+        aria-describedby={[
+          help ? helpId : null,
+          error ? errorId : null,
+        ].filter(Boolean).join(' ') || undefined}
         onChange={(event) => onChange(event.target.value)}
         className="form-control-touch w-full rounded-lg border border-border-strong px-3 py-2 text-base focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
       />
+      {help && (
+        <p id={helpId} className="mt-1 text-sm leading-5 text-fg-muted">
+          {help}
+        </p>
+      )}
       {error && (
         <p id={errorId} className="mt-1 text-sm text-error">
           {error}

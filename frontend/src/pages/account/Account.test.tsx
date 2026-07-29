@@ -150,6 +150,29 @@ describe('Account', () => {
     },
   )
 
+  it.each([
+    [
+      null,
+      '未設定時使用 Email 登入。 3～30 字元，可用英數、._-；儲存時轉小寫。',
+      '清除帳號名稱後請改用 Email',
+    ],
+    [
+      'owner',
+      '也可使用 Email 登入；清除帳號名稱後請改用 Email。 3～30 字元，可用英數、._-；儲存時轉小寫。',
+      '未設定時使用 Email 登入',
+    ],
+  ])('shows username guidance for the current state', async (username, expected, absent) => {
+    renderAccount({ ...baseUser, username })
+
+    const usernameInput = await screen.findByLabelText('帳號名稱')
+    expect(screen.getByText(expected)).toBeTruthy()
+    expect(screen.queryByText(new RegExp(absent))).toBeNull()
+    expect(usernameInput.getAttribute('aria-describedby')).toBe(
+      'account-username-help',
+    )
+    expect(document.getElementById('account-username-help')).not.toBeNull()
+  })
+
   it('shows password confirmation and backend field errors, then clears fields on success', async () => {
     const interaction = userEvent.setup()
 
@@ -207,6 +230,54 @@ describe('Account', () => {
 
     expect(await screen.findByText('帳號名稱已被使用')).toBeTruthy()
     expect(usernameInput.getAttribute('aria-invalid')).toBe('true')
+    expect(usernameInput.getAttribute('aria-describedby')).toBe(
+      'account-username-help account-username-error',
+    )
+    expect(document.getElementById('account-username-help')).not.toBeNull()
+    expect(document.getElementById('account-username-error')).not.toBeNull()
+  })
+
+  it('places the password rule beside the new password and preserves backend field errors', async () => {
+    vi.mocked(authApi.updateCurrentUserPassword).mockRejectedValue(
+      validationError({ password: ['新密碼不可與目前密碼相同'] }),
+    )
+    const interaction = userEvent.setup()
+
+    renderAccount()
+    const currentPassword = await screen.findByLabelText(/目前密碼/)
+    const password = screen.getByLabelText(/^新密碼/)
+    const confirmation = screen.getByLabelText(/確認新密碼/)
+    expect(screen.getByText('至少 8 個字元，且不可與目前密碼相同。')).toBeTruthy()
+    expect(password.getAttribute('aria-describedby')).toBe(
+      'account-new-password-help',
+    )
+
+    await interaction.type(currentPassword, 'old-password')
+    await interaction.type(password, 'old-password')
+    await interaction.type(confirmation, 'old-password')
+    await interaction.click(screen.getByRole('button', { name: '更新密碼' }))
+
+    expect(await screen.findByText('新密碼不可與目前密碼相同')).toBeTruthy()
+    expect(password.getAttribute('aria-describedby')).toBe(
+      'account-new-password-help account-new-password-error',
+    )
+  })
+
+  it('reports a committed password update as successful when auth context changed', async () => {
+    vi.mocked(authApi.updateCurrentUserPassword).mockRejectedValue(
+      new StaleCurrentUserResponseError(),
+    )
+    const interaction = userEvent.setup()
+
+    renderAccount()
+    await interaction.type(await screen.findByLabelText(/目前密碼/), 'old-password')
+    await interaction.type(screen.getByLabelText(/^新密碼/), 'new-password')
+    await interaction.type(screen.getByLabelText(/確認新密碼/), 'new-password')
+    await interaction.click(screen.getByRole('button', { name: '更新密碼' }))
+
+    expect(await screen.findByText('登入測試頁')).toBeTruthy()
+    expect(screen.getByText('密碼已更新，請使用新密碼重新登入')).toBeTruthy()
+    expect(screen.queryByText('密碼更新失敗，請稍後再試')).toBeNull()
   })
 
   it('does not report a committed profile update as failed when auth context changed', async () => {

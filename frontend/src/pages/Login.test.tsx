@@ -105,4 +105,20 @@ describe('Login', () => {
       await screen.findByRole('heading', { name: '請先修改密碼' }),
     ).toBeTruthy()
   })
+
+  it('keeps identifier guidance in the visible label and uses a generic failure message', async () => {
+    vi.mocked(authApi.login).mockRejectedValue(new Error('network'))
+    const user = userEvent.setup()
+
+    renderLogin()
+    const loginInput = screen.getByLabelText(/帳號名稱或 Email/)
+    expect(loginInput.getAttribute('placeholder')).toBeNull()
+    await user.type(loginInput, 'unknown@example.com')
+    await user.type(screen.getByLabelText(/密碼/), 'password')
+    await user.click(screen.getByRole('button', { name: '登入' }))
+
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      '登入失敗，請稍後再試',
+    )
+  })
 })
