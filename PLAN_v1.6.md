@@ -732,23 +732,23 @@ docs：完成 v1.6 smoke 與交接
 
 ### 17.2 Git 規則
 
-- [ ] 除非使用者明確要求，不自動 commit
-- [ ] 除非使用者明確要求，不自動 push
-- [ ] 不 amend 使用者既有 commit
-- [ ] 不使用 reset、clean、checkout 等破壞性指令覆蓋工作樹
-- [ ] 不在工程與 smoke 尚未完成時建立正式 tag
+- [x] 除非使用者明確要求，不自動 commit
+- [x] 除非使用者明確要求，不自動 push
+- [x] 不 amend 使用者既有 commit
+- [x] 不使用 reset、clean、checkout 等破壞性指令覆蓋工作樹
+- [x] 不在工程與 smoke 尚未完成時建立正式 tag
 
 ### 17.3 封板
 
-- [ ] 完成 automated verification
-- [ ] 完成 engineering browser smoke
-- [ ] 完成 adversarial review
-- [ ] 完成使用者 manual smoke
-- [ ] 文件與 handoff 完成
+- [x] 完成 automated verification
+- [x] 完成 engineering browser smoke
+- [x] 完成 adversarial review
+- [x] 完成使用者 manual smoke
+- [x] 文件與 handoff 完成
 - [ ] 使用者明確授權封板
 - [ ] 建立 annotated tag：`v1.6-smoke-passed`
 - [ ] Tag message：`v1.6 Smoke passed`
-- [ ] 只有使用者要求時才 push main 與 tag
+- [x] 只有使用者要求時才 push main 與 tag
 
 ---
 
