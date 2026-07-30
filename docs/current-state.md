@@ -1,6 +1,6 @@
 # ERPV2 current-state — v1.6 Smoke 已通過
 
-日期：2026-07-29
+日期：2026-07-30
 專案：ERPV2 / 中古車行內部營運系統
 目前 v1.6 runtime 基準：`35e1669 fix：關閉 Browser Smoke 複核問題`
 目前 v1.6 使用者 smoke 結果基準：`3af5f11 docs：記錄 v1.6 使用者 Smoke 通過`
@@ -61,6 +61,11 @@ cd frontend && npm run build
 v1.2 封版前最終結果：334 tests、1372 assertions、4 skipped；frontend typecheck 與 production build 均通過。完整紀錄見 `docs/v1.2-smoke-report.md`。v1.2.x hotfix（車輛照片稽核追蹤，2026-07-12，含 partial upload resume/replay 遺漏補記修正）後為 340 tests、1391 assertions、4 skipped。v1.3 與獨立 Customer hotfix 納入後的完整回歸為 499 tests、485 passed、14 environment-gated skipped、2293 assertions；所有受保護的 MariaDB 10.11.18 並發／時區測試分別在專用可拋棄 schema 執行，共 14 tests／176 assertions 全數通過，驗證後均刪除 schema。frontend lint（2 個既有 Fast Refresh warnings）／typecheck／production build 均重新執行通過。使用者於 2026-07-18 完成完整 browser manual smoke。完整紀錄見 `docs/v1.3-smoke-report.md` 與 `docs/customer-workflow-hotfix.md`。
 
 v1.4 最終回歸為 519 tests（504 passed、15 environment-gated skipped）／2516 assertions，Frontend 14 tests、lint、typecheck、production build 及三角色／RWD browser smoke 通過。v1.5 Claude review follow-up 修正完成後為 Backend 633 tests（616 passed、17 environment-gated skipped）／3170 assertions；Frontend 16 files／80 tests、lint（2 個既有 Fast Refresh warnings）、typecheck 與 production build 通過。v1.5 的 MariaDB username 專用整合另為 2 tests／36 assertions；Firefox 38 checks、Chrome 15 checks、config 2 checks 與使用者 33 項 manual smoke 均通過。完整紀錄見 `docs/v1.5-smoke-report.md`。
+
+v1.6 Frontend 為 27 files／150 tests，lint（2 個既有 Fast Refresh warnings）、
+typecheck 與 production build 通過；Backend 沿用且重跑相同的 633 tests
+（616 passed、17 skipped）／3170 assertions baseline。v1.6 沒有 Backend diff，
+MariaDB 專用測試本版未重跑；完整證據與限制見 `docs/v1.6-smoke-report.md`。
 
 ---
 
