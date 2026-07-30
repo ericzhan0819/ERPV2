@@ -756,25 +756,25 @@ docs：完成 v1.6 smoke 與交接
 
 v1.6 視為完成，必須同時滿足：
 
-- [ ] 所有正式前端頁面完成文案盤點
-- [ ] 所有盤點文字完成 A／B／C／D／E 分類
-- [ ] Dashboard 重複副標與 Card description 明顯減少
-- [ ] 頁面標題不再普遍搭配重述用途的副標
-- [ ] Username、User 管理與一般表單 help text 已縮短
-- [ ] 薪資、成交、發薪、重設密碼與金額口徑等高風險資訊仍完整
-- [ ] 正常狀態不常駐顯示大量預防性說明
-- [ ] Error、success、warning、disabled、empty state 層級清楚
-- [ ] visible label、required、per-field error、heading 與 `aria-describedby` 無回歸
-- [ ] Backend、Schema、API、roles、permissions、business logic 無 diff
-- [ ] 不新增 dependency、頁面、路由、KPI、報表、通知、onboarding 或 tooltip 平台
-- [ ] `npm test` 通過
-- [ ] `npm run lint` 通過或只有已記錄既有 warning
-- [ ] `npm run typecheck` 通過
-- [ ] `npm run build` 通過
-- [ ] Backend full suite 通過
-- [ ] 320／375／390／768／1440px 通過
-- [ ] light／dark mode 通過
-- [ ] admin／manager／sales 三角色通過
-- [ ] 使用者真實 Desktop／Mobile manual smoke 通過
-- [ ] `UI.md`、README、current-state、smoke report、handoff、AGENTS、CLAUDE 同步
-- [ ] 使用者明確授權後才建立 `v1.6-smoke-passed` annotated tag
+- [x] 所有正式前端頁面完成文案盤點
+- [x] 所有盤點文字完成 A／B／C／D／E 分類
+- [x] Dashboard 重複副標與 Card description 明顯減少
+- [x] 頁面標題不再普遍搭配重述用途的副標
+- [x] Username、User 管理與一般表單 help text 已縮短
+- [x] 薪資、成交、發薪、重設密碼與金額口徑等高風險資訊仍完整
+- [x] 正常狀態不常駐顯示大量預防性說明
+- [x] Error、success、warning、disabled、empty state 層級清楚
+- [x] visible label、required、per-field error、heading 與 `aria-describedby` 無回歸
+- [x] Backend、Schema、API、roles、permissions、business logic 無 diff
+- [x] 不新增 dependency、頁面、路由、KPI、報表、通知、onboarding 或 tooltip 平台
+- [x] `npm test` 通過
+- [x] `npm run lint` 通過或只有已記錄既有 warning
+- [x] `npm run typecheck` 通過
+- [x] `npm run build` 通過
+- [x] Backend full suite 通過
+- [x] 320／375／390／768／1440px 通過
+- [x] light／dark mode 通過
+- [x] admin／manager／sales 三角色通過
+- [x] 使用者真實 Desktop／Mobile manual smoke 通過
+- [x] `UI.md`、README、current-state、smoke report、handoff、AGENTS、CLAUDE 同步
+- [x] 使用者明確授權後才建立 `v1.6-smoke-passed` annotated tag
