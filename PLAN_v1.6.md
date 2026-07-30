@@ -668,6 +668,11 @@ Sales：
 - [x] 手機畫面文字高度明顯下降
 - [x] 沒有希望恢復的關鍵資訊
 
+本章勾選依據為使用者於 2026-07-30 回報「smoke 通過」的整體結論；
+未取得逐項、Desktop browser/version、iPhone model／iOS／Safari、
+VoiceOver、三角色個別結果與受測 build commit 明細。後續 smoke report
+必須如實保留此證據邊界，不得補寫未回報資訊。
+
 使用者提出的純偏好微調可在 v1.6 收尾處理；新增功能或新互動流程必須另立版本／hotfix，不得混入。
 
 ---
