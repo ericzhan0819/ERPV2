@@ -1,11 +1,11 @@
-# ERPV2 current-state — v1.6 Smoke 已通過
+# ERPV2 current-state — v1.6 已封板
 
-日期：2026-07-30
+日期：2026-07-31
 專案：ERPV2 / 中古車行內部營運系統
 目前 v1.6 runtime 基準：`35e1669 fix：關閉 Browser Smoke 複核問題`
 目前 v1.6 使用者 smoke 結果基準：`3af5f11 docs：記錄 v1.6 使用者 Smoke 通過`
-目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`、`v1.3-smoke-passed`、`v1.4-smoke-passed`、`v1.5-smoke-passed`
-狀態：v1.6「介面文案精簡與資訊層級優化」runtime、完整自動回歸、Chrome／Orca 工程 Browser Smoke、對立審查、使用者整體 manual smoke 與文件交接均已完成。使用者於 2026-07-30 回報「smoke 通過」，但未另提供裝置／browser／OS、VoiceOver、逐角色與受測 build 明細。v1.6 尚未取得建立 annotated tag 或 push 的明確授權；目前仍無 `v1.6-smoke-passed` tag，origin/main 保持 v1.5 基準。
+目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`、`v1.3-smoke-passed`、`v1.4-smoke-passed`、`v1.5-smoke-passed`、`v1.6-smoke-passed`
+狀態：v1.6「介面文案精簡與資訊層級優化」runtime、完整自動回歸、Chrome／Orca 工程 Browser Smoke、對立審查、使用者整體 manual smoke 與文件交接均已完成。使用者於 2026-07-30 回報「smoke 通過」，但未另提供裝置／browser／OS、VoiceOver、逐角色與受測 build 明細；並於 2026-07-31 明確授權封板、建立 annotated tag 及 push。`v1.6-smoke-passed`、main 與 tag 均已推送至 origin。
 
 ---
 
@@ -502,7 +502,8 @@ Workflow 或 dependency diff。因範圍不觸及資料庫、transaction、timez
 宣稱本次通過。完整證據見 `docs/v1.6-smoke-report.md` 與
 `docs/v1.6-handoff.md`。
 
-v1.6 尚未封板：annotated tag 與 push 必須另取得使用者明確授權。
+v1.6 已以 `v1.6-smoke-passed` annotated tag 封板；main 與 tag 已依使用者
+明確授權推送至 origin。
 
 ---
 

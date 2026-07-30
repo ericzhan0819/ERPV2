@@ -745,9 +745,9 @@ docs：完成 v1.6 smoke 與交接
 - [x] 完成 adversarial review
 - [x] 完成使用者 manual smoke
 - [x] 文件與 handoff 完成
-- [ ] 使用者明確授權封板
-- [ ] 建立 annotated tag：`v1.6-smoke-passed`
-- [ ] Tag message：`v1.6 Smoke passed`
+- [x] 使用者明確授權封板
+- [x] 建立 annotated tag：`v1.6-smoke-passed`
+- [x] Tag message：`v1.6 Smoke passed`
 - [x] 只有使用者要求時才 push main 與 tag
 
 ---

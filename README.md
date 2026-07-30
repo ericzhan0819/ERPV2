@@ -8,7 +8,7 @@ v1.4 資訊架構與 UI／UX 改版第 0～14 部分已完成。Dashboard、Vehi
 
 v1.5 帳號自助管理與系統識別集中化第 0～16 部分已完成。管理員建立員工或重設密碼後，員工必須以預設密碼登入並先完成強制改密碼；一般營運 API 由後端 fail-closed gate 阻擋，不能只靠前端導頁。使用者可在「我的帳號」修改顯示名稱、username 與密碼，但不能自行修改 Email、角色或啟用狀態。登入接受 username 或 Email，兩個 alias 共用同一實際帳號的 limiter。系統名稱集中在 `frontend/src/config/app.ts`，沒有新增線上 Settings 模組。完整自動回歸、Firefox／Desktop Chrome 工程預驗證、使用者 Desktop Chrome／Mobile Safari manual smoke 與封板審查均已通過；證據見 `docs/v1.5-smoke-report.md` 與 `docs/v1.5-handoff.md`。v1.5 已以 `v1.5-smoke-passed` annotated tag 封板；main 與 tag 已推送至 origin。
 
-v1.6 介面文案精簡與資訊層級優化的 runtime、完整自動回歸、Chrome／Orca 工程 smoke、對立審查與使用者整體 manual smoke 已通過。此版只修改前端文字、既有狀態的條件式呈現、必要的焦點／label 關聯與對應測試；Backend、schema、API、權限、商業規則、路由與 dependency 均無變更。使用者未另提供 Desktop／Mobile 裝置版本、VoiceOver、逐角色與受測 build 明細，正式報告保留此證據限制。完整紀錄見 `docs/v1.6-smoke-report.md` 與 `docs/v1.6-handoff.md`；尚未建立 `v1.6-smoke-passed` tag，也尚未 push。
+v1.6 介面文案精簡與資訊層級優化的 runtime、完整自動回歸、Chrome／Orca 工程 smoke、對立審查與使用者整體 manual smoke 已通過。此版只修改前端文字、既有狀態的條件式呈現、必要的焦點／label 關聯與對應測試；Backend、schema、API、權限、商業規則、路由與 dependency 均無變更。使用者未另提供 Desktop／Mobile 裝置版本、VoiceOver、逐角色與受測 build 明細，正式報告保留此證據限制。完整紀錄見 `docs/v1.6-smoke-report.md` 與 `docs/v1.6-handoff.md`；已以 `v1.6-smoke-passed` annotated tag 封板，main 與 tag 已推送至 origin。
 
 ### v1.3 薪資公式
 
