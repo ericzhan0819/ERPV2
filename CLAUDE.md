@@ -15,7 +15,7 @@ v1.2：車輛圖片與官網公開車輛資料前置階段已完成 smoke，並�
 v1.3：薪資結算工程實作、自動回歸、RWD／dark mode 驗證與使用者 browser manual smoke 已通過，並以 `v1.3-smoke-passed` tag 封板。
 v1.4：資訊架構與 UI／UX 改版、自動回歸、三角色 browser manual smoke 與真實 iPhone Safari 複驗已完成，並以 `v1.4-smoke-passed` tag 封板；tag 指向 `d4ea978`，runtime 與封板前修正基準為 `a10dd0c`。
 v1.5：帳號自助管理與系統識別集中化工程實作、自動回歸、Desktop Chrome／Mobile Safari browser manual smoke、封板審查與文件交接已完成，並以 `v1.5-smoke-passed` annotated tag 封板；main 與 tag 已推送至 origin。
-v1.6：介面文案精簡與資訊層級優化已完成企劃與 PLAN，尚未開始 runtime 實作；限純前端 UX Copy cleanup，不新增功能或修改後端契約。
+v1.6：介面文案精簡與資訊層級優化的 runtime、自動回歸、工程 Browser Smoke、對立審查與使用者整體 manual smoke 已通過；文件交接已完成，尚未建立正式 tag 或 push。限純前端 UX Copy cleanup，不新增功能或修改後端契約。
 ```
 
 核心目標不是擴張成完整 ERP，而是讓中古車行日常營運能穩定落地：車輛進來、建檔、整備、上架、保留、收款、成交、列印收支明細與查看營運摘要。
@@ -129,9 +129,11 @@ v1.6 任務必須閱讀：
 2. `PLAN_v1.6.md`
 3. `UI.md`
 4. `docs/current-state.md`
-5. `docs/v1.5-smoke-report.md`
-6. `docs/v1.5-handoff.md`
-7. 所有受影響的 frontend pages、components、tests 與 accessibility attributes
+5. `docs/v1.6-smoke-report.md`
+6. `docs/v1.6-handoff.md`
+7. `docs/v1.5-smoke-report.md`
+8. `docs/v1.5-handoff.md`
+9. 所有受影響的 frontend pages、components、tests 與 accessibility attributes
 
 不得只看單一檔案就直接大量改碼。實作前必須先檢查既有目錄、路由、Service、Request、Resource、測試與前端 API 型別。
 
@@ -716,7 +718,7 @@ v1.4 對立性審查必須維持 Presentation Layer 邊界：不得新增 migrat
 
 v1.5 第 0～16 部分已完成。審查證據見 `docs/v1.5-smoke-report.md` 與 `docs/v1.5-handoff.md`。v1.5 對立性審查必須維持帳號自助管理邊界：密碼值不得進入 API、Audit 或 log；username／Email 必須共用 canonical account limiter；所有 authenticated 營運路由預設受 `must_change_password` gate 保護，只有 `/api/me`、self profile、self password 與登出流程可用；self endpoint 不可修改 Email、role、is_admin、is_active 或其他管理欄位；前端 app config 只能是 source-controlled presentation config，不得擴張成 Database settings、線上設定頁、MFA、SSO、Email reset 或裝置／Session 管理。`v1.5-smoke-passed` annotated tag 已獲使用者授權並推送至 origin。
 
-v1.6 已完成企劃與 PLAN，尚未開始 runtime 實作。v1.6 review 目標是證明文案精簡沒有刪除關鍵業務資訊、破壞 accessibility 或改變既有功能。Review 必須檢查 approved-only／成交月份／期末餘額等口徑、薪資與成交鎖定、重設密碼與 Session 失效後果、條件式 warning、disabled reason、broken `aria-describedby`、Mobile overflow，以及是否偷偷新增 backend、API、schema、dependency、頁面、KPI、報表、通知或 Tooltip 平台。純文案偏好且沒有可觀察失敗模式的意見，不應列為 finding。
+v1.6 已完成工程、自動回歸、工程 Browser Smoke、對立審查、使用者整體 manual smoke 與文件交接，runtime 基準為 `35e1669`。使用者未另提供裝置／browser／OS、VoiceOver、逐角色與受測 build 明細，review 不得補寫不存在的證據。v1.6 review 仍須證明文案精簡沒有刪除關鍵業務資訊、破壞 accessibility 或改變既有功能，並檢查 approved-only／成交月份／期末餘額等口徑、薪資與成交鎖定、重設密碼與 Session 失效後果、條件式 warning、disabled reason、broken `aria-describedby`、Mobile overflow，以及是否偷偷新增 backend、API、schema、dependency、頁面、KPI、報表、通知或 Tooltip 平台。純文案偏好且沒有可觀察失敗模式的意見，不應列為 finding。
 
 Claude 審查時必須特別檢查：
 

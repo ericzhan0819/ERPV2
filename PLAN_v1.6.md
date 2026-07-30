@@ -681,37 +681,37 @@ VoiceOver、三角色個別結果與受測 build commit 明細。後續 smoke re
 
 ### 16.1 文件
 
-- [ ] 更新 `UI.md`
-- [ ] 更新 `README.md` v1.6 狀態
-- [ ] 更新 `docs/current-state.md`
-- [ ] 建立 `docs/v1.6-smoke-report.md`
-- [ ] 建立 `docs/v1.6-handoff.md`
-- [ ] 更新 `AGENTS.md`：v1.6 由規劃中改為完成／封板狀態
-- [ ] 更新 `CLAUDE.md`：v1.6 由規劃中改為完成／review 邊界
-- [ ] 確認 `backend/API.md` 無需修改
+- [x] 更新 `UI.md`
+- [x] 更新 `README.md` v1.6 狀態
+- [x] 更新 `docs/current-state.md`
+- [x] 建立 `docs/v1.6-smoke-report.md`
+- [x] 建立 `docs/v1.6-handoff.md`
+- [x] 更新 `AGENTS.md`：v1.6 由規劃中改為完成／封板狀態
+- [x] 更新 `CLAUDE.md`：v1.6 由規劃中改為完成／review 邊界
+- [x] 確認 `backend/API.md` 無需修改
 
 ### 16.2 Handoff 必須記錄
 
-- [ ] v1.6 runtime 基準 commit
-- [ ] 修改頁面清單
-- [ ] 主要刪除／縮短／條件式提示決策
-- [ ] 保留的高風險文案
-- [ ] Frontend test／lint／typecheck／build 結果
-- [ ] Backend full suite 結果
-- [ ] 未重跑 MariaDB 專用測試的原因
-- [ ] Browser smoke 的瀏覽器、寬度與角色
-- [ ] 使用者 manual smoke 結果
-- [ ] 已知限制與未做項目
-- [ ] 部署注意事項：原則上只有 frontend build 變更，無 migration／API contract
+- [x] v1.6 runtime 基準 commit
+- [x] 修改頁面清單
+- [x] 主要刪除／縮短／條件式提示決策
+- [x] 保留的高風險文案
+- [x] Frontend test／lint／typecheck／build 結果
+- [x] Backend full suite 結果
+- [x] 未重跑 MariaDB 專用測試的原因
+- [x] Browser smoke 的瀏覽器、寬度與角色
+- [x] 使用者 manual smoke 結果
+- [x] 已知限制與未做項目
+- [x] 部署注意事項：原則上只有 frontend build 變更，無 migration／API contract
 
 ### 16.3 Diff audit
 
-- [ ] `git diff --check`
-- [ ] `git status --short`
-- [ ] 確認只有 v1.6 範圍檔案
-- [ ] 確認沒有 backend runtime diff
-- [ ] 確認沒有 package lock 非預期變更
-- [ ] 確認沒有 debug log、暫存截圖、測試帳密或敏感資料
+- [x] `git diff --check`
+- [x] `git status --short`
+- [x] 確認只有 v1.6 範圍檔案
+- [x] 確認沒有 backend runtime diff
+- [x] 確認沒有 package lock 非預期變更
+- [x] 確認沒有 debug log、暫存截圖、測試帳密或敏感資料
 
 ---
 

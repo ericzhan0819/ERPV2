@@ -1,11 +1,11 @@
-# ERPV2 current-state — v1.5 Smoke 已通過
+# ERPV2 current-state — v1.6 Smoke 已通過
 
 日期：2026-07-29
 專案：ERPV2 / 中古車行內部營運系統
-目前 v1.5 browser smoke 基準：`a4bf025 test：完成 v1.5 browser manual smoke`
-目前 v1.5 runtime 與 smoke 後修正基準：`3f86871 fix：修正 v1.5 登入限流與前端身分競態`
+目前 v1.6 runtime 基準：`35e1669 fix：關閉 Browser Smoke 複核問題`
+目前 v1.6 使用者 smoke 結果基準：`3af5f11 docs：記錄 v1.6 使用者 Smoke 通過`
 目前 tag：`v1.1-smoke-passed`、`v1.2-smoke-passed`、`v1.3-smoke-passed`、`v1.4-smoke-passed`、`v1.5-smoke-passed`
-狀態：v1.5「帳號自助管理與系統識別集中化」第 0～16 部分、完整自動回歸、Firefox／Desktop Chrome 工程預驗證、使用者 Desktop Chrome／Mobile Safari Browser Manual Smoke、封板審查、文件及交接均已完成。使用者 manual smoke 執行於 `a4bf025`；其後 `3f86871` 修改登入限流、強制改密碼導流的前端競態保護與我的帳號 stale-context 回饋，三項均有直接回歸測試。本輪封板審查再次重跑完整 Backend／Frontend 驗證並判定不需額外人工複驗；使用者已明確授權，以 `v1.5-smoke-passed` annotated tag 封板；main 與 tag 已推送至 origin。
+狀態：v1.6「介面文案精簡與資訊層級優化」runtime、完整自動回歸、Chrome／Orca 工程 Browser Smoke、對立審查、使用者整體 manual smoke 與文件交接均已完成。使用者於 2026-07-30 回報「smoke 通過」，但未另提供裝置／browser／OS、VoiceOver、逐角色與受測 build 明細。v1.6 尚未取得建立 annotated tag 或 push 的明確授權；目前仍無 `v1.6-smoke-passed` tag，origin/main 保持 v1.5 基準。
 
 ---
 
@@ -470,7 +470,38 @@ v1.5 不做自助註冊、Email reset／驗證、MFA、SSO、密碼歷史、Sess
 
 ---
 
-## 9. 給下一位 AI / 工程師的注意事項
+## 9. v1.6 完成狀態
+
+v1.6 已完成 `企劃書_v1.6.md` 與 `PLAN_v1.6.md` 的純前端 UX Copy 範圍：
+
+- 全站頁面與共用文案完成 A／B／C／D／E 盤點，移除重述頁名、Card label、
+  按鈕與控制位置的常駐說明。
+- Dashboard、Auth／Account、User、Cash Account、Salary、Vehicle、
+  MoneyEntry、Customer、Audit 與 Print 的文案完成刪除、縮短或條件式分層。
+- approved-only、完整月份、成交日期／月份、期末餘額、薪資鎖定／發薪、
+  重設密碼、Session 失效與不可逆後果均保留。
+- `FormAlert`、既有 workflow Modal 的 focus trap、visible label 與
+  `aria-describedby` 回歸只屬 Presentation／Accessibility，不改業務流程。
+- Frontend 27 files／150 tests、lint（2 個既有 Fast Refresh warnings）、
+  typecheck、production build通過；Backend 633 tests（616 passed、17
+  skipped）／3170 assertions，與 v1.5 baseline 一致。
+- Chrome for Testing 151 的 32 個工程 checks 覆蓋 1440／768／390／375／
+  320px、light／dark、admin／manager／sales；Orca 46.1 三項 speech output
+  各一次，兩份列印 PDF 視覺檢查通過。
+- 使用者於 2026-07-30 回報整體 manual smoke 通過；未另提供逐項、裝置版本、
+  VoiceOver、三角色或受測 build 明細。
+
+v1.6 沒有 Backend、schema、migration、API、route、權限、Business Logic、
+Workflow 或 dependency diff。因範圍不觸及資料庫、transaction、timezone 或
+競態，本版未重跑 MariaDB 專用測試，沿用截至 v1.5 封板前的既有證據且不
+宣稱本次通過。完整證據見 `docs/v1.6-smoke-report.md` 與
+`docs/v1.6-handoff.md`。
+
+v1.6 尚未封板：annotated tag 與 push 必須另取得使用者明確授權。
+
+---
+
+## 10. 給下一位 AI / 工程師的注意事項
 
 1. 後端 Resource 遮蔽是正式安全邊界，不能只靠前端隱藏。
 2. `canViewFinancials()` 不等於 sales 可看的銷售金額；成交價、開價、底價走 sales pricing 權限。

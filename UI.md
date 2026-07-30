@@ -369,3 +369,16 @@ UI 文案只回答使用者當下需要知道的用途、可執行動作、不�
 - 只有至少兩個實際使用處具有相同語意與行為時才抽共用元件；不得建立巨大 Copy／HelpText 萬用元件。
 - UI Copy 不使用 Database-backed copy、不新增 i18n、analytics、onboarding tracking 或 runtime dependency。
 - 本章不改既有品牌、色彩、spacing、RWD、Safe Area、API、Business Logic、Workflow、角色或權限契約。
+
+### 15.6 v1.6 完成狀態
+
+v1.6 已依上述契約完成全站 A／B／C／D／E 文案盤點與純前端實作。頁面副標、
+Card description、按鈕教學與常駐 help text 已在資訊可由標題、label、狀態或
+控制項承接時移除；approved-only、成交月份、期末餘額、薪資鎖定、發薪、
+重設密碼、Session 失效與不可逆後果仍保留。
+
+共用 `FormAlert` 與既有 Modal 的焦點／label 關聯只用來維持錯誤可感知與
+鍵盤操作，不代表建立新互動平台。後續不得把 v1.6 擴張為 Tooltip／Popover、
+Onboarding、通知、頁面、路由、KPI、報表或 Database-backed copy。
+
+完整驗證與部署邊界見 `docs/v1.6-smoke-report.md`、`docs/v1.6-handoff.md`。

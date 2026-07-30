@@ -15,7 +15,7 @@ v1.2：車輛圖片與官網公開資料前置已完成 smoke，並以 `v1.2-smo
 v1.3：薪資結算工程實作、自動回歸與使用者 browser manual smoke 已通過，並以 `v1.3-smoke-passed` tag 封版。
 v1.4：資訊架構與 UI／UX 改版、自動回歸、三角色 browser manual smoke 與真實 iPhone Safari 複驗已完成，並以 `v1.4-smoke-passed` tag 封板；tag 指向 `d4ea978`，runtime 與封板前修正基準為 `a10dd0c`。
 v1.5：帳號自助管理與系統識別集中化工程實作、自動回歸、Desktop Chrome／Mobile Safari browser manual smoke、封板審查與文件交接已完成，並以 `v1.5-smoke-passed` annotated tag 封板；main 與 tag 已推送至 origin。
-v1.6：介面文案精簡與資訊層級優化已完成企劃與 PLAN，尚未開始 runtime 實作。此版本限純前端 UX Copy cleanup，不新增功能或修改後端契約。
+v1.6：介面文案精簡與資訊層級優化的 runtime、自動回歸、工程 Browser Smoke、對立審查與使用者整體 manual smoke 已通過；文件交接已完成，尚未建立正式 tag 或 push。此版本限純前端 UX Copy cleanup，不新增功能或修改後端契約。
 ```
 
 ---
@@ -57,7 +57,7 @@ Codex 應完成使用者授權範圍內的實作，不把主要工程工作轉�
 - v1.3：`企劃書_v1.3.md`、`PLAN_v1.3.md`、`docs/v1.3-smoke-report.md`、`docs/v1.3-handoff.md`
 - v1.4：`企劃書_v1.4.md`、`PLAN_v1.4.md`、`docs/v1.4-smoke-report.md`、`docs/v1.4-handoff.md`、`docs/current-state.md`、`backend/API.md`
 - v1.5：`企劃書_v1.5.md`、`PLAN_v1.5.md`、`docs/v1.5-smoke-report.md`、`docs/v1.5-handoff.md`、`docs/current-state.md`、`backend/API.md`
-- v1.6：`企劃書_v1.6.md`、`PLAN_v1.6.md`、`UI.md`、`docs/current-state.md`；實作完成後再建立 `docs/v1.6-smoke-report.md` 與 `docs/v1.6-handoff.md`
+- v1.6：`企劃書_v1.6.md`、`PLAN_v1.6.md`、`docs/v1.6-smoke-report.md`、`docs/v1.6-handoff.md`、`UI.md`、`docs/current-state.md`
 
 不得只看完成報告或單一檔案就直接大量改碼。先搜尋並確認既有路由、Controller、FormRequest、Service、Model、Policy、Resource、migration、tests、前端 API、types 與相關頁面。
 
@@ -173,7 +173,7 @@ preparing → listed → reserved → sold
 
 v1.1、v1.2、v1.3、v1.4、v1.5 均已完成既定工程範圍。除非使用者明確要求 hotfix，否則不得回開舊版或繼續塞入新功能。
 
-v1.6 已完成規劃但尚未實作。只依 `企劃書_v1.6.md` 與 `PLAN_v1.6.md` 進行介面文案精簡與資訊層級優化，不得將「減少副標與註解」擴張成新功能、整站重新設計或後端變更。
+v1.6 已完成既定工程與使用者整體 smoke。除非使用者明確要求 v1.6.x hotfix，否則不得回開；後續仍須維持純前端文案精簡邊界，不得將「減少副標與註解」擴張成新功能、整站重新設計或後端變更。
 
 v1.3 薪資結算必須維持既有範圍與資料保護，包括薪資設定、收／賣車歸屬、版本化獎金方案、approved-only 毛利、整月跨級獎金、薪資草稿／鎖定／發薪與專用 MoneyEntry 保護。
 

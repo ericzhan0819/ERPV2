@@ -1,12 +1,14 @@
-# 中古車行內部營運系統（1.0 + v1.1 + v1.2 + v1.3 + v1.4 + v1.5）
+# 中古車行內部營運系統（1.0 + v1.1 + v1.2 + v1.3 + v1.4 + v1.5 + v1.6）
 
-小型中古車行內部使用的前後端分離營運管理系統。v1.1 完成角色、敏感資料遮蔽、收支審核與客戶流程；v1.2 完成車輛照片與官網公開唯讀 API；v1.3 完成薪資結算與發薪；v1.4 完成 Dashboard 資訊架構、Vehicle Card Grid、URL Filter、Mobile Drawer、RWD 與 UX Design System；v1.5 完成 username／Email 雙登入、首次登入強制改密碼、我的帳號與前端系統識別集中化。完整穩定狀態見 `docs/current-state.md`、`docs/v1.5-smoke-report.md` 與 `docs/v1.5-handoff.md`。
+小型中古車行內部使用的前後端分離營運管理系統。v1.1 完成角色、敏感資料遮蔽、收支審核與客戶流程；v1.2 完成車輛照片與官網公開唯讀 API；v1.3 完成薪資結算與發薪；v1.4 完成 Dashboard 資訊架構、Vehicle Card Grid、URL Filter、Mobile Drawer、RWD 與 UX Design System；v1.5 完成 username／Email 雙登入、首次登入強制改密碼、我的帳號與前端系統識別集中化；v1.6 完成純前端介面文案精簡、狀態資訊分層與 Accessibility 回歸。完整穩定狀態見 `docs/current-state.md`、`docs/v1.6-smoke-report.md` 與 `docs/v1.6-handoff.md`。
 
 v1.3 薪資結算的功能實作、自動測試、真實 MariaDB 並發／時區測試、前端 lint／typecheck／production build、RWD／dark mode 驗證與使用者 browser manual smoke 已完成。範圍包含 admin-only 員工薪資設定、版本化獎金方案、正式收／賣車歸屬、approved-only 整月跨級獎金、異常與非阻擋提示、月份草稿／重算／確認，以及具備 transaction、idempotency 與 paid 歷史保護的整批發薪。當月只能建立與重算草稿，必須等月份結束後才能確認，避免中途鎖定後漏掉後續成交。2026-07-18 納入 Customer hotfix 後的完整回歸為 485 passed、14 environment-gated skipped、2293 assertions；所有受保護的 MariaDB 10.11.18 並發／時區測試於專用 schema 共 14 tests／176 assertions 全數通過。完整規格與驗收證據見 `企劃書_v1.3.md`、`PLAN_v1.3.md`、`PLAN_customer_workflow_hotfix.md`、`docs/current-state.md`、`docs/customer-workflow-hotfix.md`、`docs/v1.3-smoke-report.md`、`docs/v1.3-handoff.md`；已以 `v1.3-smoke-passed` tag 封版。
 
 v1.4 資訊架構與 UI／UX 改版第 0～14 部分已完成。Dashboard、Vehicle Card Grid、URL Filter、Mobile Drawer、RWD、light／dark mode 與 Safe Area 均通過工程驗證及 Browser Manual Smoke。最終 backend regression 為 519 tests（504 passed、15 environment-gated skipped）／2516 assertions；第 10 部分另於可拋棄 MariaDB 10.11 schema 完成 3 個時區邊界測試／35 assertions。Frontend 14 tests、lint、typecheck 與 production build 通過；Firefox 獨立環境完成三角色、Action／KPI 導流、Filter、320／375／390／768／Desktop 與鍵盤操作，使用者亦以真實手機確認中文輸入法及 iPhone Safari Sidebar、Safe Area、light／dark mode。封板前 follow-up 已修正 CustomerSelect 空白搜尋後編輯卡住狀態，以及 MoneyEntry 載入期間短暫顯示過期分頁資訊；runtime 與 follow-up 基準為 `a10dd0c`，完成文件已對齊。完整證據與部署邊界見 `docs/v1.4-smoke-report.md` 與 `docs/v1.4-handoff.md`；已以 `v1.4-smoke-passed` tag 封板，tag 指向 `d4ea978`。
 
 v1.5 帳號自助管理與系統識別集中化第 0～16 部分已完成。管理員建立員工或重設密碼後，員工必須以預設密碼登入並先完成強制改密碼；一般營運 API 由後端 fail-closed gate 阻擋，不能只靠前端導頁。使用者可在「我的帳號」修改顯示名稱、username 與密碼，但不能自行修改 Email、角色或啟用狀態。登入接受 username 或 Email，兩個 alias 共用同一實際帳號的 limiter。系統名稱集中在 `frontend/src/config/app.ts`，沒有新增線上 Settings 模組。完整自動回歸、Firefox／Desktop Chrome 工程預驗證、使用者 Desktop Chrome／Mobile Safari manual smoke 與封板審查均已通過；證據見 `docs/v1.5-smoke-report.md` 與 `docs/v1.5-handoff.md`。v1.5 已以 `v1.5-smoke-passed` annotated tag 封板；main 與 tag 已推送至 origin。
+
+v1.6 介面文案精簡與資訊層級優化的 runtime、完整自動回歸、Chrome／Orca 工程 smoke、對立審查與使用者整體 manual smoke 已通過。此版只修改前端文字、既有狀態的條件式呈現、必要的焦點／label 關聯與對應測試；Backend、schema、API、權限、商業規則、路由與 dependency 均無變更。使用者未另提供 Desktop／Mobile 裝置版本、VoiceOver、逐角色與受測 build 明細，正式報告保留此證據限制。完整紀錄見 `docs/v1.6-smoke-report.md` 與 `docs/v1.6-handoff.md`；尚未建立 `v1.6-smoke-passed` tag，也尚未 push。
 
 ### v1.3 薪資公式
 
