@@ -246,6 +246,8 @@ Query 參數（`IndexVehicleRequest`）：
 
 列表只 eager load 已提交（`upload_batch_id IS NULL`）且標記為封面的照片，照片查詢只取得 `id`、`vehicle_id`、`disk`、`thumbnail_path`。沒有正式封面時 `cover_photo` 為 `null`；不回傳完整 `photos` 相簿、原圖 URL、原始檔名、上傳者或其他照片內部欄位。封面縮圖不改變既有價格權限，也不新增毛利、資金帳戶、收支摘要等資料。
 
+內部後台的 `VehicleCoverPhotoResource` 與 `VehiclePhotoResource` 若使用本機 local disk，圖片網址的 scheme、host 與 port 會跟隨經 trusted-proxy 判定後的實際 API request origin。這讓同一台開發機可由 LAN／Tailscale 兩種入口載入圖片，正式 HTTPS 反向代理也不會產生 `http://` mixed content。S3／R2 等非 local disk 一律保留 Storage 產生的 CDN 網址。
+
 未傳 `status` 時，API 本身仍維持既有「不限制狀態」行為，避免其他呼叫端回歸。後台 `/vehicles` 工作區由前端 URL 契約套用 `preparing`、`listed`、`reserved` 預設集合；單一 `status=preparing` 連結保持相容，逗號多選、搜尋、整備完成、成交月份與頁碼可由重新整理及瀏覽器上一頁／下一頁還原。`sold_month` 只查車輛 `sold_at`，不使用 `MoneyEntry.entry_date`，也不擴張為任意成交日期區間。
 
 ### POST /api/vehicles
@@ -998,6 +1000,8 @@ Query 參數：
 }
 ```
 
+上述內部 Resource 的 request-host 行為不適用於公開 API。
+
 ---
 
 ## 14. Public Vehicles（官網公開唯讀 API，v1.2）
@@ -1009,6 +1013,8 @@ Query 參數：
 **允許回傳欄位**（`PublicVehicleResource` / `PublicVehicleListResource` 白名單）：`id`、`stock_no`、`brand`、`model`、`year`、`mileage_km`、`color`、`fuel_type`、`transmission`、`displacement`、`asking_price`、`cover_photo`、`photos`（僅詳情頁）、`listing_date`、`created_at`。
 
 **禁止回傳欄位**：`purchase_price`（收購價）、`floor_price`（底價）、`sold_price`（成交價）、任何買方／賣方／客戶個資、`money_entries`／成本／毛利、`cash_account`、內部備註（證件／備鑰／過戶／驗車檢核、貸款或車況備註）、`approval_status`、`idempotency_key`、`uploaded_by`、`original_filename`、`mime_type`。公開 API 使用獨立的 `PublicVehicleResource`／`PublicVehicleListResource`／`PublicVehiclePhotoResource`，不共用內部 `VehicleResource`／`VehiclePhotoResource`，避免未來內部欄位新增時意外外洩。
+
+公開 `PublicVehiclePhotoResource` 的 `url`／`thumbnail_url` 必須固定使用 local disk 的 `APP_URL` 絕對網址，或 S3／R2 的 CDN 網址，不得跟隨 API 呼叫端的 request host。此契約確保 Next.js Server Components／SSR／ISR、`og:image` 與任何 server-to-server consumer 都取得瀏覽器可公開存取的 canonical HTTPS 圖片網址，不會把 `localhost`、container name 或內網 IP 烘進快取輸出。
 
 ### GET /api/public/vehicles
 

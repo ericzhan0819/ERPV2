@@ -18,6 +18,8 @@ use App\Policies\CommissionPlanPolicy;
 use App\Policies\SalaryPeriodPolicy;
 use App\Policies\SalaryProfilePolicy;
 use App\Policies\SalarySettlementPolicy;
+use Illuminate\Http\Middleware\TrustProxies;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -36,6 +38,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Middleware::trustProxies() 不接受 Closure，且 withMiddleware() 執行時 config 尚未載入，
+        // 因此必須在 provider boot 後以已載入的設定明確綁定，避免退回 framework legacy fallback。
+        TrustProxies::at(config('trustedproxy.proxies', []));
+        TrustProxies::withHeaders(
+            Request::HEADER_X_FORWARDED_FOR
+                | Request::HEADER_X_FORWARDED_PORT
+                | Request::HEADER_X_FORWARDED_PROTO,
+        );
+
         Gate::policy(AuditLog::class, AuditLogPolicy::class);
         Gate::policy(SalaryProfile::class, SalaryProfilePolicy::class);
         Gate::policy(CommissionPlan::class, CommissionPlanPolicy::class);

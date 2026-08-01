@@ -2,9 +2,9 @@
 
 namespace App\Http\Resources;
 
+use App\Support\StorageAssetUrl;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use Illuminate\Support\Facades\Storage;
 
 class VehicleCoverPhotoResource extends JsonResource
 {
@@ -12,7 +12,12 @@ class VehicleCoverPhotoResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'thumbnail_url' => Storage::disk($this->disk)->url($this->thumbnail_path),
+            'thumbnail_url' => StorageAssetUrl::forRequest(
+                $request,
+                $this->disk,
+                $this->thumbnail_path,
+                followRequestOrigin: true,
+            ),
         ];
     }
 }

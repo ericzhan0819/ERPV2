@@ -215,7 +215,9 @@ LAN 與 tunnel 兩種網址），可在 `.env` 的 `FRONTEND_URL` 用逗號分�
 
 後端 `.env` 必填：
 
-- `APP_URL`：後端自身網址，例如 `https://api.erp.example.com`
+- `APP_URL`：後端 canonical 網址，例如 `https://api.erp.example.com`；公開車輛 API 的圖片網址與正式 scheme 以此為準
+- `TRUSTED_HOSTS`：`APP_URL` host 以外仍需允許的 hostname／IP，逗號分隔且不含 port；LAN、Tailscale、`localhost` health check 或 IP 型 load balancer probe 必須逐一列出，禁止萬用字元
+- `TRUSTED_PROXIES`：實際反向代理 IP／CIDR，逗號分隔；同機 Nginx／Caddy 可用 `127.0.0.1,::1`，Docker 需改成實際 proxy 網段，禁止設為 `*`
 - `FRONTEND_URL`：前端網址，例如 `https://erp.example.com`
 - `SANCTUM_STATEFUL_DOMAINS`：前端網域（不含協定），例如 `erp.example.com`
 - `SESSION_DOMAIN`：cookie 共用網域，例如 `.erp.example.com`
@@ -239,6 +241,11 @@ UTC，應停止部署並人工評估既有資料；不得直接套用固定八�
 - `VITE_API_BASE_URL`：後端 API 網址，例如 `https://api.erp.example.com`
 
 完整範例請參考 `backend/.env.example`、`frontend/.env.example` 內的正式上線註解區塊。
+
+非 `local` 且非 PHPUnit 環境會啟用 trusted-host 驗證：`APP_URL` host 自動列入，`TRUSTED_HOSTS` 只補充額外入口，且不自動信任子網域。未列入的 raw `Host` 會回 400，因此同時保留 LAN／Tailscale、`localhost` health check 或 IP probe 時必須明確列舉。Laravel 在 `APP_ENV=local` 與測試環境會刻意略過 `TrustHosts` middleware；開發環境的 raw `Host` 不受這項防護，不能把 local curl 結果視為 production host 驗證已啟用。
+
+反向代理必須保留允許的 `Host`，並覆寫 `X-Forwarded-Proto`／`X-Forwarded-Port`；應用只信任 `TRUSTED_PROXIES` 來源的 forwarded scheme／port／client IP，刻意不信任 `X-Forwarded-Host`，避免外部 forwarded host 汙染產生的 URL。
+
 修改 `.env` 後需執行：
 
 ```bash

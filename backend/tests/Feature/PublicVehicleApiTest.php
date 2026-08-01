@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehiclePhoto;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class PublicVehicleApiTest extends TestCase
@@ -59,18 +60,34 @@ class PublicVehicleApiTest extends TestCase
         $this->assertNotContains($cancelled->id, $ids);
     }
 
-    public function test_public_vehicle_detail_returns_photos_and_cover_photo(): void
+    public function test_public_vehicle_detail_keeps_canonical_photo_urls_for_ssr_callers(): void
     {
+        config(['filesystems.disks.public.url' => 'https://api.erp.example.com/storage']);
+        Storage::forgetDisk('public');
+
         $admin = User::factory()->admin()->create(['is_active' => true]);
         $vehicle = Vehicle::factory()->create(['status' => 'listed']);
         $this->makePhoto($vehicle, $admin, 'a', true, 0);
         $this->makePhoto($vehicle, $admin, 'b', false, 1);
 
-        $response = $this->getJson("/api/public/vehicles/{$vehicle->id}");
+        $response = $this->getJson("http://nextjs.internal:3000/api/public/vehicles/{$vehicle->id}");
 
         $response->assertOk();
         $response->assertJsonCount(2, 'data.photos');
-        $response->assertJsonPath('data.cover_photo.is_cover', true);
+        $response
+            ->assertJsonPath('data.cover_photo.is_cover', true)
+            ->assertJsonPath(
+                'data.cover_photo.url',
+                "https://api.erp.example.com/storage/vehicles/{$vehicle->id}/a.webp",
+            )
+            ->assertJsonPath(
+                'data.cover_photo.thumbnail_url',
+                "https://api.erp.example.com/storage/vehicles/{$vehicle->id}/a_thumb.webp",
+            )
+            ->assertJsonPath(
+                'data.photos.1.url',
+                "https://api.erp.example.com/storage/vehicles/{$vehicle->id}/b.webp",
+            );
     }
 
     public function test_public_vehicle_detail_for_non_listed_vehicle_returns_404(): void

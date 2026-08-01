@@ -8,6 +8,7 @@ use App\Models\VehiclePhoto;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class VehicleListResourceTest extends TestCase
@@ -58,6 +59,48 @@ class VehicleListResourceTest extends TestCase
             ->assertJsonMissingPath('data.0.cover_photo.thumbnail_path')
             ->assertJsonMissingPath('data.0.cover_photo.original_filename')
             ->assertJsonMissingPath('data.0.photos');
+    }
+
+    public function test_internal_list_cover_thumbnail_follows_absolute_request_origin(): void
+    {
+        config(['filesystems.disks.public.url' => 'https://api.erp.example.com/storage']);
+        Storage::forgetDisk('public');
+
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create();
+        $this->makePhoto($vehicle, $admin, 'cover', true);
+
+        $response = $this
+            ->actingAs($admin, 'web')
+            ->getJson('http://192.168.0.40:8000/api/vehicles')
+            ->assertOk();
+
+        $response->assertJsonPath(
+            'data.0.cover_photo.thumbnail_url',
+            "http://192.168.0.40:8000/storage/vehicles/{$vehicle->id}/cover_thumb.webp",
+        );
+    }
+
+    public function test_internal_list_cover_thumbnail_honors_https_from_trusted_proxy(): void
+    {
+        config(['filesystems.disks.public.url' => 'http://100.112.1.114:8000/storage']);
+        Storage::forgetDisk('public');
+
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create();
+        $this->makePhoto($vehicle, $admin, 'cover', true);
+
+        $response = $this
+            ->withServerVariables(['REMOTE_ADDR' => '127.0.0.1'])
+            ->withHeader('X-Forwarded-Proto', 'https')
+            ->actingAs($admin, 'web')
+            ->getJson('http://erp.example.com/api/vehicles')
+            ->assertOk();
+
+        $response->assertJsonPath(
+            'data.0.cover_photo.thumbnail_url',
+            "https://erp.example.com/storage/vehicles/{$vehicle->id}/cover_thumb.webp",
+        );
     }
 
     public function test_list_returns_null_without_a_committed_cover_photo(): void

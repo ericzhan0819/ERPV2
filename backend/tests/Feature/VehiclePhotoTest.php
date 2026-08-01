@@ -6,9 +6,12 @@ use App\Models\AuditLog;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehiclePhoto;
+use App\Models\VehiclePhotoUploadBatch;
+use App\Services\VehiclePhotoImageProcessor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class VehiclePhotoTest extends TestCase
@@ -121,6 +124,32 @@ class VehiclePhotoTest extends TestCase
 
         $response->assertOk();
         $response->assertJsonCount(1, 'data');
+    }
+
+    public function test_internal_photo_resource_follows_absolute_request_origin(): void
+    {
+        config(['filesystems.disks.public.url' => 'https://api.erp.example.com/storage']);
+        Storage::forgetDisk('public');
+
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $sales = User::factory()->sales()->create(['is_active' => true]);
+        $vehicle = Vehicle::factory()->create();
+        $this->makePhoto($vehicle, $admin, 'a', true);
+
+        $response = $this
+            ->actingAs($sales, 'web')
+            ->getJson("http://192.168.0.40:8000/api/vehicles/{$vehicle->id}/photos")
+            ->assertOk();
+
+        $response
+            ->assertJsonPath(
+                'data.0.url',
+                "http://192.168.0.40:8000/storage/vehicles/{$vehicle->id}/a.webp",
+            )
+            ->assertJsonPath(
+                'data.0.thumbnail_url',
+                "http://192.168.0.40:8000/storage/vehicles/{$vehicle->id}/a_thumb.webp",
+            );
     }
 
     public function test_first_uploaded_photo_becomes_cover_automatically(): void
@@ -469,7 +498,7 @@ class VehiclePhotoTest extends TestCase
             $this->makePhoto($vehicle, $admin, 'existing-'.$i, $i === 0, $i);
         }
 
-        $spy = $this->spy(\App\Services\VehiclePhotoImageProcessor::class);
+        $spy = $this->spy(VehiclePhotoImageProcessor::class);
 
         $response = $this->actingAs($admin, 'web')->postJson("/api/vehicles/{$vehicle->id}/photos", [
             'idempotency_key' => 'over-vehicle-limit-no-processing-'.uniqid(),
@@ -561,20 +590,20 @@ class VehiclePhotoTest extends TestCase
             $this->makePhoto($vehicle, $admin, 'existing-'.$i, $i === 0, $i);
         }
 
-        $otherBatch = \App\Models\VehiclePhotoUploadBatch::create([
+        $otherBatch = VehiclePhotoUploadBatch::create([
             'vehicle_id' => $vehicle->id,
             'idempotency_key' => 'other-in-flight-batch-'.uniqid(),
             'idempotency_payload' => 'unrelated-payload',
             'photo_ids' => [],
             'processing_lease_expires_at' => now()->addMinutes(10),
-            'claim_token' => (string) \Illuminate\Support\Str::uuid(),
+            'claim_token' => (string) Str::uuid(),
         ]);
 
         $hiddenPhoto = $this->makePhoto($vehicle, $admin, 'hidden-in-progress', false, $maxPerVehicle - 1);
         $hiddenPhoto->update(['upload_batch_id' => $otherBatch->id]);
 
-        $this->app->bind(\App\Services\VehiclePhotoImageProcessor::class, function () use ($hiddenPhoto) {
-            return new class($hiddenPhoto) extends \App\Services\VehiclePhotoImageProcessor
+        $this->app->bind(VehiclePhotoImageProcessor::class, function () use ($hiddenPhoto) {
+            return new class($hiddenPhoto) extends VehiclePhotoImageProcessor
             {
                 private bool $settled = false;
 
@@ -583,7 +612,7 @@ class VehiclePhotoTest extends TestCase
                     parent::__construct();
                 }
 
-                public function process(\Illuminate\Http\UploadedFile $file, int $vehicleId): array
+                public function process(UploadedFile $file, int $vehicleId): array
                 {
                     $data = parent::process($file, $vehicleId);
 
