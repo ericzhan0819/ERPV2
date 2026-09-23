@@ -1,0 +1,655 @@
+import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
+import { isAxiosError } from 'axios'
+import { createUser, deleteUser, listUsers, resetUserPassword, setUserActive, setUserRole, updateUser } from '../../api/users'
+import { useAuth } from '../../hooks/useAuth'
+import { ActiveStatusBadge } from '../../components/ActiveStatusBadge'
+import { FormAlert } from '../../components/FormAlert'
+import type { User, UserPayload, UserRole, UserUpdatePayload } from '../../types/user'
+
+const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
+  { value: 'admin', label: '管理員' },
+  { value: 'manager', label: '經理' },
+  { value: 'sales', label: '業務' },
+]
+
+function roleLabel(role: UserRole): string {
+  return ROLE_OPTIONS.find((option) => option.value === role)?.label ?? role
+}
+
+interface CreateFormState {
+  name: string
+  email: string
+  password: string
+  role: UserRole
+  phone: string
+  job_title: string
+  hire_date: string
+  notes: string
+}
+
+interface EditFormState {
+  name: string
+  email: string
+  phone: string
+  job_title: string
+  hire_date: string
+  notes: string
+}
+
+const emptyCreateForm: CreateFormState = {
+  name: '',
+  email: '',
+  password: '',
+  role: 'sales',
+  phone: '',
+  job_title: '',
+  hire_date: '',
+  notes: '',
+}
+const emptyEditForm: EditFormState = { name: '', email: '', phone: '', job_title: '', hire_date: '', notes: '' }
+
+export function UserList() {
+  const { user: currentUser } = useAuth()
+  const isAdmin = currentUser?.role === 'admin'
+
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [focusPageError, setFocusPageError] = useState(false)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+  const [creating, setCreating] = useState(false)
+  const [createForm, setCreateForm] = useState<CreateFormState>(emptyCreateForm)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [createSubmitAttempt, setCreateSubmitAttempt] = useState(0)
+  const [submitting, setSubmitting] = useState(false)
+
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editForm, setEditForm] = useState<EditFormState>(emptyEditForm)
+  const [editError, setEditError] = useState<string | null>(null)
+  const [editSubmitAttempt, setEditSubmitAttempt] = useState(0)
+
+  const [resettingId, setResettingId] = useState<number | null>(null)
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetError, setResetError] = useState<string | null>(null)
+  const [resetSubmitAttempt, setResetSubmitAttempt] = useState(0)
+
+  function loadUsers(refreshErrorMessage = '使用者載入失敗') {
+    setLoading(true)
+    setFocusPageError(false)
+    setError(null)
+    listUsers()
+      .then(setUsers)
+      .catch(() => setError(refreshErrorMessage))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    if (isAdmin) {
+      loadUsers()
+    } else {
+      setLoading(false)
+    }
+  }, [isAdmin])
+
+  function extractErrorMessage(err: unknown, fallback: string): string {
+    if (isAxiosError(err)) {
+      const data = err.response?.data
+      const firstFieldError = data?.errors ? Object.values(data.errors as Record<string, string[]>)[0]?.[0] : undefined
+      return firstFieldError ?? data?.message ?? fallback
+    }
+    return fallback
+  }
+
+  async function handleCreateSubmit(event: FormEvent) {
+    event.preventDefault()
+    setCreateSubmitAttempt((current) => current + 1)
+    setCreateError(null)
+    setSuccessMessage(null)
+
+    if (!createForm.name.trim()) {
+      setCreateError('請輸入姓名')
+      return
+    }
+    if (!createForm.email.trim()) {
+      setCreateError('請輸入電子郵件')
+      return
+    }
+    if (createForm.password.length < 8) {
+      setCreateError('密碼至少需要 8 個字元')
+      return
+    }
+
+    const payload: UserPayload = {
+      name: createForm.name.trim(),
+      email: createForm.email.trim(),
+      password: createForm.password,
+      role: createForm.role,
+      phone: createForm.phone.trim() || null,
+      job_title: createForm.job_title.trim() || null,
+      hire_date: createForm.hire_date || null,
+      notes: createForm.notes.trim() || null,
+    }
+
+    setSubmitting(true)
+    try {
+      await createUser(payload)
+      setCreating(false)
+      setCreateForm(emptyCreateForm)
+      setSuccessMessage('員工已建立；首次登入需使用 Email 與預設密碼，並立即修改密碼。')
+      loadUsers('操作已送出，但員工列表可能不是最新；請重新整理後確認。')
+    } catch (err) {
+      setCreateError(extractErrorMessage(err, '新增使用者失敗，請稍後再試'))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  function startEdit(user: User) {
+    setSuccessMessage(null)
+    setEditingId(user.id)
+    setEditError(null)
+    setEditForm({
+      name: user.name,
+      email: user.email,
+      phone: user.phone ?? '',
+      job_title: user.job_title ?? '',
+      hire_date: user.hire_date ?? '',
+      notes: user.notes ?? '',
+    })
+  }
+
+  async function handleEditSubmit(event: FormEvent, id: number) {
+    event.preventDefault()
+    setEditSubmitAttempt((current) => current + 1)
+    setEditError(null)
+    setSuccessMessage(null)
+
+    if (!editForm.name.trim()) {
+      setEditError('請輸入姓名')
+      return
+    }
+    if (!editForm.email.trim()) {
+      setEditError('請輸入電子郵件')
+      return
+    }
+
+    const payload: UserUpdatePayload = {
+      name: editForm.name.trim(),
+      email: editForm.email.trim(),
+      phone: editForm.phone.trim() || null,
+      job_title: editForm.job_title.trim() || null,
+      hire_date: editForm.hire_date || null,
+      notes: editForm.notes.trim() || null,
+    }
+
+    setSubmitting(true)
+    try {
+      await updateUser(id, payload)
+      setEditingId(null)
+      loadUsers('操作已送出，但員工列表可能不是最新；請重新整理後確認。')
+    } catch (err) {
+      setEditError(extractErrorMessage(err, '更新使用者失敗，請稍後再試'))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleDelete(user: User) {
+    setSuccessMessage(null)
+    if (!window.confirm(`確定要刪除使用者「${user.name}」嗎？此操作無法復原。`)) {
+      return
+    }
+    setError(null)
+    setFocusPageError(true)
+    try {
+      await deleteUser(user.id)
+      loadUsers('操作已送出，但員工列表可能不是最新；請重新整理後確認。')
+    } catch (err) {
+      setError(extractErrorMessage(err, '刪除使用者失敗'))
+    }
+  }
+
+  async function toggleActive(user: User) {
+    setError(null)
+    setFocusPageError(true)
+    setSuccessMessage(null)
+    try {
+      await setUserActive(user.id, !user.is_active)
+      loadUsers('操作已送出，但員工列表可能不是最新；請重新整理後確認。')
+    } catch (err) {
+      setError(extractErrorMessage(err, '更新使用者狀態失敗'))
+    }
+  }
+
+  async function handleRoleChange(user: User, role: UserRole) {
+    setSuccessMessage(null)
+    if (role === user.role) {
+      return
+    }
+    setError(null)
+    setFocusPageError(true)
+    try {
+      await setUserRole(user.id, role)
+      loadUsers('操作已送出，但員工列表可能不是最新；請重新整理後確認。')
+    } catch (err) {
+      setError(extractErrorMessage(err, '更新角色失敗'))
+    }
+  }
+
+  function startReset(user: User) {
+    setSuccessMessage(null)
+    setResettingId(user.id)
+    setResetPassword('')
+    setResetError(null)
+  }
+
+  async function handleResetSubmit(event: FormEvent, id: number) {
+    event.preventDefault()
+    setResetSubmitAttempt((current) => current + 1)
+    setResetError(null)
+    setSuccessMessage(null)
+
+    if (resetPassword.length < 8) {
+      setResetError('密碼至少需要 8 個字元')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      await resetUserPassword(id, resetPassword)
+      setResettingId(null)
+      setResetPassword('')
+      setSuccessMessage('密碼已重設；員工既有登入會失效，需以新密碼重新登入並修改密碼。')
+      loadUsers('操作已送出，但員工列表可能不是最新；請重新整理後確認。')
+    } catch (err) {
+      setResetError(extractErrorMessage(err, '重設密碼失敗'))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div>
+          <h1 className="text-xl font-semibold text-fg">員工/帳號管理</h1>
+          <p className="mt-1 text-sm text-fg-muted">僅限管理員操作</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold text-fg">員工/帳號管理</h1>
+        <button
+          onClick={() => {
+            setSuccessMessage(null)
+            setCreating((v) => !v)
+            setCreateError(null)
+            setCreateForm(emptyCreateForm)
+          }}
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover"
+        >
+          {creating ? '取消新增' : '新增員工'}
+        </button>
+      </div>
+
+      {creating && (
+        <form onSubmit={handleCreateSubmit} className="max-w-2xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
+          <FormAlert message={createError} signal={createSubmitAttempt} focusOnShow className="mb-4" />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">姓名 *</label>
+              <input
+                type="text"
+                required
+                value={createForm.name}
+                onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">電子郵件 *</label>
+              <input
+                type="email"
+                required
+                value={createForm.email}
+                onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">密碼 *</label>
+              <input
+                type="password"
+                required
+                minLength={8}
+                value={createForm.password}
+                onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">角色 *</label>
+              <select
+                value={createForm.role}
+                onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value as UserRole }))}
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+              >
+                {ROLE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">電話</label>
+              <input
+                type="text"
+                value={createForm.phone}
+                onChange={(e) => setCreateForm((f) => ({ ...f, phone: e.target.value }))}
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">職稱</label>
+              <input
+                type="text"
+                value={createForm.job_title}
+                onChange={(e) => setCreateForm((f) => ({ ...f, job_title: e.target.value }))}
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-fg-muted">到職日</label>
+              <input
+                type="date"
+                value={createForm.hire_date}
+                onChange={(e) => setCreateForm((f) => ({ ...f, hire_date: e.target.value }))}
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
+              <textarea
+                value={createForm.notes}
+                onChange={(e) => setCreateForm((f) => ({ ...f, notes: e.target.value }))}
+                rows={2}
+                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+              />
+            </div>
+          </div>
+
+          <div className="mt-6 flex gap-3">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
+            >
+              {submitting ? '建立中...' : '建立員工'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      <FormAlert message={error} focusOnShow={focusPageError} />
+      <div role="status" aria-live="polite" className="empty:hidden">
+        {successMessage && (
+          <p className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-fg">
+            {successMessage}
+          </p>
+        )}
+      </div>
+
+      <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
+        <table className="min-w-full divide-y divide-border text-sm">
+          <thead className="bg-surface-2">
+            <tr>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">姓名</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">帳號名稱</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">電子郵件</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">職稱</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">角色</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">狀態</th>
+              <th className="px-4 py-3 text-left font-medium text-fg-muted">操作</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {loading && (
+              <tr>
+                <td colSpan={7} className="px-4 py-6 text-center text-fg-muted">
+                  載入中...
+                </td>
+              </tr>
+            )}
+            {!loading && !error && users.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-6 text-center text-fg-muted">
+                  <div className="flex flex-col items-center gap-2">
+                    <span>尚無使用者</span>
+                    <button
+                      type="button"
+                      onClick={() => setCreating(true)}
+                      className="text-sm font-medium text-primary hover:underline"
+                    >
+                      新增第一位員工
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {!loading &&
+              users.map((user) => {
+                const isSelf = currentUser?.id === user.id
+                const selfRestrictionId = `user-${user.id}-self-restrictions`
+
+                if (editingId === user.id) {
+                  return (
+                    <tr key={user.id} className="bg-surface-2">
+                      <td colSpan={7} className="px-4 py-4">
+                        <form onSubmit={(e) => handleEditSubmit(e, user.id)} className="flex flex-col gap-4">
+                          <FormAlert message={editError} signal={editSubmitAttempt} focusOnShow />
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div>
+                              <label className="mb-1 block text-sm font-medium text-fg-muted">姓名 *</label>
+                              <input
+                                type="text"
+                                required
+                                value={editForm.name}
+                                onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-sm font-medium text-fg-muted">電子郵件 *</label>
+                              <input
+                                type="email"
+                                required
+                                value={editForm.email}
+                                onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+                                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-sm font-medium text-fg-muted">電話</label>
+                              <input
+                                type="text"
+                                value={editForm.phone}
+                                onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
+                                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-sm font-medium text-fg-muted">職稱</label>
+                              <input
+                                type="text"
+                                value={editForm.job_title}
+                                onChange={(e) => setEditForm((f) => ({ ...f, job_title: e.target.value }))}
+                                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-sm font-medium text-fg-muted">到職日</label>
+                              <input
+                                type="date"
+                                value={editForm.hire_date}
+                                onChange={(e) => setEditForm((f) => ({ ...f, hire_date: e.target.value }))}
+                                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+                              />
+                            </div>
+                            <div className="sm:col-span-2">
+                              <label className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
+                              <textarea
+                                value={editForm.notes}
+                                onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
+                                rows={2}
+                                className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex gap-3">
+                            <button
+                              type="submit"
+                              disabled={submitting}
+                              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
+                            >
+                              {submitting ? '儲存中...' : '儲存'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingId(null)}
+                              className="rounded-lg border border-border-strong px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
+                            >
+                              取消
+                            </button>
+                          </div>
+                        </form>
+                      </td>
+                    </tr>
+                  )
+                }
+
+                if (resettingId === user.id) {
+                  return (
+                    <tr key={user.id} className="bg-surface-2">
+                      <td colSpan={7} className="px-4 py-4">
+                        <form onSubmit={(e) => handleResetSubmit(e, user.id)} className="flex flex-col gap-4">
+                          <FormAlert message={resetError} signal={resetSubmitAttempt} focusOnShow />
+                          <div className="max-w-sm">
+                            <label className="mb-1 block text-sm font-medium text-fg-muted">{user.name} 的新密碼</label>
+                            <input
+                              type="password"
+                              required
+                              minLength={8}
+                              value={resetPassword}
+                              onChange={(e) => setResetPassword(e.target.value)}
+                              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
+                            />
+                          </div>
+
+                          <div className="flex gap-3">
+                            <button
+                              type="submit"
+                              disabled={submitting}
+                              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover disabled:opacity-50"
+                            >
+                              {submitting ? '儲存中...' : '重設密碼'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setResettingId(null)}
+                              className="rounded-lg border border-border-strong px-4 py-2 text-sm font-medium text-fg-muted hover:bg-surface-2"
+                            >
+                              取消
+                            </button>
+                          </div>
+                        </form>
+                      </td>
+                    </tr>
+                  )
+                }
+
+                return (
+                  <tr key={user.id} className="hover:bg-surface-2">
+                    <td className="px-4 py-3 font-medium text-fg">{user.name}</td>
+                    <td className="px-4 py-3">
+                      {user.username ?? <span className="text-fg-muted">尚未設定</span>}
+                    </td>
+                    <td className="px-4 py-3">{user.email}</td>
+                    <td className="px-4 py-3">{user.job_title || '-'}</td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={user.role}
+                        disabled={isSelf}
+                        onChange={(e) => handleRoleChange(user, e.target.value as UserRole)}
+                        aria-label={`${user.name}的角色：${roleLabel(user.role)}`}
+                        aria-describedby={isSelf ? selfRestrictionId : undefined}
+                        className="rounded-lg border border-border-strong px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {ROLE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col items-start gap-1">
+                        <ActiveStatusBadge active={user.is_active} />
+                        {user.must_change_password && (
+                          <span className="rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-xs font-medium text-fg">
+                            需修改密碼
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-3">
+                        <button onClick={() => startEdit(user)} className="text-sm font-medium text-fg hover:underline">
+                          編輯
+                        </button>
+                        <button
+                          onClick={() => startReset(user)}
+                          disabled={isSelf}
+                          aria-describedby={isSelf ? selfRestrictionId : undefined}
+                          className="text-sm font-medium text-fg-muted hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:no-underline"
+                        >
+                          重設密碼
+                        </button>
+                        <button
+                          onClick={() => toggleActive(user)}
+                          disabled={isSelf && user.is_active}
+                          aria-describedby={isSelf ? selfRestrictionId : undefined}
+                          className="text-sm font-medium text-fg-muted hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          {user.is_active ? '停用' : '啟用'}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(user)}
+                          disabled={isSelf}
+                          aria-describedby={isSelf ? selfRestrictionId : undefined}
+                          className="text-sm font-medium text-error hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          刪除
+                        </button>
+                        {isSelf && (
+                          <span id={selfRestrictionId} className="basis-full text-xs text-fg-muted">
+                            不可變更自己的角色、停用或刪除自己的帳號；密碼請至「我的帳號」。
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,40 @@
+<?php
+
+namespace App\Http\Resources;
+
+use App\Support\StorageAssetUrl;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class VehiclePhotoResource extends JsonResource
+{
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'vehicle_id' => $this->vehicle_id,
+            'url' => StorageAssetUrl::forRequest(
+                $request,
+                $this->disk,
+                $this->path,
+                followRequestOrigin: true,
+            ),
+            'thumbnail_url' => StorageAssetUrl::forRequest(
+                $request,
+                $this->disk,
+                $this->thumbnail_path,
+                followRequestOrigin: true,
+            ),
+            'original_filename' => $this->original_filename,
+            'mime_type' => $this->mime_type,
+            'size' => $this->size,
+            'width' => $this->width,
+            'height' => $this->height,
+            'sort_order' => $this->sort_order,
+            'is_cover' => $this->is_cover,
+            'uploaded_by' => $this->uploaded_by,
+            'created_at' => $this->created_at?->toIso8601String(),
+            'updated_at' => $this->updated_at?->toIso8601String(),
+        ];
+    }
+}

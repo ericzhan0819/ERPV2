@@ -1,0 +1,265 @@
+<?php
+
+namespace App\Services;
+
+use Illuminate\Cache\Lock;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Intervention\Image\Exceptions\DecoderException;
+use Intervention\Image\ImageManager;
+use Intervention\Image\Interfaces\ImageInterface;
+use Throwable;
+
+/**
+ * 負責把單張上傳檔轉成「可安全公開展示」的 webp 主圖 + 縮圖，並寫入 vehicle_photos
+ * 設定的 disk。所有輸出一律重新編碼、strip EXIF/GPS，不直接使用使用者上傳的原檔或
+ * 原始檔名。
+ */
+class VehiclePhotoImageProcessor
+{
+    private readonly ImageManager $manager;
+
+    public function __construct()
+    {
+        $this->manager = ImageManager::gd();
+    }
+
+    /**
+     * @return array{disk: string, path: string, thumbnail_path: string, original_filename: string,
+     *     mime_type: string, size: int, width: int, height: int}
+     */
+    public function process(UploadedFile $file, int $vehicleId): array
+    {
+        $this->assertValidImage($file);
+
+        $config = config('vehicle_photos');
+
+        // decode → clone → scaleDown → 兩次 toWebp 編碼是整個流程裡真正吃記憶體的部分
+        // （單張最壞情況已知可達數百 MB RSS，見 config/vehicle_photos.php 的量測數據），
+        // 且 GD 的像素緩衝區是原生記憶體配置、不受 PHP memory_limit 限制。固定像素上限
+        // 只能擋單一請求離譜到不合理的圖片，擋不住「多個 admin/manager 同時上傳」這種
+        // 把好幾個合法尺寸的解碼疊加在一起、一樣可能把 worker 記憶體吃光的並發情境
+        // 。因此這段用全域 lock 把「同時間只解碼/編碼一張圖」這件事直接變成程式碼
+        // 保證，而不是「內部使用者不多、應該不會同時上傳」
+        // 這種無法強制執行的假設。等待逾時就直接回錯誤，不讓 HTTP worker 無限期卡住。
+        //
+        // lock 的固定 TTL 本身不能單靠它保證獨佔：如果解碼/編碼/寫檔剛好在主機負載
+        // 很高（例如正好在搶救記憶體、觸發 swap）時變慢、超過 TTL，Laravel 的
+        // database lock 會把過期的 row 視為可再被別人搶走，導致第二個請求以為自己
+        // 獨佔、其實跟第一個請求同時持有原生 GD buffer——這正是這把 lock 原本要防的
+        // 情況。因此 decodeAndStore() 會在每個重量級步驟「之間」呼叫 $lock->refresh()
+        // 續約，讓「當下還沒完成處理」持續換到新的
+        // TTL 窗口；萬一某次 refresh() 失敗（代表已經真的過期、鎖被搶走），立刻中止並
+        // 丟例外，不能假裝還擁有獨佔權繼續把檔案寫進 storage。
+        //
+        // 但這個續約只能發生在步驟「之間」：單一個 decode / toWebp() 呼叫本身是一次
+        // 不可中斷的 GD 原生函式呼叫，執行中沒有機會插入程式碼續約，所以如果單一步驟
+        // 本身就跑得比 TTL 還久，續約機制救不到。真正兜底的是
+        // config/vehicle_photos.php 裡 processing_lock_ttl_seconds 用遠大於實測單一
+        // 步驟耗時的安全係數換算出來的 TTL，不是這個續約機制本身——這裡沒辦法做到
+        // 100% 杜絕，這是 lease-based lock 的已知理論限制。
+        $lock = Cache::lock('vehicle_photo_image_processing', $config['processing_lock_ttl_seconds']);
+
+        try {
+            return $lock->block(
+                $config['processing_lock_wait_seconds'],
+                fn () => $this->decodeAndStore($file, $vehicleId, $config, $lock)
+            );
+        } catch (LockTimeoutException) {
+            throw ValidationException::withMessages([
+                'photos' => '系統目前正在處理其他照片，請稍後再試一次。',
+            ]);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     * @return array{disk: string, path: string, thumbnail_path: string, original_filename: string,
+     *     mime_type: string, size: int, width: int, height: int}
+     */
+    private function decodeAndStore(UploadedFile $file, int $vehicleId, array $config, Lock $lock): array
+    {
+        try {
+            $source = $this->manager->read($file->getRealPath());
+        } catch (DecoderException) {
+            throw ValidationException::withMessages([
+                'photos' => '圖片檔案無法讀取或已損毀。',
+            ]);
+        }
+
+        $this->assertLockStillHeld($lock, $config);
+
+        $disk = $config['disk'];
+        $uuid = (string) Str::uuid();
+        $path = "vehicles/{$vehicleId}/{$uuid}.webp";
+        $thumbnailPath = "vehicles/{$vehicleId}/{$uuid}_thumb.webp";
+
+        $display = $this->fitWithin(clone $source, $config['display']['max_width'], $config['display']['max_height']);
+        $displayEncoded = (string) $display->toWebp(quality: $config['display']['quality'], strip: true);
+        $width = $display->width();
+        $height = $display->height();
+
+        $this->assertLockStillHeld($lock, $config);
+
+        $thumbnail = $this->fitWithin($source, $config['thumbnail']['max_width'], $config['thumbnail']['max_height']);
+        $thumbnailEncoded = (string) $thumbnail->toWebp(quality: $config['thumbnail']['quality'], strip: true);
+
+        // 到這裡兩張圖都已經編碼成 webp bytes，後面只需要這兩個字串，不再需要 GD 原生
+        // 解碼緩衝區（$source / $display / $thumbnail 可能是同一顆 GdImage 底層物件的
+        // 不同參照，視 fitWithin() 是否真的觸發 scaleDown 而定）。putOrCleanup() 接下來
+        // 要進行的 storage I/O 可能是慢的（尤其未來搬到 Cloudflare R2 走網路），如果讓
+        // 這些原生緩衝區在 I/O 期間繼續活著，一旦 I/O 卡住超過 lock TTL，就會回到跟
+        // 「兩個請求同時持有原生 GD buffer」一樣的並發疊加風險，前面幾輪加的並發保護
+        // 等於白做。因此在進入 I/O 前明確 unset，讓 refcount 歸零、原生記憶體立刻
+        // 釋放，I/O 期間只留著小很多的編碼後
+        // 字串。
+        //
+        // 用 /proc/self/status 的 VmRSS 實測過效果（memory_get_usage() 量不到 GD 的
+        // 原生記憶體，見 config/vehicle_photos.php 的量測方法說明）：24MP 圖片在這行
+        // unset 之前 RSS 約 335MB，unset 後降到約 138MB，等於卡在 storage I/O 期間
+        // 少留著約 197MB 的原生緩衝區。
+        unset($source, $display, $thumbnail);
+
+        $this->assertLockStillHeld($lock, $config);
+
+        $this->putOrCleanup($disk, $path, $displayEncoded, $thumbnailPath, $thumbnailEncoded);
+
+        return [
+            'disk' => $disk,
+            'path' => $path,
+            'thumbnail_path' => $thumbnailPath,
+            'original_filename' => $file->getClientOriginalName(),
+            'mime_type' => 'image/webp',
+            'size' => strlen($displayEncoded),
+            'width' => $width,
+            'height' => $height,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     */
+    private function assertLockStillHeld(Lock $lock, array $config): void
+    {
+        if (! $lock->refresh($config['processing_lock_ttl_seconds'])) {
+            throw ValidationException::withMessages([
+                'photos' => '照片處理逾時，請重新上傳。',
+            ]);
+        }
+    }
+
+    /**
+     * 刪除照片檔案，缺檔視為已完成（idempotent），不因檔案早已不存在而報錯。
+     *
+     * 呼叫端（VehiclePhotoService::deletePhoto()）依賴這個方法在真正刪除失敗時
+     * 拋出例外：只有 storage 確定清乾淨，才會繼續刪除 DB row。若 Storage::delete()
+     * 回傳 false 卻被當成靜默成功，DB row 會在檔案其實還留著或刪除失敗的情況下
+     * 被移除，讓「已刪除」的照片可能仍可透過舊網址公開存取，因此這裡必須檢查
+     * 回傳值並拋錯，不能只呼叫了事。
+     */
+    public function delete(string $disk, string $path, ?string $thumbnailPath): void
+    {
+        $storage = Storage::disk($disk);
+
+        if ($storage->exists($path) && ! $storage->delete($path)) {
+            throw new \RuntimeException('車輛照片主圖刪除失敗。');
+        }
+
+        if ($thumbnailPath !== null && $storage->exists($thumbnailPath) && ! $storage->delete($thumbnailPath)) {
+            throw new \RuntimeException('車輛照片縮圖刪除失敗。');
+        }
+    }
+
+    private function fitWithin(ImageInterface $image, int $maxWidth, int $maxHeight): ImageInterface
+    {
+        if ($image->width() > $maxWidth || $image->height() > $maxHeight) {
+            return $image->scaleDown($maxWidth, $maxHeight);
+        }
+
+        return $image;
+    }
+
+    private function putOrCleanup(string $disk, string $path, string $contents, string $thumbnailPath, string $thumbnailContents): void
+    {
+        $storage = Storage::disk($disk);
+        $writtenPath = null;
+        $writtenThumbnailPath = null;
+
+        try {
+            if (! $storage->put($path, $contents)) {
+                throw new \RuntimeException('車輛照片主圖儲存失敗。');
+            }
+            $writtenPath = $path;
+
+            if (! $storage->put($thumbnailPath, $thumbnailContents)) {
+                throw new \RuntimeException('車輛照片縮圖儲存失敗。');
+            }
+            $writtenThumbnailPath = $thumbnailPath;
+        } catch (Throwable $e) {
+            if ($writtenPath !== null) {
+                $storage->delete($writtenPath);
+            }
+            if ($writtenThumbnailPath !== null) {
+                $storage->delete($writtenThumbnailPath);
+            }
+
+            throw $e;
+        }
+    }
+
+    private function assertValidImage(UploadedFile $file): void
+    {
+        $config = config('vehicle_photos');
+
+        if (! $file->isValid()) {
+            throw ValidationException::withMessages([
+                'photos' => '檔案上傳失敗，請重新選擇檔案。',
+            ]);
+        }
+
+        if ($file->getSize() > $config['max_file_size_kb'] * 1024) {
+            throw ValidationException::withMessages([
+                'photos' => '單張照片檔案大小不可超過 8MB。',
+            ]);
+        }
+
+        $extension = strtolower($file->getClientOriginalExtension());
+        if (! in_array($extension, $config['allowed_extensions'], true)) {
+            throw ValidationException::withMessages([
+                'photos' => '照片格式僅接受 jpg、jpeg、png、webp。',
+            ]);
+        }
+
+        // getMimeType() 是依實際檔案內容偵測，避免使用者只是把副檔名改成 .jpg
+        // 但內容其實是 svg / heic / pdf 等不允許的格式。
+        $detectedMime = $file->getMimeType();
+        if (! in_array($detectedMime, $config['allowed_mimes'], true)) {
+            throw ValidationException::withMessages([
+                'photos' => '照片格式僅接受 jpg、jpeg、png、webp。',
+            ]);
+        }
+
+        // 只用 getimagesize() 讀檔頭取得像素尺寸，不會像 ImageManager::read() 一樣把整張圖
+        // 解碼進記憶體。8MB 以內的檔案仍可能宣告超大像素尺寸（例如極端壓縮的 PNG），若不在
+        // 解碼前擋下，read() 會先把整張圖展開進記憶體才輪到 fitWithin() 縮小，等於任何請求都
+        // 能透過一張合法但像素超大的圖片吃光 worker 記憶體/CPU（decompression bomb）。
+        $dimensions = @getimagesize($file->getRealPath());
+        if ($dimensions === false) {
+            throw ValidationException::withMessages([
+                'photos' => '圖片檔案無法讀取或已損毀。',
+            ]);
+        }
+
+        [$width, $height] = $dimensions;
+        $megapixels = ($width * $height) / 1_000_000;
+        if ($megapixels > $config['max_megapixels']) {
+            throw ValidationException::withMessages([
+                'photos' => '照片像素尺寸過大，請使用較小尺寸的圖片。',
+            ]);
+        }
+    }
+}

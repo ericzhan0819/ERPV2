@@ -1,0 +1,613 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\User;
+use App\Models\Vehicle;
+use App\Services\AuditLogService;
+use App\Services\UserService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
+use Mockery\MockInterface;
+use PHPUnit\Framework\Attributes\DataProvider;
+use RuntimeException;
+use Tests\TestCase;
+
+class UserTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_non_admin_cannot_list_users(): void
+    {
+        $user = User::factory()->manager()->create(['is_active' => true]);
+
+        $this->actingAs($user, 'web')->getJson('/api/users')->assertStatus(403);
+    }
+
+    public function test_non_admin_cannot_create_user(): void
+    {
+        $user = User::factory()->manager()->create(['is_active' => true]);
+
+        $this->actingAs($user, 'web')->postJson('/api/users', [
+            'name' => '新使用者',
+            'email' => 'new-user@example.com',
+            'password' => 'password123',
+            'role' => 'manager',
+        ])->assertStatus(403);
+
+        $this->assertDatabaseMissing('users', ['email' => 'new-user@example.com']);
+    }
+
+    public function test_me_and_admin_user_list_share_the_same_safe_resource_contract(): void
+    {
+        $admin = User::factory()->admin()->withUsername('owner')->create([
+            'must_change_password' => false,
+            'remember_token' => 'secret-token',
+        ]);
+
+        $me = $this->actingAs($admin, 'web')->getJson('/api/me')
+            ->assertOk()
+            ->assertJsonMissingPath('data.password')
+            ->assertJsonMissingPath('data.remember_token')
+            ->json('data');
+
+        $listed = $this->actingAs($admin, 'web')->getJson('/api/users')
+            ->assertOk()
+            ->assertJsonMissingPath('data.0.password')
+            ->assertJsonMissingPath('data.0.remember_token')
+            ->json('data.0');
+
+        $this->assertSame([
+            'id',
+            'name',
+            'email',
+            'username',
+            'must_change_password',
+            'role',
+            'is_admin',
+            'is_active',
+            'phone',
+            'job_title',
+            'hire_date',
+            'notes',
+        ], array_keys($listed));
+        $this->assertSame($me, $listed);
+        $this->assertSame('owner', $listed['username']);
+        $this->assertFalse($listed['must_change_password']);
+    }
+
+    public function test_admin_can_create_update_reset_password_change_status_and_role(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+
+        $createResponse = $this->actingAs($admin, 'web')->postJson('/api/users', [
+            'name' => '新使用者',
+            'email' => 'new-user@example.com',
+            'password' => 'password123',
+            'role' => 'sales',
+            'phone' => '0912345678',
+            'job_title' => '業務專員',
+            'hire_date' => '2026-01-15',
+            'notes' => '備註',
+        ])->assertCreated()
+            ->assertJsonPath('data.username', null)
+            ->assertJsonPath('data.must_change_password', true)
+            ->assertJsonMissingPath('data.password');
+
+        $userId = $createResponse->json('data.id');
+        $this->assertDatabaseHas('users', [
+            'id' => $userId,
+            'email' => 'new-user@example.com',
+            'role' => 'sales',
+            'is_admin' => false,
+            'username' => null,
+            'must_change_password' => true,
+            'phone' => '0912345678',
+            'job_title' => '業務專員',
+        ]);
+
+        $this->actingAs($admin, 'web')->putJson("/api/users/{$userId}", [
+            'name' => '更新後名稱',
+            'email' => 'new-user@example.com',
+            'phone' => '0987654321',
+        ])->assertOk()->assertJsonPath('data.name', '更新後名稱')->assertJsonPath('data.phone', '0987654321');
+
+        $this->actingAs($admin, 'web')->patchJson("/api/users/{$userId}/role", ['role' => 'admin'])
+            ->assertOk()->assertJsonPath('data.role', 'admin')->assertJsonPath('data.is_admin', true);
+
+        $this->actingAs($admin, 'web')->patchJson("/api/users/{$userId}/status", ['is_active' => false])
+            ->assertOk()->assertJsonPath('data.is_active', false);
+
+        $this->actingAs($admin, 'web')->postJson("/api/users/{$userId}/reset-password", ['password' => 'newpassword456'])
+            ->assertOk();
+
+        $updatedUser = User::find($userId);
+        $this->assertTrue(Hash::check('newpassword456', $updatedUser->password));
+        $this->assertTrue($updatedUser->must_change_password);
+    }
+
+    #[DataProvider('forbiddenCreateAccountFieldProvider')]
+    public function test_admin_create_rejects_account_state_managed_by_the_employee_flow(
+        string $field,
+        mixed $value,
+        string $message
+    ): void {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+
+        $this->actingAs($admin, 'web')->postJson('/api/users', [
+            'name' => '新使用者',
+            'email' => 'forbidden-create@example.com',
+            'password' => 'password123',
+            'role' => 'sales',
+            $field => $value,
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors($field)
+            ->assertJsonPath("errors.{$field}.0", $message);
+
+        $this->assertDatabaseMissing('users', ['email' => 'forbidden-create@example.com']);
+    }
+
+    public static function forbiddenCreateAccountFieldProvider(): array
+    {
+        return [
+            'username' => [
+                'username',
+                'admin-chosen',
+                '新員工的帳號名稱由本人登入後設定',
+            ],
+            'must change password false' => [
+                'must_change_password',
+                false,
+                '新員工固定需要在首次登入後修改密碼',
+            ],
+        ];
+    }
+
+    public function test_admin_create_user_rolls_back_when_audit_cannot_be_recorded(): void
+    {
+        $this->mock(AuditLogService::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('recordModelEvent')
+                ->once()
+                ->andThrow(new RuntimeException('audit unavailable'));
+        });
+
+        try {
+            app(UserService::class)->createUser([
+                'name' => '建立失敗使用者',
+                'email' => 'audit-failed-create@example.com',
+                'password' => 'password123',
+                'role' => User::ROLE_SALES,
+            ]);
+            $this->fail('稽核寫入失敗時，建立帳號不得被視為成功。');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('audit unavailable', $exception->getMessage());
+        }
+
+        $this->assertDatabaseMissing('users', [
+            'email' => 'audit-failed-create@example.com',
+        ]);
+    }
+
+    public function test_admin_reset_password_sets_required_state_without_returning_sensitive_values(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $target = User::factory()->manager()->create([
+            'password' => Hash::make('original-password'),
+            'must_change_password' => false,
+        ]);
+
+        $this->actingAs($admin, 'web')->postJson("/api/users/{$target->id}/reset-password", [
+            'password' => 'new-password-123',
+        ])->assertOk()
+            ->assertExactJson(['message' => '密碼已重設']);
+
+        $target->refresh();
+        $this->assertTrue(Hash::check('new-password-123', $target->password));
+        $this->assertTrue($target->must_change_password);
+    }
+
+    public function test_admin_reset_password_rejects_attempt_to_override_required_state(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $target = User::factory()->manager()->create([
+            'password' => Hash::make('original-password'),
+            'must_change_password' => false,
+        ]);
+
+        $this->actingAs($admin, 'web')->postJson("/api/users/{$target->id}/reset-password", [
+            'password' => 'new-password-123',
+            'must_change_password' => false,
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('must_change_password')
+            ->assertJsonPath(
+                'errors.must_change_password.0',
+                '管理員重設密碼後固定需要使用者再次修改密碼',
+            );
+
+        $target->refresh();
+        $this->assertTrue(Hash::check('original-password', $target->password));
+        $this->assertFalse($target->must_change_password);
+    }
+
+    public function test_admin_reset_password_rolls_back_when_audit_cannot_be_recorded(): void
+    {
+        $target = User::factory()->manager()->create([
+            'password' => Hash::make('original-password'),
+            'must_change_password' => false,
+        ]);
+
+        $this->mock(AuditLogService::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('recordModelEvent')
+                ->once()
+                ->andThrow(new RuntimeException('audit unavailable'));
+        });
+
+        try {
+            app(UserService::class)->resetPassword($target, 'new-password-123');
+            $this->fail('稽核寫入失敗時，重設密碼不得被視為成功。');
+        } catch (RuntimeException $exception) {
+            $this->assertSame('audit unavailable', $exception->getMessage());
+        }
+
+        $target->refresh();
+        $this->assertTrue(Hash::check('original-password', $target->password));
+        $this->assertFalse($target->must_change_password);
+    }
+
+    public function test_admin_reset_invalidates_existing_stateful_session_and_relogin_reads_required_state(): void
+    {
+        $target = User::factory()->manager()->create([
+            'email' => 'logged-in-target@example.com',
+            'password' => Hash::make('original-password'),
+            'must_change_password' => false,
+        ]);
+
+        $this->withHeaders(['Referer' => 'http://localhost:5173']);
+
+        $this->postJson('/api/login', [
+            'login' => $target->email,
+            'password' => 'original-password',
+        ])->assertOk();
+        $this->getJson('/api/me')
+            ->assertJsonPath('data.must_change_password', false);
+
+        app(UserService::class)->resetPassword(
+            User::query()->findOrFail($target->id),
+            'new-password-123',
+        );
+
+        Auth::forgetGuards();
+
+        $this->getJson('/api/me')
+            ->assertUnauthorized()
+            ->assertSessionMissing(Auth::guard('web')->getName())
+            ->assertSessionMissing('password_hash_web');
+
+        Auth::forgetGuards();
+        Auth::shouldUse('web');
+
+        $this->postJson('/api/login', [
+            'login' => $target->email,
+            'password' => 'new-password-123',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.must_change_password', true);
+    }
+
+    public function test_role_created_user_has_synced_is_admin(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+
+        $this->actingAs($admin, 'web')->postJson('/api/users', [
+            'name' => '經理',
+            'email' => 'manager-user@example.com',
+            'password' => 'password123',
+            'role' => 'manager',
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('users', ['email' => 'manager-user@example.com', 'role' => 'manager', 'is_admin' => false]);
+    }
+
+    public function test_create_user_rejects_invalid_role(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+
+        $this->actingAs($admin, 'web')->postJson('/api/users', [
+            'name' => '新使用者',
+            'email' => 'invalid-role@example.com',
+            'password' => 'password123',
+            'role' => 'owner',
+        ])->assertStatus(422)->assertJsonValidationErrors('role');
+    }
+
+    public function test_admin_cannot_demote_own_account(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+
+        $this->actingAs($admin, 'web')->patchJson("/api/users/{$admin->id}/role", ['role' => 'manager'])
+            ->assertStatus(422)->assertJsonValidationErrors('role');
+
+        $this->assertDatabaseHas('users', ['id' => $admin->id, 'role' => 'admin', 'is_admin' => true]);
+    }
+
+    public function test_admin_cannot_disable_own_account(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+
+        $this->actingAs($admin, 'web')->patchJson("/api/users/{$admin->id}/status", ['is_active' => false])
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('users', ['id' => $admin->id, 'is_active' => true]);
+    }
+
+    public function test_admin_cannot_delete_own_account(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+
+        $this->actingAs($admin, 'web')->deleteJson("/api/users/{$admin->id}")
+            ->assertStatus(422);
+
+        $this->assertDatabaseHas('users', ['id' => $admin->id]);
+    }
+
+    public function test_admin_can_delete_user_without_related_records(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $other = User::factory()->manager()->create(['is_active' => true]);
+
+        $this->actingAs($admin, 'web')->deleteJson("/api/users/{$other->id}")->assertOk();
+        $this->assertDatabaseMissing('users', ['id' => $other->id]);
+    }
+
+    public function test_admin_cannot_delete_user_with_related_vehicle_records(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $other = User::factory()->manager()->create(['is_active' => true]);
+        Vehicle::factory()->create(['created_by' => $other->id]);
+
+        $this->actingAs($admin, 'web')->deleteJson("/api/users/{$other->id}")
+            ->assertStatus(422)->assertJsonValidationErrors('user');
+
+        $this->assertDatabaseHas('users', ['id' => $other->id]);
+    }
+
+    #[DataProvider('vehicleAgentColumnProvider')]
+    public function test_admin_cannot_delete_user_assigned_as_vehicle_agent(string $agentColumn): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $agent = User::factory()->sales()->create(['is_active' => true]);
+        Vehicle::factory()->create([
+            'created_by' => null,
+            'updated_by' => null,
+            $agentColumn => $agent->id,
+        ]);
+
+        $this->actingAs($admin, 'web')->deleteJson("/api/users/{$agent->id}")
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('user')
+            ->assertJsonPath('errors.user.0', '此使用者已有相關紀錄，不得刪除，請改為停用');
+
+        $this->assertDatabaseHas('users', ['id' => $agent->id]);
+    }
+
+    public static function vehicleAgentColumnProvider(): array
+    {
+        return [
+            'purchase agent' => ['purchase_agent_id'],
+            'sales agent' => ['sales_agent_id'],
+        ];
+    }
+
+    // 此段說明相鄰程式碼的用途與預期行為。
+    public function test_service_prevents_demoting_the_last_active_admin(): void
+    {
+        $onlyAdmin = User::factory()->admin()->create(['is_active' => true]);
+        $actor = User::factory()->manager()->create(['is_active' => true]);
+
+        $this->expectException(ValidationException::class);
+
+        app(UserService::class)->setRole($actor, $onlyAdmin, 'manager');
+    }
+
+    public function test_service_prevents_disabling_the_last_active_admin(): void
+    {
+        $onlyAdmin = User::factory()->admin()->create(['is_active' => true]);
+        $actor = User::factory()->manager()->create(['is_active' => true]);
+
+        $this->expectException(ValidationException::class);
+
+        app(UserService::class)->setActive($actor, $onlyAdmin, false);
+    }
+
+    public function test_service_prevents_deleting_the_last_active_admin(): void
+    {
+        $onlyAdmin = User::factory()->admin()->create(['is_active' => true]);
+        $actor = User::factory()->manager()->create(['is_active' => true]);
+
+        $this->expectException(ValidationException::class);
+
+        app(UserService::class)->deleteUser($actor, $onlyAdmin);
+    }
+
+    public function test_service_allows_demoting_an_admin_when_another_active_admin_remains(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $other = User::factory()->admin()->create(['is_active' => true]);
+
+        app(UserService::class)->setRole($admin, $other, 'manager');
+
+        $other->refresh();
+        $this->assertSame('manager', $other->role);
+        $this->assertFalse($other->is_admin);
+    }
+
+    public function test_setrole_is_idempotent_for_same_target_role(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $manager = User::factory()->manager()->create(['is_active' => true]);
+
+        $result = app(UserService::class)->setRole($admin, $manager, 'manager');
+
+        $this->assertSame('manager', $result->role);
+        $this->assertFalse($result->is_admin);
+    }
+
+    // 此段說明相鄰程式碼的用途與預期行為。
+    public function test_setrole_reconciles_stale_is_admin_even_without_role_change(): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $desynced = User::factory()->manager()->create(['is_active' => true, 'is_admin' => true]);
+
+        $result = app(UserService::class)->setRole($admin, $desynced, 'manager');
+
+        $this->assertSame('manager', $result->role);
+        $this->assertFalse($result->is_admin);
+        $this->assertDatabaseHas('users', ['id' => $desynced->id, 'role' => 'manager', 'is_admin' => false]);
+    }
+
+    #[DataProvider('presentIsActiveValueProvider')]
+    public function test_generic_update_rejects_any_present_is_active_value(mixed $isActiveValue): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $other = User::factory()->manager()->create(['is_active' => true, 'name' => '原始名稱']);
+
+        $this->actingAs($admin, 'web')->putJson("/api/users/{$other->id}", [
+            'name' => '被忽略的名稱',
+            'email' => $other->email,
+            'is_active' => $isActiveValue,
+        ])->assertStatus(422)->assertJsonValidationErrors('is_active');
+
+        $this->assertDatabaseHas('users', ['id' => $other->id, 'name' => '原始名稱', 'is_active' => true]);
+    }
+
+    public static function presentIsActiveValueProvider(): array
+    {
+        return [
+            'boolean false' => [false],
+            'boolean true' => [true],
+            'null' => [null],
+            'empty string' => [''],
+            'empty array' => [[]],
+        ];
+    }
+
+    #[DataProvider('presentIsAdminValueProvider')]
+    public function test_generic_update_rejects_any_present_is_admin_value(mixed $isAdminValue): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $other = User::factory()->manager()->create(['is_active' => true, 'name' => '原始名稱']);
+
+        $this->actingAs($admin, 'web')->putJson("/api/users/{$other->id}", [
+            'name' => '被忽略的名稱',
+            'email' => $other->email,
+            'is_admin' => $isAdminValue,
+        ])->assertStatus(422)->assertJsonValidationErrors('is_admin');
+
+        $this->assertDatabaseHas('users', ['id' => $other->id, 'name' => '原始名稱', 'is_admin' => false]);
+    }
+
+    public static function presentIsAdminValueProvider(): array
+    {
+        return [
+            'boolean false' => [false],
+            'boolean true' => [true],
+            'null' => [null],
+            'empty string' => [''],
+            'empty array' => [[]],
+        ];
+    }
+
+    #[DataProvider('presentRoleValueProvider')]
+    public function test_generic_update_rejects_any_present_role_value(mixed $roleValue): void
+    {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $other = User::factory()->manager()->create(['is_active' => true, 'name' => '原始名稱']);
+
+        $this->actingAs($admin, 'web')->putJson("/api/users/{$other->id}", [
+            'name' => '被忽略的名稱',
+            'email' => $other->email,
+            'role' => $roleValue,
+        ])->assertStatus(422)->assertJsonValidationErrors('role');
+
+        $this->assertDatabaseHas('users', ['id' => $other->id, 'name' => '原始名稱', 'role' => 'manager']);
+    }
+
+    public static function presentRoleValueProvider(): array
+    {
+        return [
+            'string' => ['admin'],
+            'null' => [null],
+            'empty string' => [''],
+            'empty array' => [[]],
+        ];
+    }
+
+    #[DataProvider('forbiddenAccountFieldProvider')]
+    public function test_generic_update_rejects_account_fields_managed_by_dedicated_flows(
+        string $field,
+        mixed $value,
+        string $message
+    ): void {
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $other = User::factory()->manager()->withUsername('keep.me')->create([
+            'is_active' => true,
+            'name' => '原始名稱',
+            'password' => Hash::make('original-password'),
+            'must_change_password' => true,
+        ]);
+        $originalPasswordHash = $other->password;
+
+        $this->actingAs($admin, 'web')->patchJson("/api/users/{$other->id}", [
+            'name' => '被忽略的名稱',
+            'email' => $other->email,
+            $field => $value,
+        ])->assertStatus(422)
+            ->assertJsonValidationErrors($field)
+            ->assertJsonPath("errors.{$field}.0", $message);
+
+        $this->assertDatabaseHas('users', [
+            'id' => $other->id,
+            'name' => '原始名稱',
+            'username' => 'keep.me',
+            'must_change_password' => true,
+        ]);
+
+        $other->refresh();
+        $this->assertSame($originalPasswordHash, $other->password);
+        $this->assertTrue(Hash::check('original-password', $other->password));
+        $this->assertFalse(Hash::check('attacker-chosen-password', $other->password));
+    }
+
+    public static function forbiddenAccountFieldProvider(): array
+    {
+        return [
+            'username string' => [
+                'username',
+                'new.username',
+                '管理員一般資料更新不可修改帳號名稱',
+            ],
+            'username null' => [
+                'username',
+                null,
+                '管理員一般資料更新不可修改帳號名稱',
+            ],
+            'must change password false' => [
+                'must_change_password',
+                false,
+                '管理員一般資料更新不可修改首次改密碼狀態',
+            ],
+            'must change password null' => [
+                'must_change_password',
+                null,
+                '管理員一般資料更新不可修改首次改密碼狀態',
+            ],
+            'password string' => [
+                'password',
+                'attacker-chosen-password',
+                '密碼請改用 POST /api/users/{id}/reset-password 重設',
+            ],
+        ];
+    }
+}

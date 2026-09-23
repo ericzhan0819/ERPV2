@@ -1,0 +1,178 @@
+<?php
+
+namespace App\Services;
+
+use App\Exceptions\SessionRequiredException;
+use App\Exceptions\TooManyLoginAttemptsException;
+use App\Models\User;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
+use Throwable;
+
+class AuthService
+{
+    public function __construct(private readonly AuditLogService $auditLogService) {}
+
+    private const MAX_IDENTIFIER_IP_ATTEMPTS = 5;
+
+    private const IDENTIFIER_IP_DECAY_SECONDS = 60;
+
+    private const MAX_ACCOUNT_ATTEMPTS = 10;
+
+    private const ACCOUNT_DECAY_SECONDS = 900;
+
+    private const MAX_IP_ATTEMPTS = 30;
+
+    private const IP_DECAY_SECONDS = 60;
+
+    /**
+     * @throws AuthenticationException
+     * @throws TooManyLoginAttemptsException
+     */
+    public function login(string $login, string $password): User
+    {
+        // 本系統只提供 cookie-based Session 登入。若請求沒有通過 Sanctum stateful
+        // middleware，必須在查詢帳號、驗證密碼或異動 limiter 前拒絕，避免正確密碼
+        // 走到 Session 操作才回 500，形成密碼 oracle 並清空登入失敗額度。
+        if (! request()->hasSession()) {
+            throw new SessionRequiredException;
+        }
+
+        $normalizedLogin = $this->normalizeLogin($login);
+        $ip = (string) request()->ip();
+        $ipKey = 'login:ip:'.$ip;
+
+        // IP 的總限制只計登入失敗次數，所以這裡只讀取是否超限，不會先占用一次額度。
+        // 此檢查必須在解析 User 之前，避免已封鎖的請求仍觸發資料庫查詢。
+        if (RateLimiter::tooManyAttempts($ipKey, self::MAX_IP_ATTEMPTS)) {
+            throw new TooManyLoginAttemptsException(RateLimiter::availableIn($ipKey));
+        }
+
+        $loginUser = $this->resolveLoginUser($normalizedLogin);
+        $limiters = $this->limiters($normalizedLogin, $loginUser, $ip);
+
+        // 呼叫 Auth::attempt 前，先把帳號加 IP 與帳號本身的額度各記一次。
+        // 這樣多個請求同時進來時，不會都先看到「尚未超限」而一起通過。
+        foreach (['identifier_ip', 'account'] as $name) {
+            [$key, $maxAttempts, $decaySeconds] = $limiters[$name];
+
+            if (RateLimiter::hit($key, $decaySeconds) > $maxAttempts) {
+                throw new TooManyLoginAttemptsException(RateLimiter::availableIn($key));
+            }
+        }
+
+        if (! Auth::attempt([
+            'id' => $loginUser?->id ?? 0,
+            'password' => $password,
+        ])) {
+            RateLimiter::hit($ipKey, self::IP_DECAY_SECONDS);
+
+            throw new AuthenticationException('帳號或密碼錯誤');
+        }
+
+        /** @var User $user */
+        $user = Auth::user();
+
+        if (! $user->is_active) {
+            Auth::logout();
+            RateLimiter::hit($ipKey, self::IP_DECAY_SECONDS);
+
+            throw new AuthenticationException('此帳號已被停用');
+        }
+
+        // 只有通過啟用狀態檢查的正式成功登入才能清除額度；停用帳號即使密碼正確，
+        // 仍必須保留本次 identifier／account 嘗試並累積 IP-wide 失敗次數。
+        RateLimiter::clear($limiters['identifier_ip'][0]);
+        RateLimiter::clear($limiters['account'][0]);
+
+        request()->session()->regenerate();
+
+        try {
+            $this->auditLogService->recordAuthentication('login', $user);
+        } catch (Throwable $e) {
+            // 無法留下登入稽核紀錄時，不可保留已登入的工作階段。
+            Auth::guard('web')->logout();
+            request()->session()->invalidate();
+            request()->session()->regenerateToken();
+
+            throw $e;
+        }
+
+        return $user;
+    }
+
+    /**
+     * @return array<string, array{0: string, 1: int, 2: int}>
+     */
+    private function limiters(string $login, ?User $user, string $ip): array
+    {
+        $canonicalIdentity = $user instanceof User
+            ? 'uid:'.$user->id
+            : 'raw:'.hash_hmac('sha256', $login, (string) config('app.key'));
+
+        return [
+            'identifier_ip' => ['login:identifier_ip:'.$canonicalIdentity.'|'.$ip, self::MAX_IDENTIFIER_IP_ATTEMPTS, self::IDENTIFIER_IP_DECAY_SECONDS],
+            'account' => ['login:account:'.$canonicalIdentity, self::MAX_ACCOUNT_ATTEMPTS, self::ACCOUNT_DECAY_SECONDS],
+        ];
+    }
+
+    private function normalizeLogin(string $login): string
+    {
+        $trimmed = Str::trim($login);
+
+        return Str::contains($trimmed, '@')
+            ? Str::lower($trimmed)
+            : (User::normalizeUsername($trimmed) ?? '');
+    }
+
+    /**
+     * Email 大小寫相同的資料若不只一筆，不能任選其中一筆進行認證。
+     *
+     * 多筆資料的 fail-closed 分支只會在大小寫敏感 unique index（例如 SQLite）下可達；
+     * 正式 MariaDB 的 utf8mb4_unicode_ci unique index 會先拒絕大小寫變體。
+     */
+    private function resolveLoginUser(string $login): ?User
+    {
+        if (! Str::contains($login, '@')) {
+            return User::query()
+                ->where('username', $login)
+                ->first();
+        }
+
+        // 每次 Email 登入都要先解析 User，且 LOWER(email) 無法使用既有 email unique index。
+        // 本系統使用者數量很小，目前接受此成本；若要消除需另做 Email 小寫回填與索引調整。
+        $users = User::query()
+            ->whereRaw('LOWER(email) = ?', [$login])
+            ->orderBy('id')
+            ->limit(2)
+            ->get();
+
+        return $users->count() === 1 ? $users->first() : null;
+    }
+
+    /**
+     * 可重複安全呼叫：即使使用者已登出，或用戶端因未收到回應而重試，也不會出錯。
+     */
+    public function logout(): void
+    {
+        $user = Auth::guard('web')->user();
+
+        try {
+            if ($user instanceof User) {
+                $this->auditLogService->recordAuthentication('logout', $user);
+            }
+        } finally {
+            // 登出以安全為優先：就算稽核紀錄寫入失敗，也一定先讓登入工作階段失效。
+            if (Auth::guard('web')->check()) {
+                Auth::guard('web')->logout();
+            }
+
+            if (request()->hasSession()) {
+                request()->session()->invalidate();
+                request()->session()->regenerateToken();
+            }
+        }
+    }
+}

@@ -1,0 +1,160 @@
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { AuthProvider } from './hooks/useAuth'
+import { ProtectedRoute } from './routes/ProtectedRoute'
+import { AppLayout } from './layouts/AppLayout'
+import { Login } from './pages/Login'
+import { Dashboard } from './pages/Dashboard'
+import { VehicleList } from './pages/vehicles/VehicleList'
+import { VehicleCreate } from './pages/vehicles/VehicleCreate'
+import { VehicleDetail } from './pages/vehicles/VehicleDetail'
+import { CommissionAttributionPending } from './pages/vehicles/CommissionAttributionPending'
+import { CustomerList } from './pages/customers/CustomerList'
+import { CustomerCreate } from './pages/customers/CustomerCreate'
+import { CustomerDetail } from './pages/customers/CustomerDetail'
+import { MoneyEntryList } from './pages/money-entries/MoneyEntryList'
+import { MoneyEntryCreate } from './pages/money-entries/MoneyEntryCreate'
+import { CashAccountList } from './pages/cash-accounts/CashAccountList'
+import { UserList } from './pages/users/UserList'
+import { AuditLogList } from './pages/audit-logs/AuditLogList'
+import { VehicleIntakePrint } from './pages/print/VehicleIntakePrint'
+import { VehicleClosingPrint } from './pages/print/VehicleClosingPrint'
+import { SalaryPeriodList } from './pages/salary/SalaryPeriodList'
+import { SalaryPeriodDetail } from './pages/salary/SalaryPeriodDetail'
+import { SalaryProfiles } from './pages/salary/SalaryProfiles'
+import { CommissionPlans } from './pages/salary/CommissionPlans'
+import { PasswordChangeRequired } from './pages/PasswordChangeRequired'
+import { PASSWORD_CHANGE_REQUIRED_PATH } from './auth/passwordChangeRequired'
+import { Account } from './pages/account/Account'
+
+function App() {
+  return (
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route
+          path={PASSWORD_CHANGE_REQUIRED_PATH}
+          element={
+            <ProtectedRoute passwordChangeOnly>
+              <PasswordChangeRequired />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vehicles/:id/print/intake"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'manager']}>
+              <VehicleIntakePrint />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/vehicles/:id/print/closing"
+          element={
+            <ProtectedRoute allowedRoles={['admin', 'manager']}>
+              <VehicleClosingPrint />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          element={
+            <ProtectedRoute>
+              <AppLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/account" element={<Account />} />
+          <Route path="/vehicles" element={<VehicleList />} />
+          <Route
+            path="/vehicles/create"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'manager']}>
+                <VehicleCreate />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/vehicles/commission-attribution"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <CommissionAttributionPending />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/vehicles/:id" element={<VehicleDetail />} />
+          <Route
+            path="/customers"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'manager', 'sales']}>
+                <CustomerList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/customers/create"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'manager', 'sales']}>
+                <CustomerCreate />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/customers/:id"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'manager', 'sales']}>
+                <CustomerDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/money-entries"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'manager', 'sales']}>
+                <MoneyEntryList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/money-entries/create"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'manager', 'sales']}>
+                <MoneyEntryCreate />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/cash-accounts"
+            element={
+              <ProtectedRoute allowedRoles={['admin', 'manager']}>
+                <CashAccountList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/audit-logs"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <AuditLogList />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/users"
+            element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <UserList />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/salary" element={<ProtectedRoute allowedRoles={['admin']}><SalaryPeriodList /></ProtectedRoute>} />
+          <Route path="/salary/periods/:id" element={<ProtectedRoute allowedRoles={['admin']}><SalaryPeriodDetail /></ProtectedRoute>} />
+          <Route path="/salary/profiles" element={<ProtectedRoute allowedRoles={['admin']}><SalaryProfiles /></ProtectedRoute>} />
+          <Route path="/salary/commission-plans" element={<ProtectedRoute allowedRoles={['admin']}><CommissionPlans /></ProtectedRoute>} />
+        </Route>
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </AuthProvider>
+  )
+}
+
+export default App

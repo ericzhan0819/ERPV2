@@ -1,0 +1,51 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Exceptions\SessionRequiredException;
+use App\Exceptions\TooManyLoginAttemptsException;
+use App\Http\Requests\LoginRequest;
+use App\Http\Resources\UserResource;
+use App\Services\AuthService;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+class AuthController extends Controller
+{
+    public function __construct(private readonly AuthService $authService) {}
+
+    public function login(LoginRequest $request): UserResource|JsonResponse
+    {
+        try {
+            $user = $this->authService->login(
+                $request->validated('login'),
+                $request->validated('password'),
+            );
+        } catch (SessionRequiredException $e) {
+            return response()->json(['message' => $e->getMessage()], 419);
+        } catch (TooManyLoginAttemptsException $e) {
+            return response()->json(['message' => $e->getMessage()], 429)
+                ->header('Retry-After', (string) $e->retryAfter);
+        } catch (AuthenticationException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return new UserResource($user);
+    }
+
+    public function logout(Request $request): JsonResponse
+    {
+        $hasSession = $request->hasSession();
+        $this->authService->logout();
+
+        return response()->json([
+            'message' => $hasSession ? '已登出' : '無可登出的工作階段',
+        ]);
+    }
+
+    public function me(Request $request): UserResource
+    {
+        return new UserResource($request->user());
+    }
+}

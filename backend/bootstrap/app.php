@@ -1,0 +1,46 @@
+<?php
+
+use App\Http\Middleware\EnsurePasswordHasBeenChanged;
+use App\Http\Middleware\EnsureUserHasRole;
+use App\Http\Middleware\EnsureUserIsActive;
+use App\Support\TrustedHostPatterns;
+use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Configuration\Exceptions;
+use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withRouting(
+        web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
+        commands: __DIR__.'/../routes/console.php',
+        health: '/up',
+    )
+    ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->trustHosts(
+            at: fn (): array => TrustedHostPatterns::from(
+                (string) config('app.url'),
+                config('trustedhosts.additional_hosts', []),
+            ),
+            subdomains: false,
+        );
+        $middleware->statefulApi();
+        $middleware->redirectGuestsTo(fn (Request $request): ?string => $request->is('api/*') ? null : '/login');
+
+        $middleware->alias([
+            'active' => EnsureUserIsActive::class,
+            'password.changed' => EnsurePasswordHasBeenChanged::class,
+            'role' => EnsureUserHasRole::class,
+        ]);
+        // 先檢查停用與待改密碼狀態，再拒絕未授權角色，最後才做 route model binding，
+        // 避免以 403／404 差異枚舉敏感資源 ID。
+        $middleware->prependToPriorityList(SubstituteBindings::class, EnsureUserHasRole::class);
+        $middleware->prependToPriorityList(EnsureUserHasRole::class, EnsurePasswordHasBeenChanged::class);
+        $middleware->prependToPriorityList(EnsurePasswordHasBeenChanged::class, EnsureUserIsActive::class);
+    })
+    ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->shouldRenderJsonWhen(
+            fn (Request $request) => $request->is('api/*'),
+        );
+    })->create();

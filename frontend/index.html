@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta id="app-theme-color" name="theme-color" content="#F8FAFC" />
+    <script>
+      (() => {
+        const storageKey = 'erp-theme'
+        let theme = null
+
+        try {
+          const storedTheme = window.localStorage.getItem(storageKey)
+          if (storedTheme === 'light' || storedTheme === 'dark') theme = storedTheme
+        } catch {
+          // Safari 限制儲存空間時仍依系統主題正常載入。
+        }
+
+        if (!theme) {
+          theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        }
+
+        const isDark = theme === 'dark'
+        const backgroundColor = isDark ? '#0B1120' : '#F8FAFC'
+        document.documentElement.classList.toggle('dark', isDark)
+        document.documentElement.style.colorScheme = theme
+        document.documentElement.style.backgroundColor = backgroundColor
+        document.getElementById('app-theme-color')?.setAttribute('content', backgroundColor)
+      })()
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Vite 會由 src/config/app.ts 注入正式標題；ERPV2 是轉換失敗時的安全 fallback。 -->
+    <title>ERPV2</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

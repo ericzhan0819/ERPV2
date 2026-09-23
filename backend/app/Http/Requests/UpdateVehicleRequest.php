@@ -1,0 +1,49 @@
+<?php
+
+namespace App\Http\Requests;
+
+use App\Models\Vehicle;
+use Illuminate\Foundation\Http\FormRequest;
+
+class UpdateVehicleRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'brand' => ['required', 'string', 'max:255'],
+            'model' => ['required', 'string', 'max:255'],
+            'year' => ['nullable', 'integer', 'min:1900', 'max:2100'],
+            'license_plate' => ['nullable', 'string', 'max:255', 'required_without:vin'],
+            'vin' => ['nullable', 'string', 'max:255', 'required_without:license_plate'],
+            'mileage_km' => ['nullable', 'integer', 'min:0'],
+            'color' => ['nullable', 'string', 'max:255'],
+            'displacement' => ['nullable', 'string', 'max:255'],
+            'transmission' => ['nullable', 'string', 'max:255'],
+            'fuel_type' => ['nullable', 'string', 'max:255'],
+            'parking_location' => ['nullable', 'string', 'max:255'],
+            'has_registration_document' => ['nullable', 'boolean'],
+            'has_spare_key' => ['nullable', 'boolean'],
+            'is_transfer_completed' => ['nullable', 'boolean'],
+            'is_inspection_completed' => ['nullable', 'boolean'],
+            'is_preparation_completed' => ['nullable', 'boolean'],
+            'lien_note' => ['nullable', 'string'],
+            'condition_note' => ['nullable', 'string'],
+            'purchase_date' => ['nullable', 'date'],
+            'purchase_source_type' => ['nullable', 'string', 'max:255'],
+            'seller_name' => ['nullable', 'string', 'max:255'],
+            'seller_phone' => ['nullable', 'string', 'max:255'],
+            'seller_customer_id' => ['nullable', 'integer', 'exists:customers,id'],
+            'purchase_price' => ['nullable', 'integer', 'min:0'],
+            'asking_price' => ['nullable', 'integer', 'min:0'],
+            'floor_price' => ['nullable', 'integer', 'min:0'],
+            'sales_note' => ['nullable', 'string'],
+            'public_description' => ['nullable', 'string', 'max:'.Vehicle::PUBLIC_DESCRIPTION_MAX_LENGTH],
+            'notes' => ['nullable', 'string'],
+        ];
+    }
+}

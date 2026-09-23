@@ -1,0 +1,295 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\AuditLog;
+use App\Models\User;
+use App\Services\AuditLogService;
+use Illuminate\Auth\Events\Attempting;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
+use Mockery;
+use Mockery\MockInterface;
+use RuntimeException;
+use Tests\TestCase;
+
+class DualIdentifierLoginTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->withHeaders(['Referer' => 'http://localhost']);
+    }
+
+    public function test_login_request_requires_login_string_and_keeps_password_contract(): void
+    {
+        $this->postJson('/api/login', [
+            'email' => 'admin@example.com',
+            'password' => 'password',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['login'])
+            ->assertJsonPath('errors.login.0', '請輸入帳號或 Email');
+
+        $this->postJson('/api/login', [
+            'login' => ['admin@example.com'],
+            'password' => 'password',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['login'])
+            ->assertJsonPath('errors.login.0', '帳號或 Email 格式不正確');
+
+        $this->postJson('/api/login', [
+            'login' => str_repeat('a', 256),
+            'password' => 'password',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['login'])
+            ->assertJsonPath('errors.login.0', '帳號或 Email 不得超過 255 個字元');
+
+        $this->postJson('/api/login', [
+            'login' => 'admin@example.com',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['password'])
+            ->assertJsonPath('errors.password.0', '請輸入密碼');
+
+        $this->postJson('/api/login', [
+            'login' => 'admin@example.com',
+            'password' => ['password'],
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['password'])
+            ->assertJsonPath('errors.password.0', '密碼格式不正確');
+    }
+
+    public function test_email_login_is_trimmed_case_insensitive_and_returns_account_state(): void
+    {
+        $user = User::factory()->mustChangePassword()->create([
+            'email' => 'Owner@Example.com',
+            'username' => 'owner',
+            'password' => Hash::make('correct-password'),
+        ]);
+
+        $response = $this->postJson('/api/login', [
+            'login' => '  OWNER@EXAMPLE.COM  ',
+            'password' => 'correct-password',
+        ])->assertSuccessful()
+            ->assertJsonPath('data.id', $user->id)
+            ->assertJsonPath('data.username', 'owner')
+            ->assertJsonPath('data.must_change_password', true);
+
+        $this->assertSame(
+            ['username' => 'owner', 'must_change_password' => true],
+            array_intersect_key(
+                $response->json('data'),
+                array_flip(['username', 'must_change_password']),
+            ),
+        );
+        $this->assertAuthenticatedAs($user);
+    }
+
+    public function test_username_login_is_trimmed_and_case_insensitive(): void
+    {
+        $user = User::factory()->withUsername('sales.one')->create([
+            'password' => Hash::make('correct-password'),
+        ]);
+
+        $this->postJson('/api/login', [
+            'login' => '  SALES.ONE  ',
+            'password' => 'correct-password',
+        ])->assertSuccessful()
+            ->assertJsonPath('data.id', $user->id);
+
+        $this->assertAuthenticatedAs($user);
+    }
+
+    public function test_successful_login_regenerates_the_session_id(): void
+    {
+        User::factory()->withUsername('session.user')->create([
+            'password' => Hash::make('correct-password'),
+        ]);
+        $probe = new class
+        {
+            public ?string $sessionId = null;
+        };
+        Event::listen(Attempting::class, function () use ($probe): void {
+            $probe->sessionId = session()->getId();
+        });
+
+        $this->postJson('/api/login', [
+            'login' => 'session.user',
+            'password' => 'correct-password',
+        ])->assertOk();
+
+        $this->assertNotNull($probe->sessionId);
+        $this->assertNotSame($probe->sessionId, session()->getId());
+    }
+
+    public function test_failed_login_does_not_regenerate_the_session_id(): void
+    {
+        User::factory()->withUsername('session.user')->create([
+            'password' => Hash::make('correct-password'),
+        ]);
+        $probe = new class
+        {
+            public ?string $sessionId = null;
+        };
+        Event::listen(Attempting::class, function () use ($probe): void {
+            $probe->sessionId = session()->getId();
+        });
+
+        $this->postJson('/api/login', [
+            'login' => 'session.user',
+            'password' => 'wrong-password',
+        ])->assertUnprocessable();
+
+        $this->assertNotNull($probe->sessionId);
+        $this->assertSame($probe->sessionId, session()->getId());
+    }
+
+    public function test_non_stateful_login_is_rejected_before_credentials_or_limiters_are_touched(): void
+    {
+        $user = User::factory()->withUsername('stateless.user')->create([
+            'password' => Hash::make('correct-password'),
+        ]);
+        AuditLog::query()->delete();
+        $accountKey = "login:account:uid:{$user->id}";
+        $identifierIpKey = "login:identifier_ip:uid:{$user->id}|127.0.0.1";
+        RateLimiter::clear($accountKey);
+        RateLimiter::clear($identifierIpKey);
+
+        for ($attempt = 0; $attempt < 4; $attempt++) {
+            RateLimiter::hit($accountKey, 900);
+            RateLimiter::hit($identifierIpKey, 60);
+        }
+
+        $this->flushHeaders();
+        $expectedResponse = ['message' => '工作階段無效，請重新整理後再試'];
+        $authenticationAttempted = false;
+        Event::listen(Attempting::class, function () use (&$authenticationAttempted): void {
+            $authenticationAttempted = true;
+        });
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        $this->postJson('/api/login', [
+            'login' => 'stateless.user',
+            'password' => 'wrong-password',
+        ])->assertStatus(419)->assertExactJson($expectedResponse);
+
+        $this->postJson('/api/login', [
+            'login' => 'stateless.user',
+            'password' => 'correct-password',
+        ])->assertStatus(419)->assertExactJson($expectedResponse);
+
+        $queries = DB::getQueryLog();
+        DB::disableQueryLog();
+        $this->assertFalse($authenticationAttempted);
+        $this->assertCount(0, $queries);
+        $this->assertSame(4, RateLimiter::attempts($accountKey));
+        $this->assertSame(4, RateLimiter::attempts($identifierIpKey));
+        $this->assertSame(0, AuditLog::query()->where('subject_type', 'authentication')->count());
+        $this->assertGuest();
+        RateLimiter::clear($accountKey);
+        RateLimiter::clear($identifierIpKey);
+    }
+
+    public function test_user_without_username_can_still_login_by_email(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'legacy@example.com',
+            'username' => null,
+            'password' => Hash::make('correct-password'),
+        ]);
+
+        $this->postJson('/api/login', [
+            'login' => 'legacy@example.com',
+            'password' => 'correct-password',
+        ])->assertSuccessful()
+            ->assertJsonPath('data.id', $user->id)
+            ->assertJsonPath('data.username', null);
+    }
+
+    public function test_case_variant_duplicate_emails_fail_closed_instead_of_authenticating_an_arbitrary_user(): void
+    {
+        User::factory()->create([
+            'email' => 'Dup@example.com',
+            'password' => Hash::make('password-a'),
+        ]);
+        User::factory()->create([
+            'email' => 'dup@example.com',
+            'password' => Hash::make('password-b'),
+        ]);
+
+        foreach (['password-a', 'password-b'] as $password) {
+            $this->postJson('/api/login', [
+                'login' => 'dup@example.com',
+                'password' => $password,
+            ])->assertUnprocessable()
+                ->assertExactJson(['message' => '帳號或密碼錯誤']);
+
+            $this->assertGuest();
+        }
+    }
+
+    public function test_unknown_identifiers_and_wrong_password_share_the_same_response(): void
+    {
+        User::factory()->withUsername('known.user')->create([
+            'email' => 'known@example.com',
+            'password' => Hash::make('correct-password'),
+        ]);
+
+        foreach ([
+            ['missing@example.com', 'correct-password'],
+            ['missing.user', 'correct-password'],
+            ['known@example.com', 'wrong-password'],
+            ['known.user', 'wrong-password'],
+        ] as [$login, $password]) {
+            $this->postJson('/api/login', compact('login', 'password'))
+                ->assertUnprocessable()
+                ->assertExactJson(['message' => '帳號或密碼錯誤']);
+        }
+    }
+
+    public function test_inactive_user_cannot_login_with_either_identifier(): void
+    {
+        User::factory()->withUsername('disabled.user')->create([
+            'email' => 'disabled@example.com',
+            'password' => Hash::make('correct-password'),
+            'is_active' => false,
+        ]);
+
+        foreach (['disabled@example.com', 'DISABLED.USER'] as $login) {
+            $this->postJson('/api/login', [
+                'login' => $login,
+                'password' => 'correct-password',
+            ])->assertUnprocessable()
+                ->assertExactJson(['message' => '此帳號已被停用']);
+
+            $this->assertGuest();
+        }
+    }
+
+    public function test_audit_failure_invalidates_the_authenticated_session(): void
+    {
+        User::factory()->withUsername('audit.failure')->create([
+            'password' => Hash::make('correct-password'),
+        ]);
+
+        $this->partialMock(AuditLogService::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('recordAuthentication')
+                ->once()
+                ->with('login', Mockery::type(User::class))
+                ->andThrow(new RuntimeException('audit unavailable'));
+        });
+
+        $this->postJson('/api/login', [
+            'login' => 'audit.failure',
+            'password' => 'correct-password',
+        ])->assertInternalServerError();
+
+        $this->getJson('/api/me')->assertUnauthorized();
+    }
+}
