@@ -79,6 +79,10 @@ class MoneyEntryService
     {
         $query = MoneyEntry::query()->with(['vehicle:id,stock_no,brand,model', 'cashAccount:id,name,type']);
 
+        if (! ($user?->hasAnyRole(User::ROLES) ?? false)) {
+            $query->whereRaw('1 = 0');
+        }
+
         // 薪資支出雖然也是 MoneyEntry，counterparty_name 與 amount 足以反推出個人
         // 薪資，初版只能由 admin 查看。不能只在 Resource 隱藏欄位，否則 manager
         // 仍可從筆數、分類、日期等側面枚舉薪資紀錄。

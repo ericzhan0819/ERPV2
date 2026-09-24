@@ -50,14 +50,14 @@ class RoleAccessTest extends TestCase
 
         $response = $this->actingAs($unknownRoleUser, 'web')->getJson("/api/vehicles/{$vehicle->id}");
 
-        $response->assertOk();
+        $response->assertForbidden();
         $response->assertJsonMissingPath('vehicle.purchase_price');
         $response->assertJsonMissingPath('vehicle.asking_price');
         $response->assertJsonMissingPath('vehicle.floor_price');
         $response->assertJsonMissingPath('vehicle.sold_price');
         $response->assertJsonMissingPath('summary');
         $response->assertJsonMissingPath('sales_collection_summary');
-        $response->assertJsonPath('money_entries', []);
+        $response->assertJsonMissingPath('money_entries');
     }
 
     public function test_manager_can_see_vehicle_financial_fields_in_json(): void
@@ -211,7 +211,7 @@ class RoleAccessTest extends TestCase
         $vehicle = Vehicle::factory()->create(['purchase_price' => 500000]);
 
         $vehicleResponse = $this->actingAs($unknownRoleUser, 'web')->getJson("/api/vehicles/{$vehicle->id}");
-        $vehicleResponse->assertOk();
+        $vehicleResponse->assertForbidden();
         $vehicleResponse->assertJsonMissingPath('vehicle.purchase_price');
         $vehicleResponse->assertJsonMissingPath('vehicle.sold_price');
         $vehicleResponse->assertJsonMissingPath('vehicle.asking_price');

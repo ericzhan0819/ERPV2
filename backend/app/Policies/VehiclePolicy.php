@@ -9,12 +9,12 @@ class VehiclePolicy
 {
     public function viewAny(User $user): bool
     {
-        return true;
+        return $user->hasAnyRole(User::ROLES);
     }
 
     public function view(User $user, Vehicle $vehicle): bool
     {
-        return true;
+        return $user->hasAnyRole(User::ROLES);
     }
 
     public function create(User $user): bool
@@ -79,12 +79,12 @@ class VehiclePolicy
 
     public function viewMoneyEntries(User $user, Vehicle $vehicle): bool
     {
-        return true;
+        return $user->hasAnyRole(User::ROLES);
     }
 
     public function viewPhotos(User $user, Vehicle $vehicle): bool
     {
-        return true;
+        return $user->hasAnyRole(User::ROLES);
     }
 
     public function managePhotos(User $user, Vehicle $vehicle): bool

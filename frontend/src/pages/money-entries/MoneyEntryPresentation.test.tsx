@@ -198,6 +198,27 @@ describe('Money entry presentation', () => {
     expect(within(row!).getByText('待審核')).toBeTruthy()
   })
 
+  it.each(['admin', 'manager', 'sales'] as const)('limits account filtering for %s, including bookmarked URLs and mobile filters', async (role) => {
+    setRole(role)
+    vi.mocked(moneyEntriesApi.listMoneyEntries).mockResolvedValue({
+      data: [],
+      meta: { current_page: 1, last_page: 1, per_page: 20, total: 0 },
+    })
+    renderList('/money-entries?cash_account_id=1')
+    await waitFor(() => expect(moneyEntriesApi.listMoneyEntries).toHaveBeenCalled())
+    expect(moneyEntriesApi.listMoneyEntries).toHaveBeenLastCalledWith(expect.objectContaining({
+      cash_account_id: role === 'sales' ? undefined : 1,
+    }))
+    if (role === 'sales') {
+      expect(screen.queryByLabelText('資金帳戶')).toBeNull()
+      expect(screen.queryByText('資金帳戶：營運現金')).toBeNull()
+      await userEvent.setup().click(screen.getByRole('button', { name: /篩選/ }))
+      expect(screen.queryByLabelText('資金帳戶')).toBeNull()
+    } else {
+      expect(screen.getByLabelText('資金帳戶')).toBeTruthy()
+    }
+  })
+
   it('keeps sales-safe amounts while masking cash accounts and approval controls', async () => {
     setRole('sales')
     vi.mocked(moneyEntriesApi.listMoneyEntries).mockResolvedValue({

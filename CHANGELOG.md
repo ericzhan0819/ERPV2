@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project uses Semantic Versioni
 
 ## [Unreleased]
 
+### Security
+
+- Reject unknown roles when reading internal vehicles, vehicle money entries, and photos.
+- Share the login account rate limit with current-password verification during password changes.
+- Restrict cash-account filtering of money entries to admin and manager, including the frontend filter controls.
+
 ## [1.0.0] - 2026-09-23
 
 ### Added

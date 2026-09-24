@@ -39,12 +39,14 @@ type MoneyFilterChangeHandler = (
 function MoneyEntryFilterFields({
   filters,
   cashAccounts,
+  canViewFinance,
   vehicles,
   onChange,
   debounceSearch = false,
   idPrefix,
 }: {
   filters: MoneyEntryListFilters
+  canViewFinance: boolean
   cashAccounts: CashAccountOption[]
   vehicles: Vehicle[]
   onChange: MoneyFilterChangeHandler
@@ -98,7 +100,7 @@ function MoneyEntryFilterFields({
         </select>
       </label>
 
-      <label className="flex flex-col gap-1 text-sm font-medium text-fg-muted">
+      {canViewFinance && <label className="flex flex-col gap-1 text-sm font-medium text-fg-muted">
         資金帳戶
         <select
           value={filters.cashAccountId ?? ''}
@@ -108,7 +110,7 @@ function MoneyEntryFilterFields({
           <option value="">全部資金帳戶</option>
           {cashAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
         </select>
-      </label>
+      </label>}
 
       <label className="flex flex-col gap-1 text-sm font-medium text-fg-muted">
         關聯車輛
@@ -159,6 +161,7 @@ export function MoneyEntryList() {
   const columnCount = 7 + (showAmountColumn ? 1 : 0) + (canViewFinance ? 1 : 0) + (isAdmin ? 1 : 0)
   const [searchParams, setSearchParams] = useSearchParams()
   const filters = parseMoneyEntryListFilters(searchParams)
+  if (!canViewFinance) filters.cashAccountId = null
   const filterUrlKey = searchParams.toString()
 
   const [entries, setEntries] = useState<MoneyEntry[]>([])
@@ -222,8 +225,12 @@ export function MoneyEntryList() {
   }
 
   useEffect(() => {
-    if (!filterDrawerOpen) setDraftFilters(parseMoneyEntryListFilters(new URLSearchParams(filterUrlKey)))
-  }, [filterDrawerOpen, filterUrlKey])
+    if (!filterDrawerOpen) {
+      const nextFilters = parseMoneyEntryListFilters(new URLSearchParams(filterUrlKey))
+      if (!canViewFinance) nextFilters.cashAccountId = null
+      setDraftFilters(nextFilters)
+    }
+  }, [filterDrawerOpen, filterUrlKey, canViewFinance])
 
   useEffect(() => {
     listCashAccountOptions().then(setCashAccounts).catch(() => setCashAccounts([]))
@@ -351,6 +358,7 @@ export function MoneyEntryList() {
           idPrefix="money-desktop"
           filters={draftFilters}
           cashAccounts={cashAccounts}
+          canViewFinance={canViewFinance}
           vehicles={vehicles}
           debounceSearch
           onChange={(updates, options) => {
@@ -411,6 +419,7 @@ export function MoneyEntryList() {
           idPrefix="money-mobile"
           filters={draftFilters}
           cashAccounts={cashAccounts}
+          canViewFinance={canViewFinance}
           vehicles={vehicles}
           onChange={(updates) => setDraftFilters((current) => ({ ...current, ...updates, page: 1 }))}
         />

@@ -61,7 +61,7 @@ class VehicleCommissionAgentResourceTest extends TestCase
             'sales_agent_id' => $agent->id,
         ]);
 
-        $response = $this->actingAs($unknown, 'web')->getJson("/api/vehicles/{$vehicle->id}")->assertOk();
+        $response = $this->actingAs($unknown, 'web')->getJson("/api/vehicles/{$vehicle->id}")->assertForbidden();
         $response->assertJsonMissingPath('vehicle.purchase_agent_id');
         $response->assertJsonMissingPath('vehicle.purchase_agent');
         $response->assertJsonMissingPath('vehicle.sales_agent_id');
