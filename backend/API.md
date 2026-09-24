@@ -27,11 +27,13 @@ Bearer token。即使資料庫保留框架既有的 `personal_access_tokens` tab
 - `MoneyEntryResource`：`cash_account_id`、`cash_account` 一律省略；`amount` 只在該筆是自己建立的申請，或分類屬於「訂金收入／尾款收入／退款」等銷售收款安全分類時才會出現，其餘（例如他人上報的成本）完全不會出現在 `sales` 的列表中
 - `CashAccountResource`：完整版（含 `opening_balance`）僅 `admin`/`manager` 可讀（`GET /api/cash-accounts`、`GET /api/cash-accounts/{id}`、`GET /api/cash-accounts/balances`），`sales` 只能呼叫不含餘額欄位的 `GET /api/cash-accounts/options`
 
+`GET /api/money-entries` 與 `GET /api/vehicles/{vehicle}/money-entries` 的 `cash_account_id` 篩選僅限 `admin`／`manager`；`sales` 只要傳入此欄位（含空值）就回欄位驗證錯誤 `422`。
+
 判斷依據為 `User::canViewFinancials()`（`role` 為 `admin` 或 `manager` 時為 `true`）。
 
 `VehicleResource` 的 `asking_price`（開價）、`floor_price`（底價）、`sold_price`（成交價）**不在**上述遮蔽清單內：`sales` 可以看到這三個欄位，因為這是業務跟客人談價錢、追蹤收款的依據。判斷依據為 `User::canViewSalesPricing()`（`role` 為 `admin`、`manager` 或 `sales` 時為 `true`）。`sales` 仍看不到 `purchase_price`（收購價）、購車付款、完整整備成本、單車毛利、資金帳戶餘額、完整收支金額、他人上報的成本明細。
 
-`GET /api/vehicles/{vehicle}` 對 `sales` 回傳的 payload 不含管理用 `summary`（單車收入/支出合計、毛利），改為 `sales_collection_summary`（銷售收款安全摘要，只計入訂金/尾款收入與退款，見下方車輛模組章節），`money_entries` 也只包含銷售收款安全紀錄與自己上報的車輛支出申請，不含購車付款或他人成本明細。未知角色（`role` 不在 `admin`/`manager`/`sales` 內）一律 fail-closed：不回傳 `summary`、`sales_collection_summary`，`money_entries` 為空陣列。
+`GET /api/vehicles/{vehicle}` 對 `sales` 回傳的 payload 不含管理用 `summary`（單車收入/支出合計、毛利），改為 `sales_collection_summary`（銷售收款安全摘要，只計入訂金/尾款收入與退款，見下方車輛模組章節），`money_entries` 也只包含銷售收款安全紀錄與自己上報的車輛支出申請，不含購車付款或他人成本明細。未知角色（`role` 不在 `admin`/`manager`/`sales` 內）讀取內部車輛列表、詳情、車輛收支與照片一律回 `403`。
 
 v1.3 Phase 1 起，`source_type=salary_settlement` 的薪資支出只對 `admin` 可見。`manager`／`sales` 不會在一般 Money Entry 列表取得這些紀錄，也不能用 ID 枚舉單筆；Resource 另有防禦性遮蔽，不向非 admin 輸出金額、資金帳戶、員工姓名、說明或審核欄位。
 
@@ -134,6 +136,8 @@ Request body 採完整表單提交：
 ```
 
 成功後密碼與 `must_change_password=false` 會在同一個 database transaction 保存；若請求具有 Session，會保留目前登入狀態並 regenerate Session ID，再回傳更新後 `UserResource`。目前密碼不是字串、目前密碼錯誤、新舊密碼相同或 confirmation 不符時回對應欄位的 `422`。
+
+目前密碼驗證與登入共用帳號級額度：15 分鐘內最多 10 次失敗，跨 Session、IP、username／Email 共用。超限回 `429` 與 `Retry-After` 秒數，正確密碼也需等待額度恢復。完整改密碼成功後清除此帳號額度；目前密碼正確但新密碼格式不符不增加失敗次數，也不清除先前失敗次數。
 
 `name`、`username`、`email`、`role`、`is_admin`、`is_active`、`phone`、`job_title`、`hire_date`、`notes`、`must_change_password` 只要出現在 payload 就回 `422`，不會被靜默忽略。Request、response 與 Audit Log 均不會保存或回傳密碼值。
 

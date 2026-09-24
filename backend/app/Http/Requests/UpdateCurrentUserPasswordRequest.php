@@ -3,6 +3,8 @@
 namespace App\Http\Requests;
 
 use App\Models\User;
+use App\Services\AuthService;
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateCurrentUserPasswordRequest extends FormRequest
@@ -29,7 +31,11 @@ class UpdateCurrentUserPasswordRequest extends FormRequest
     public function rules(): array
     {
         $rules = [
-            'current_password' => ['bail', 'required', 'string', 'current_password:web'],
+            'current_password' => ['bail', 'required', 'string', function (string $attribute, mixed $value, Closure $fail): void {
+                if (! app(AuthService::class)->checkCurrentPassword($this->user(), $value)) {
+                    $fail('目前密碼不正確');
+                }
+            }],
             'password' => ['required', 'string', 'min:8', 'confirmed', 'different:current_password'],
         ];
 
@@ -45,7 +51,6 @@ class UpdateCurrentUserPasswordRequest extends FormRequest
         $messages = [
             'current_password.required' => '請輸入目前密碼',
             'current_password.string' => '目前密碼格式不正確',
-            'current_password.current_password' => '目前密碼不正確',
             'password.required' => '請輸入新密碼',
             'password.string' => '新密碼格式不正確',
             'password.min' => '新密碼至少需要 8 個字元',

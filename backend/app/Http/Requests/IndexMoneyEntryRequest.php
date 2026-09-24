@@ -15,7 +15,9 @@ class IndexMoneyEntryRequest extends FormRequest
     {
         return [
             'vehicle_id' => ['nullable', 'integer', 'exists:vehicles,id'],
-            'cash_account_id' => ['nullable', 'integer', 'exists:cash_accounts,id'],
+            'cash_account_id' => $this->user()?->canViewFinancials()
+                ? ['nullable', 'integer', 'exists:cash_accounts,id']
+                : ['missing'],
             'direction' => ['nullable', 'string', 'in:income,expense'],
             'category' => ['nullable', 'string', 'max:255'],
             'approval_status' => ['nullable', 'string', 'in:approved,pending,rejected'],

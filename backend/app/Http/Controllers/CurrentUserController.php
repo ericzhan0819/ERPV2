@@ -5,12 +5,14 @@ namespace App\Http\Controllers;
 use App\Http\Requests\UpdateCurrentUserPasswordRequest;
 use App\Http\Requests\UpdateCurrentUserProfileRequest;
 use App\Http\Resources\UserResource;
+use App\Services\AuthService;
 use App\Services\UserService;
 
 class CurrentUserController extends Controller
 {
     public function __construct(
         private readonly UserService $userService,
+        private readonly AuthService $authService,
     ) {}
 
     public function updateProfile(UpdateCurrentUserProfileRequest $request): UserResource
@@ -26,6 +28,8 @@ class CurrentUserController extends Controller
             $request->user(),
             $request->validated('password'),
         );
+
+        $this->authService->clearAccountAttempts($user);
 
         if ($request->hasSession()) {
             $request->session()->regenerate();

@@ -7,8 +7,10 @@ use App\Exceptions\TooManyLoginAttemptsException;
 use App\Models\User;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
 use Throwable;
 
 class AuthService
@@ -116,6 +118,33 @@ class AuthService
             'identifier_ip' => ['login:identifier_ip:'.$canonicalIdentity.'|'.$ip, self::MAX_IDENTIFIER_IP_ATTEMPTS, self::IDENTIFIER_IP_DECAY_SECONDS],
             'account' => ['login:account:'.$canonicalIdentity, self::MAX_ACCOUNT_ATTEMPTS, self::ACCOUNT_DECAY_SECONDS],
         ];
+    }
+
+    public function checkCurrentPassword(User $user, string $password): bool
+    {
+        $key = 'login:account:uid:'.$user->id;
+
+        // 與登入共用帳號額度，先占用再驗證，避免並行猜測繞過上限。
+        if (RateLimiter::hit($key, self::ACCOUNT_DECAY_SECONDS) > self::MAX_ACCOUNT_ATTEMPTS) {
+            throw new TooManyRequestsHttpException(
+                RateLimiter::availableIn($key),
+                '密碼驗證次數過多，請稍後再試',
+            );
+        }
+
+        if (! Hash::check($password, $user->getAuthPassword())) {
+            return false;
+        }
+
+        // 正確的目前密碼不算失敗；完整改密碼成功後才清除先前失敗次數。
+        RateLimiter::decrement($key);
+
+        return true;
+    }
+
+    public function clearAccountAttempts(User $user): void
+    {
+        RateLimiter::clear('login:account:uid:'.$user->id);
     }
 
     private function normalizeLogin(string $login): string
