@@ -6,6 +6,7 @@ use App\Models\CashAccount;
 use App\Models\MoneyEntry;
 use App\Models\User;
 use App\Models\Vehicle;
+use App\Support\MoneyMath;
 use App\Support\VehicleMoneyCategories;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\QueryException;
@@ -235,13 +236,15 @@ class MoneyEntryService
                 $this->assertVehicleMutable((int) $lockedEntry->vehicle_id);
             }
 
-            $newVehicleId = isset($data['vehicle_id']) ? (int) $data['vehicle_id'] : null;
+            $newVehicleId = array_key_exists('vehicle_id', $data)
+                ? ($data['vehicle_id'] !== null ? (int) $data['vehicle_id'] : null)
+                : $lockedEntry->vehicle_id;
             if ($newVehicleId !== null && $newVehicleId !== (int) $lockedEntry->vehicle_id) {
                 $this->assertVehicleMutable($newVehicleId);
             }
 
             $this->assertCashAccountActive((int) $data['cash_account_id']);
-            $this->assertCategoryRules($data['category'], $data['direction'], $data['vehicle_id'] ?? null);
+            $this->assertCategoryRules($data['category'], $data['direction'], $newVehicleId);
 
             $lockedEntry->fill($data);
             $lockedEntry->updated_by = $userId;
@@ -276,12 +279,13 @@ class MoneyEntryService
         });
     }
 
-    public function approve(MoneyEntry $entry, int $approverId): MoneyEntry
+    public function approve(MoneyEntry $entry, int $approverId, string $expectedReviewToken): MoneyEntry
     {
-        return DB::transaction(function () use ($entry, $approverId) {
+        return DB::transaction(function () use ($entry, $approverId, $expectedReviewToken) {
             $lockedEntry = MoneyEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
 
             $this->assertPendingApprovableEntry($lockedEntry, '核准');
+            abort_unless(hash_equals($lockedEntry->reviewToken(), $expectedReviewToken), 409, '收支內容已變更，請重新確認後再審核');
             $this->lockVehicleForApprovalAndAssertCollectionInvariant($lockedEntry);
 
             $lockedEntry->approval_status = MoneyEntry::APPROVAL_APPROVED;
@@ -293,12 +297,13 @@ class MoneyEntryService
         });
     }
 
-    public function reject(MoneyEntry $entry, int $approverId): MoneyEntry
+    public function reject(MoneyEntry $entry, int $approverId, string $expectedReviewToken): MoneyEntry
     {
-        return DB::transaction(function () use ($entry, $approverId) {
+        return DB::transaction(function () use ($entry, $approverId, $expectedReviewToken) {
             $lockedEntry = MoneyEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
 
             $this->assertPendingApprovableEntry($lockedEntry, '駁回');
+            abort_unless(hash_equals($lockedEntry->reviewToken(), $expectedReviewToken), 409, '收支內容已變更，請重新確認後再審核');
 
             $lockedEntry->approval_status = MoneyEntry::APPROVAL_REJECTED;
             $lockedEntry->approved_by = $approverId;
@@ -517,41 +522,23 @@ class MoneyEntryService
      */
     public function balanceForAccount(CashAccount $cashAccount): int
     {
-        $income = (int) MoneyEntry::query()
-            ->approved()
-            ->where('cash_account_id', $cashAccount->id)
-            ->where('direction', 'income')
-            ->sum('amount');
+        $entries = MoneyEntry::query()->approved()->where('cash_account_id', $cashAccount->id);
+        $income = MoneyMath::sum((clone $entries)->where('direction', 'income'), 'amount');
+        $expense = MoneyMath::sum((clone $entries)->where('direction', 'expense'), 'amount');
 
-        $expense = (int) MoneyEntry::query()
-            ->approved()
-            ->where('cash_account_id', $cashAccount->id)
-            ->where('direction', 'expense')
-            ->sum('amount');
-
-        return (int) $cashAccount->opening_balance + $income - $expense;
+        return MoneyMath::add((int) $cashAccount->opening_balance, MoneyMath::subtract($income, $expense));
     }
 
-    /**
-     * 依帳戶類型（現金／銀行／其他）加總所有同類型帳戶的目前餘額，供 Dashboard 卡片使用。
-     */
+    /** Sum approved balances for all accounts of the requested type. */
     public function balanceForType(string $type): int
     {
-        $openingBalance = (int) CashAccount::query()->where('type', $type)->sum('opening_balance');
+        $openingBalance = MoneyMath::sum(CashAccount::query()->where('type', $type), 'opening_balance');
+        $entries = MoneyEntry::query()->approved()
+            ->whereHas('cashAccount', fn ($query) => $query->where('type', $type));
+        $income = MoneyMath::sum((clone $entries)->where('direction', 'income'), 'amount');
+        $expense = MoneyMath::sum((clone $entries)->where('direction', 'expense'), 'amount');
 
-        $income = (int) MoneyEntry::query()
-            ->approved()
-            ->whereHas('cashAccount', fn ($query) => $query->where('type', $type))
-            ->where('direction', 'income')
-            ->sum('amount');
-
-        $expense = (int) MoneyEntry::query()
-            ->approved()
-            ->whereHas('cashAccount', fn ($query) => $query->where('type', $type))
-            ->where('direction', 'expense')
-            ->sum('amount');
-
-        return $openingBalance + $income - $expense;
+        return MoneyMath::add($openingBalance, MoneyMath::subtract($income, $expense));
     }
 
     private function assertVehicleMutable(int $vehicleId): void

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\MoneyMath;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreVehicleRequest extends FormRequest
@@ -51,7 +52,7 @@ class StoreVehicleRequest extends FormRequest
             // 85~100 字元的合法 key。
             'idempotency_key' => ['required', 'string', 'max:'.($this->hasInitialPurchasePayment() ? 84 : 100)],
             'initial_purchase_payment' => ['nullable', 'array'],
-            'initial_purchase_payment.amount' => ['required_with:initial_purchase_payment', 'integer', 'min:1'],
+            'initial_purchase_payment.amount' => ['required_with:initial_purchase_payment', 'integer', 'min:1', 'max:'.MoneyMath::MAX_AMOUNT],
             'initial_purchase_payment.cash_account_id' => ['required_with:initial_purchase_payment', 'integer', 'exists:cash_accounts,id'],
             'initial_purchase_payment.entry_date' => ['nullable', 'date'],
             'initial_purchase_payment.description' => ['nullable', 'string'],
@@ -61,5 +62,12 @@ class StoreVehicleRequest extends FormRequest
     private function hasInitialPurchasePayment(): bool
     {
         return ! empty($this->input('initial_purchase_payment'));
+    }
+
+    public function messages(): array
+    {
+        return [
+            'initial_purchase_payment.amount.max' => '金額不得超過 999,999,999,999 元',
+        ];
     }
 }

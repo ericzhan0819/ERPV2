@@ -3,13 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\IndexMoneyEntryRequest;
+use App\Http\Requests\ReviewMoneyEntryRequest;
 use App\Http\Requests\StoreMoneyEntryRequest;
 use App\Http\Requests\UpdateMoneyEntryRequest;
 use App\Http\Resources\MoneyEntryResource;
 use App\Models\MoneyEntry;
 use App\Services\MoneyEntryService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class MoneyEntryController extends Controller
@@ -49,16 +49,16 @@ class MoneyEntryController extends Controller
         return response()->json(['message' => '收支紀錄已刪除']);
     }
 
-    public function approve(Request $request, MoneyEntry $moneyEntry): MoneyEntryResource
+    public function approve(ReviewMoneyEntryRequest $request, MoneyEntry $moneyEntry): MoneyEntryResource
     {
-        $entry = $this->moneyEntryService->approve($moneyEntry, $request->user()->id);
+        $entry = $this->moneyEntryService->approve($moneyEntry, $request->user()->id, $request->validated('expected_review_token'));
 
         return new MoneyEntryResource($entry->load(['vehicle:id,stock_no,brand,model', 'cashAccount:id,name,type']));
     }
 
-    public function reject(Request $request, MoneyEntry $moneyEntry): MoneyEntryResource
+    public function reject(ReviewMoneyEntryRequest $request, MoneyEntry $moneyEntry): MoneyEntryResource
     {
-        $entry = $this->moneyEntryService->reject($moneyEntry, $request->user()->id);
+        $entry = $this->moneyEntryService->reject($moneyEntry, $request->user()->id, $request->validated('expected_review_token'));
 
         return new MoneyEntryResource($entry->load(['vehicle:id,stock_no,brand,model', 'cashAccount:id,name,type']));
     }

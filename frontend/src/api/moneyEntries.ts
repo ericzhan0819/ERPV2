@@ -11,12 +11,12 @@ export async function createMoneyEntry(payload: CreateMoneyEntryPayload): Promis
   return data.data
 }
 
-export async function approveMoneyEntry(id: number): Promise<MoneyEntry> {
-  const { data } = await apiClient.patch<{ data: MoneyEntry }>(`/api/money-entries/${id}/approve`)
+export async function approveMoneyEntry(id: number, expectedReviewToken: string): Promise<MoneyEntry> {
+  const { data } = await apiClient.patch<{ data: MoneyEntry }>(`/api/money-entries/${id}/approve`, { expected_review_token: expectedReviewToken })
   return data.data
 }
 
-export async function rejectMoneyEntry(id: number): Promise<MoneyEntry> {
-  const { data } = await apiClient.patch<{ data: MoneyEntry }>(`/api/money-entries/${id}/reject`)
+export async function rejectMoneyEntry(id: number, expectedReviewToken: string): Promise<MoneyEntry> {
+  const { data } = await apiClient.patch<{ data: MoneyEntry }>(`/api/money-entries/${id}/reject`, { expected_review_token: expectedReviewToken })
   return data.data
 }

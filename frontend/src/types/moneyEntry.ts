@@ -16,6 +16,7 @@ export interface MoneyEntryCashAccountRef {
 }
 
 export interface MoneyEntry {
+  review_token?: string
   id: number
   entry_date: string
   direction: MoneyDirection

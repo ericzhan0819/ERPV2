@@ -6,6 +6,14 @@ The format is based on Keep a Changelog, and this project uses Semantic Versioni
 
 ## [Unreleased]
 
+### Fixed
+
+- Validate money-entry categories against the final vehicle binding when updates omit `vehicle_id`.
+- Require a current `expected_review_token` for approval and rejection; API clients must send the admin-only `review_token` returned when reading the entry.
+- Show approval errors and refresh stale lists on 409 / 422 responses.
+- Limit individual money-entry amounts and opening balances to 999999999999, and detect unsafe account, dashboard, vehicle, and salary-period aggregates. Salary confirmation and payment enforce the same per-entry limit.
+- Calculate final-payment warnings using approved deposits and final payments less approved refunds, matching sale-closing collections.
+
 ### Security
 
 - Reject unknown roles when reading internal vehicles, vehicle money entries, and photos.

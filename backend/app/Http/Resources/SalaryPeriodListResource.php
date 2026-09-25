@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Support\MoneyMath;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -29,7 +30,7 @@ class SalaryPeriodListResource extends JsonResource
     private function aggregateValue(string $attribute, string $relation, ?string $sumField = null): ?int
     {
         if (array_key_exists($attribute, $this->resource->getAttributes())) {
-            return (int) $this->resource->getAttribute($attribute);
+            return MoneyMath::integer($this->resource->getAttribute($attribute) ?? 0);
         }
 
         if (! $this->resource->relationLoaded($relation)) {
@@ -38,6 +39,6 @@ class SalaryPeriodListResource extends JsonResource
 
         return $sumField === null
             ? $this->resource->getRelation($relation)->count()
-            : (int) $this->resource->getRelation($relation)->sum($sumField);
+            : MoneyMath::total($this->resource->getRelation($relation)->pluck($sumField));
     }
 }

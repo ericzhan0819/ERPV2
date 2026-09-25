@@ -500,7 +500,7 @@ reservation 的冪等比較包含正式 `sales_agent_id`；同一把 key 改傳�
 { "vehicle": { /* VehicleResource */ }, "warning": null }
 ```
 
-`warning` 於尾款加訂金總額與成交價不符時回傳提示文字，不阻擋操作。
+`warning` 以「已核准訂金＋尾款－已核准退款」淨收款與成交價比較，不包含其他單車收入、pending 或 rejected 紀錄；金額不符時回傳提示文字，不阻擋操作。此公式與成交結案相同（警告比較是否相等，結案檢查是否收足）。
 
 ### POST /api/vehicles/{id}/close-sale — 成交結案
 
@@ -594,6 +594,8 @@ Query 參數（`IndexMoneyEntryRequest`）：`vehicle_id`、`cash_account_id`、
 
 ### POST /api/money-entries
 
+一般收支與車輛快捷／工作流的單筆收支金額（含 `deposit_amount`、`initial_purchase_payment.amount`）上限為 `999999999999`，超過回傳 422。
+
 Request body（`StoreMoneyEntryRequest`）：
 
 | 欄位 | 型別 | 必填 | 說明 |
@@ -616,7 +618,7 @@ Request body（`StoreMoneyEntryRequest`）：
 
 ### PATCH /api/money-entries/{id}
 
-Request body（`UpdateMoneyEntryRequest`）：同 Store，但不含 `idempotency_key`。
+Request body（`UpdateMoneyEntryRequest`）：同 Store，但不含 `idempotency_key`。省略 `vehicle_id` 時保留既有關聯；明確傳入 `null` 才解除關聯。分類規則以更新後的最終關聯檢查。
 
 回傳：`MoneyEntryResource`。
 
@@ -636,21 +638,23 @@ Request body（`UpdateMoneyEntryRequest`）：同 Store，但不含 `idempotency
 
 ### PATCH /api/money-entries/{id}/approve — 僅限管理員
 
-不需 request body。將 `approval_status` 改為 `approved`，並記錄 `approved_by`（核准者 id）與 `approved_at`（核准時間）。
+Request body：`expected_review_token`（必填，64 位小寫十六進位字串），使用管理員讀取該筆 `MoneyEntryResource.review_token` 的值。將 `approval_status` 改為 `approved`，並記錄 `approved_by`（核准者 id）與 `approved_at`（核准時間）。
 
-錯誤：`422` — `source_type=legacy_unknown`，或目前狀態不是 `pending`。
+錯誤：`409` — 加鎖後內容與審核 token 不符，狀態維持不變；需重新取得並確認內容後再審核。`422` — token 缺少或格式錯誤、來源不允許審核，或目前狀態不是 `pending`。核准另會拒絕已結案／取消車輛的訂金、尾款或退款。前端遇到 409／422 顯示後端原因並重新載入清單，不自動重送審核。
 
 回傳：`MoneyEntryResource`。
 
 ### PATCH /api/money-entries/{id}/reject — 僅限管理員
 
-不需 request body（無「駁回原因」欄位）。將 `approval_status` 改為 `rejected`，`approved_by`／`approved_at` 同樣會記錄為駁回當下的操作者與時間（欄位沿用同一組，approve 與 reject 共用）。
+Request body：`expected_review_token`（格式同核准端點；無「駁回原因」欄位）。將 `approval_status` 改為 `rejected`，`approved_by`／`approved_at` 同樣會記錄為駁回當下的操作者與時間（欄位沿用同一組，approve 與 reject 共用）。
 
-錯誤：`422` — `source_type=legacy_unknown`，或目前狀態不是 `pending`。
+錯誤：`409` — 加鎖後內容與審核 token 不符，狀態維持不變；需重新取得並確認內容後再審核。`422` — token 缺少或格式錯誤、來源不允許審核，或目前狀態不是 `pending`。核准另會拒絕已結案／取消車輛的訂金、尾款或退款。前端遇到 409／422 顯示後端原因並重新載入清單，不自動重送審核。
 
 回傳：`MoneyEntryResource`。
 
 ### MoneyEntryResource
+
+`review_token` 僅對 admin 輸出，其他角色完全省略。token 綁定紀錄 ID、金額、帳戶、分類、日期、車輛關聯、對象、說明、來源、審核狀態與建立／更新者；同一秒內編輯仍會使舊內容 token 失效。核准／駁回端點現在必須帶 token，呼叫端須同步更新；舊客戶端不帶 token 會回 422。
 
 ```json
 {
@@ -681,7 +685,7 @@ Request body（`UpdateMoneyEntryRequest`）：同 Store，但不含 `idempotency
 
 帳戶類型：`cash`（現金）、`bank`（銀行）、`other`（其他）。
 
-帳戶目前餘額不儲存在資料庫，即時計算：`目前餘額 = 期初餘額 + approved 收入總額 - approved 支出總額`。
+帳戶目前餘額不儲存在資料庫，即時計算：`目前餘額 = 期初餘額 + approved 收入總額 - approved 支出總額`。新增／編輯的 `opening_balance` 範圍為 `0..999999999999`。帳戶餘額、Dashboard 月收支／毛利／現金趨勢、單車財務與銷售收款摘要、薪資月份合計採安全整數彙總；超出 PHP 整數範圍時回傳 422，不截斷、不轉為浮點數。
 
 ### GET /api/cash-accounts/options — admin / manager / sales
 
@@ -1192,7 +1196,7 @@ Request body：
 }
 ```
 
-`type` 只接受 `manual_addition` 或 `manual_deduction`，`amount` 必須為正整數，`description` 必填且最多 255 字元。前端不得指定 settlement、vehicle、snapshot、totals 或狀態欄位。回應與月份詳情使用相同 item 欄位集合；手動項目固定包含 `vehicle_id: null` 與 `vehicle: null`，不會因 relation 未預載而省略 key。
+`type` 只接受 `manual_addition` 或 `manual_deduction`，`amount` 必須為正整數且不得超過 `999999999999`，`description` 必填且最多 255 字元。前端不得指定 settlement、vehicle、snapshot、totals 或狀態欄位。回應與月份詳情使用相同 item 欄位集合；手動項目固定包含 `vehicle_id: null` 與 `vehicle: null`，不會因 relation 未預載而省略 key。
 
 ### DELETE /api/salary-periods/{salaryPeriod}/adjustments/{item}
 
@@ -1203,6 +1207,8 @@ Request body：
 重新鎖定整月候選車、驗證資格、重算並比對草稿 snapshot；全部一致且沒有阻擋異常／負薪後，將月份確認鎖定並回傳完整月份。只有 draft 可執行，Request 不接受任何業務 payload。結算月份若尚未結束，即使是 draft 也回傳 `422 salary_period`；當月只能建立與重算預估，必須等下個月才能確認。
 
 ### POST /api/salary-periods/{salaryPeriod}/pay
+
+薪資確認與發薪亦檢查每人的 `net_pay <= 999999999999`；超過回傳 422，整批不寫入薪資收支。確認前可修正草稿；既有 confirmed 快照仍保持鎖定，不會自動調整或拆分超額薪資。
 
 對 confirmed 月份執行整批發薪，成功或相同 payload replay 均回傳 `200` 與 paid 月份。
 

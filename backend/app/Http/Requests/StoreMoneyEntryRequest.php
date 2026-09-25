@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Services\MoneyEntryService;
+use App\Support\MoneyMath;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreMoneyEntryRequest extends FormRequest
@@ -18,12 +19,19 @@ class StoreMoneyEntryRequest extends FormRequest
             'entry_date' => ['required', 'date'],
             'direction' => ['required', 'string', 'in:income,expense'],
             'category' => ['required', 'string', 'in:'.implode(',', MoneyEntryService::categories())],
-            'amount' => ['required', 'integer', 'min:1'],
+            'amount' => ['required', 'integer', 'min:1', 'max:'.MoneyMath::MAX_AMOUNT],
             'cash_account_id' => ['required', 'integer', 'exists:cash_accounts,id'],
             'vehicle_id' => ['nullable', 'integer', 'exists:vehicles,id'],
             'counterparty_name' => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'idempotency_key' => ['required', 'string', 'max:100'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'amount.max' => '金額不得超過 999,999,999,999 元',
         ];
     }
 }

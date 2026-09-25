@@ -1,3 +1,4 @@
+import { isAxiosError } from 'axios'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { SlidersHorizontal } from 'lucide-react'
@@ -171,6 +172,7 @@ export function MoneyEntryList() {
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [reviewError, setReviewError] = useState<string | null>(null)
   const [focusPageError, setFocusPageError] = useState(false)
   const [reviewingId, setReviewingId] = useState<number | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
@@ -178,6 +180,7 @@ export function MoneyEntryList() {
   const [draftFilters, setDraftFilters] = useState<MoneyEntryListFilters>(() => ({ ...filters }))
   const filterDrawerTriggerRef = useRef<HTMLButtonElement>(null)
   const requestSequenceRef = useRef(0)
+  const reviewErrorRef = useRef<string | null>(null)
   const reviewRefreshPendingRef = useRef(false)
   const hasActiveFilters = hasActiveMoneyEntryListFilters(filters)
   const isPageOutOfRange = Boolean(meta && filters.page > meta.last_page)
@@ -242,8 +245,10 @@ export function MoneyEntryList() {
     const isReviewRefresh = reviewRefreshPendingRef.current
     reviewRefreshPendingRef.current = false
     setLoading(true)
-    setFocusPageError(false)
+    setFocusPageError(reviewErrorRef.current !== null)
     setError(null)
+    setReviewError(reviewErrorRef.current)
+    reviewErrorRef.current = null
     setMeta(null)
     listMoneyEntries({
       search: filters.search || undefined,
@@ -290,31 +295,46 @@ export function MoneyEntryList() {
     refreshToken,
   ])
 
-  async function handleApprove(id: number) {
-    setReviewingId(id)
+  function handleReviewError(err: unknown, fallback: string) {
+    const message = isAxiosError<{ message?: string; errors?: Record<string, string[]> }>(err)
+      ? Object.values(err.response?.data.errors ?? {}).flat()[0] || err.response?.data.message || fallback
+      : fallback
+    setReviewError(message)
+    if (isAxiosError(err) && [409, 422].includes(err.response?.status ?? 0)) {
+      reviewErrorRef.current = message
+      setRefreshToken((token) => token + 1)
+    }
+  }
+
+  async function handleApprove(entry: MoneyEntry) {
+    setReviewError(null)
+    setReviewingId(entry.id)
     setFocusPageError(true)
     setError(null)
     try {
-      await approveMoneyEntry(id)
+      if (!entry.review_token) throw new Error('Missing review token')
+      await approveMoneyEntry(entry.id, entry.review_token)
       reviewRefreshPendingRef.current = true
       setRefreshToken((token) => token + 1)
-    } catch {
-      setError('核准失敗，請稍後再試')
+    } catch (err) {
+      handleReviewError(err, '核准失敗，請稍後再試')
     } finally {
       setReviewingId(null)
     }
   }
 
-  async function handleReject(id: number) {
-    setReviewingId(id)
+  async function handleReject(entry: MoneyEntry) {
+    setReviewError(null)
+    setReviewingId(entry.id)
     setFocusPageError(true)
     setError(null)
     try {
-      await rejectMoneyEntry(id)
+      if (!entry.review_token) throw new Error('Missing review token')
+      await rejectMoneyEntry(entry.id, entry.review_token)
       reviewRefreshPendingRef.current = true
       setRefreshToken((token) => token + 1)
-    } catch {
-      setError('駁回失敗，請稍後再試')
+    } catch (err) {
+      handleReviewError(err, '駁回失敗，請稍後再試')
     } finally {
       setReviewingId(null)
     }
@@ -425,7 +445,7 @@ export function MoneyEntryList() {
         />
       </MobileFilterDrawer>
 
-      <FormAlert message={error} focusOnShow={focusPageError} />
+      <FormAlert message={[reviewError, error].filter(Boolean).join(' ') || null} focusOnShow={focusPageError} />
 
       <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
         <table className="min-w-full divide-y divide-border text-sm">
@@ -522,7 +542,7 @@ export function MoneyEntryList() {
                           <button
                             type="button"
                             disabled={reviewingId === entry.id}
-                            onClick={() => handleApprove(entry.id)}
+                            onClick={() => handleApprove(entry)}
                             className="rounded-lg border border-border-strong px-2.5 py-1 text-xs font-medium text-success hover:bg-surface-2 disabled:opacity-50"
                           >
                             核准
@@ -530,7 +550,7 @@ export function MoneyEntryList() {
                           <button
                             type="button"
                             disabled={reviewingId === entry.id}
-                            onClick={() => handleReject(entry.id)}
+                            onClick={() => handleReject(entry)}
                             className="rounded-lg border border-border-strong px-2.5 py-1 text-xs font-medium text-error hover:bg-surface-2 disabled:opacity-50"
                           >
                             駁回

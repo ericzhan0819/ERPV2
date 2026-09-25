@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\User;
+use App\Support\MoneyMath;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -20,7 +21,7 @@ class ReserveVehicleRequest extends FormRequest
             'buyer_phone' => ['nullable', 'string', 'max:255'],
             'buyer_customer_id' => ['nullable', 'integer', 'exists:customers,id'],
             'sold_price' => ['required', 'integer', 'min:1'],
-            'deposit_amount' => ['required', 'integer', 'min:1'],
+            'deposit_amount' => ['required', 'integer', 'min:1', 'max:'.MoneyMath::MAX_AMOUNT],
             'cash_account_id' => ['required', 'integer', 'exists:cash_accounts,id'],
             'entry_date' => ['nullable', 'date'],
             'description' => ['nullable', 'string'],
@@ -31,6 +32,13 @@ class ReserveVehicleRequest extends FormRequest
                 'integer',
                 'exists:users,id',
             ],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'deposit_amount.max' => '金額不得超過 999,999,999,999 元',
         ];
     }
 }

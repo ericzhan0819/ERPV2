@@ -63,10 +63,10 @@ class SalaryMoneyEntryProtectionTest extends TestCase
         ]);
 
         $this->actingAs($admin, 'web')
-            ->patchJson("/api/money-entries/{$entry->id}/approve")
+            ->patchJson("/api/money-entries/{$entry->id}/approve", ['expected_review_token' => $entry->fresh()->reviewToken()])
             ->assertUnprocessable();
         $this->actingAs($admin, 'web')
-            ->patchJson("/api/money-entries/{$entry->id}/reject")
+            ->patchJson("/api/money-entries/{$entry->id}/reject", ['expected_review_token' => $entry->fresh()->reviewToken()])
             ->assertUnprocessable();
     }
 

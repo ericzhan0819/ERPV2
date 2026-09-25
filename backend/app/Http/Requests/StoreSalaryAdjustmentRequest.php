@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\SalarySettlementItem;
+use App\Support\MoneyMath;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -18,7 +19,7 @@ class StoreSalaryAdjustmentRequest extends FormRequest
         return [
             'user_id' => ['required', 'integer', 'exists:users,id'],
             'type' => ['required', Rule::in(SalarySettlementItem::MANUAL_TYPES)],
-            'amount' => ['required', 'integer', 'min:1'],
+            'amount' => ['required', 'integer', 'min:1', 'max:'.MoneyMath::MAX_AMOUNT],
             'description' => ['required', 'string', 'max:255'],
             'salary_period_id' => ['missing'],
             'salary_settlement_id' => ['missing'],
@@ -52,6 +53,7 @@ class StoreSalaryAdjustmentRequest extends FormRequest
             '*.integer' => ':attribute 必須是整數',
             '*.exists' => '指定的:attribute不存在',
             'type.in' => '項目類型只允許其他加給或其他扣款',
+            'amount.max' => '金額不得超過 999,999,999,999 元',
             'amount.min' => '金額必須大於 0',
             'description.max' => '說明不可超過 255 個字元',
             '*.missing' => ':attribute 不允許由前端寫入',

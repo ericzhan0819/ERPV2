@@ -567,6 +567,7 @@ class SalarySettingsMysqlConcurrencyTest extends TestCase
             $entry = app(MoneyEntryService::class)->approve(
                 MoneyEntry::query()->findOrFail($moneyEntryId),
                 $adminId,
+                MoneyEntry::query()->findOrFail($moneyEntryId)->reviewToken(),
             );
             $this->writeChildResult($resultPath, [
                 'ok' => true,

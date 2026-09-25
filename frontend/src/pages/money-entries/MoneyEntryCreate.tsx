@@ -73,6 +73,7 @@ export function MoneyEntryCreate() {
     if (!category) nextFieldErrors.category = '請選擇分類'
     if (!cashAccountId) nextFieldErrors.cashAccountId = '請選擇資金帳戶'
     if (!amount || Number(amount) <= 0) nextFieldErrors.amount = '金額必須大於 0'
+    else if (Number(amount) > 999999999999) nextFieldErrors.amount = '金額不得超過 999,999,999,999 元'
     setFieldErrors(nextFieldErrors)
     if (Object.keys(nextFieldErrors).length > 0) {
       setValidationAttempt((current) => current + 1)
@@ -100,7 +101,13 @@ export function MoneyEntryCreate() {
       await createMoneyEntry(payload)
       navigate('/money-entries')
     } catch (err) {
-      setError(extractErrorMessage(err, '新增收支失敗，請稍後再試'))
+      const amountError = isAxiosError<{ errors?: { amount?: string[] } }>(err) ? err.response?.data.errors?.amount?.[0] : undefined
+      if (amountError) {
+        setFieldErrors((current) => ({ ...current, amount: amountError }))
+        setValidationAttempt((current) => current + 1)
+      } else {
+        setError(extractErrorMessage(err, '新增收支失敗，請稍後再試'))
+      }
     } finally {
       setSubmitting(false)
     }

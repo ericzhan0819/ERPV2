@@ -89,6 +89,39 @@ class SalaryHttpBoundaryTest extends TestCase
         $this->assertFalse((new SalarySettlementPolicy)->deleteAdjustment($unknown, $settlement));
     }
 
+    public function test_oversized_draft_totals_fail_explicitly_in_list_and_detail(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $period = $this->period($admin);
+        foreach (range(1, 2) as $index) {
+            SalarySettlement::query()->create([
+                'salary_period_id' => $period->id,
+                'user_id' => User::factory()->create()->id,
+                'net_pay' => PHP_INT_MAX,
+                'gross_pay' => PHP_INT_MAX,
+            ]);
+        }
+        $this->actingAs($admin, 'web')->getJson('/api/salary-periods')
+            ->assertUnprocessable()->assertJsonValidationErrors('amount');
+        $this->getJson("/api/salary-periods/{$period->id}")
+            ->assertUnprocessable()->assertJsonValidationErrors('amount');
+
+        // The list resource also accepts preloaded relations without a SQL aggregate.
+        try {
+            (new SalaryPeriodListResource($period->load('settlements')))->resolve(request());
+            $this->fail('A collection total must not overflow to a float or zero');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('amount', $exception->errors());
+        }
+        $period->setAttribute('settlements_sum_net_pay', '18446744073709551614');
+        try {
+            (new SalaryPeriodListResource($period))->resolve(request());
+            $this->fail('A decimal SQL total must not be truncated');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('amount', $exception->errors());
+        }
+    }
+
     public function test_salary_requests_accept_only_business_inputs_and_reject_system_fields_with_chinese_messages(): void
     {
         $user = User::factory()->create();

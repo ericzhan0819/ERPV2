@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\CashAccount;
 use App\Models\MoneyEntry;
 use App\Models\Vehicle;
+use App\Support\MoneyMath;
 use App\Support\TaipeiMonthRange;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -62,7 +63,7 @@ class DashboardService
         $monthlySoldVehicles = $this->soldVehiclesForPeriod($monthStart, $nextMonthStart);
         $trendSoldVehicles = $this->soldVehiclesForPeriod($trendStart, $tomorrow);
 
-        $monthlyGrossProfit = array_sum($this->grossProfitsByVehicle($monthlySoldVehicles->pluck('id')));
+        $monthlyGrossProfit = MoneyMath::total($this->grossProfitsByVehicle($monthlySoldVehicles->pluck('id')));
         $trendGrossProfits = $this->grossProfitsByVehicle($trendSoldVehicles->pluck('id'));
 
         $workOverview = [
@@ -98,12 +99,11 @@ class DashboardService
 
     private function approvedAmountForPeriod(string $direction, Carbon $start, Carbon $end): int
     {
-        return (int) MoneyEntry::query()
+        return MoneyMath::sum(MoneyEntry::query()
             ->approved()
             ->where('direction', $direction)
             ->where('entry_date', '>=', $start->toDateString())
-            ->where('entry_date', '<', $end->toDateString())
-            ->sum('amount');
+            ->where('entry_date', '<', $end->toDateString()), 'amount');
     }
 
     /**
@@ -130,16 +130,16 @@ class DashboardService
             return [];
         }
 
-        return MoneyEntry::query()
+        return MoneyMath::aggregate(fn () => MoneyEntry::query()
             ->approved()
             ->whereIn('vehicle_id', $vehicleIds)
             ->selectRaw("vehicle_id,
                 SUM(CASE WHEN direction = 'income' THEN amount ELSE 0 END) as income_total,
                 SUM(CASE WHEN direction = 'expense' THEN amount ELSE 0 END) as expense_total")
             ->groupBy('vehicle_id')
-            ->get()
+            ->get())
             ->mapWithKeys(fn (MoneyEntry $entry): array => [
-                (int) $entry->vehicle_id => (int) $entry->getAttribute('income_total') - (int) $entry->getAttribute('expense_total'),
+                (int) $entry->vehicle_id => MoneyMath::subtract(MoneyMath::integer($entry->getAttribute('income_total')), MoneyMath::integer($entry->getAttribute('expense_total'))),
             ])
             ->all();
     }
@@ -172,7 +172,7 @@ class DashboardService
 
         foreach ($vehicles as $vehicle) {
             $date = $vehicle->sold_at->toDateString();
-            $dailyAmounts[$date] = ($dailyAmounts[$date] ?? 0) + ($grossProfits[$vehicle->id] ?? 0);
+            $dailyAmounts[$date] = MoneyMath::add($dailyAmounts[$date] ?? 0, $grossProfits[$vehicle->id] ?? 0);
         }
 
         return $this->dateRange($start)
@@ -188,12 +188,11 @@ class DashboardService
      */
     private function cashBalanceTrend(Carbon $start, Carbon $today): array
     {
-        $openingBalance = (int) CashAccount::query()
-            ->where('type', 'cash')
-            ->sum('opening_balance');
+        $openingBalance = MoneyMath::sum(CashAccount::query()
+            ->where('type', 'cash'), 'opening_balance');
 
-        $balanceBeforeRange = $openingBalance + $this->cashNetBefore($start);
-        $dailyNet = MoneyEntry::query()
+        $balanceBeforeRange = MoneyMath::add($openingBalance, $this->cashNetBefore($start));
+        $dailyNet = MoneyMath::aggregate(fn () => MoneyEntry::query()
             ->approved()
             ->join('cash_accounts', 'cash_accounts.id', '=', 'money_entries.cash_account_id')
             ->where('cash_accounts.type', 'cash')
@@ -203,16 +202,16 @@ class DashboardService
                 SUM(CASE WHEN direction = 'income' THEN amount ELSE 0 END) as income_total,
                 SUM(CASE WHEN direction = 'expense' THEN amount ELSE 0 END) as expense_total")
             ->groupBy('entry_date')
-            ->get()
+            ->get())
             ->mapWithKeys(fn (MoneyEntry $entry): array => [
-                $entry->entry_date->toDateString() => (int) $entry->getAttribute('income_total') - (int) $entry->getAttribute('expense_total'),
+                $entry->entry_date->toDateString() => MoneyMath::subtract(MoneyMath::integer($entry->getAttribute('income_total')), MoneyMath::integer($entry->getAttribute('expense_total'))),
             ]);
 
         $balance = $balanceBeforeRange;
 
         return $this->dateRange($start)
             ->map(function (Carbon $date) use (&$balance, $dailyNet): array {
-                $balance += (int) ($dailyNet[$date->toDateString()] ?? 0);
+                $balance = MoneyMath::add($balance, $dailyNet[$date->toDateString()] ?? 0);
 
                 return [
                     'date' => $date->toDateString(),
@@ -224,16 +223,16 @@ class DashboardService
 
     private function cashNetBefore(Carbon $date): int
     {
-        $totals = MoneyEntry::query()
+        $totals = MoneyMath::aggregate(fn () => MoneyEntry::query()
             ->approved()
             ->join('cash_accounts', 'cash_accounts.id', '=', 'money_entries.cash_account_id')
             ->where('cash_accounts.type', 'cash')
             ->where('entry_date', '<', $date->toDateString())
             ->selectRaw("COALESCE(SUM(CASE WHEN direction = 'income' THEN amount ELSE 0 END), 0) as income_total,
                 COALESCE(SUM(CASE WHEN direction = 'expense' THEN amount ELSE 0 END), 0) as expense_total")
-            ->first();
+            ->first());
 
-        return (int) $totals->getAttribute('income_total') - (int) $totals->getAttribute('expense_total');
+        return MoneyMath::subtract(MoneyMath::integer($totals->getAttribute('income_total')), MoneyMath::integer($totals->getAttribute('expense_total')));
     }
 
     /**

@@ -88,6 +88,26 @@ class SalaryPaymentTest extends TestCase
         $this->assertArrayNotHasKey('amount', $audit->after_values);
     }
 
+    public function test_oversized_salary_cannot_be_confirmed_or_paid_as_a_legacy_snapshot(): void
+    {
+        $this->employeeWithProfile('正常員工', 30000);
+        $this->employeeWithProfile('超額員工', 1000000000000);
+        $period = $this->draftPeriod('2026-06');
+        $this->expectValidation(fn () => $this->service->confirm($this->admin, $period), 'net_pay');
+        $this->assertSame(SalaryPeriod::STATUS_DRAFT, $period->fresh()->status);
+        $this->actingAs($this->admin, 'web')->postJson("/api/salary-periods/{$period->id}/adjustments", [
+            'amount' => 1000000000000, 'type' => 'manual_addition', 'description' => '測試',
+        ])->assertUnprocessable()->assertJsonValidationErrors('amount');
+
+        // Simulate an oversized snapshot confirmed before the amount limit existed.
+        DB::table('salary_periods')->where('id', $period->id)->update(['status' => SalaryPeriod::STATUS_CONFIRMED]);
+        $account = CashAccount::factory()->create();
+        $this->expectValidation(fn () => $this->service->pay($this->admin, $period->fresh(), $this->payload($account, 'oversized-pay')), 'net_pay');
+        $this->assertSame(SalaryPeriod::STATUS_CONFIRMED, $period->fresh()->status);
+        $this->assertDatabaseCount('money_entries', 0);
+        $this->assertSame(0, $period->settlements()->whereNotNull('money_entry_id')->count());
+    }
+
     public function test_pay_is_admin_confirmed_only_and_requires_an_active_account(): void
     {
         $this->employeeWithProfile('員工', 30000);

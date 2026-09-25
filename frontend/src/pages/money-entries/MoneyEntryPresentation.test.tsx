@@ -57,6 +57,7 @@ function setRole(role: UserRole) {
 
 const pendingEntry: MoneyEntry = {
   id: 9,
+  review_token: 'a'.repeat(64),
   entry_date: '2026-07-29',
   direction: 'expense',
   category: '一般支出',
@@ -130,6 +131,32 @@ describe('Money entry presentation', () => {
     expect(document.activeElement).toBe(amount)
   })
 
+  it('shows an oversized amount beside the field in Chinese without submitting', async () => {
+    render(<MemoryRouter><MoneyEntryCreate /></MemoryRouter>)
+    await screen.findByRole('option', { name: '營運現金' })
+    fireEvent.change(screen.getByLabelText('金額'), { target: { value: '1000000000000' } })
+    fireEvent.change(screen.getByLabelText('分類'), { target: { value: '一般收入' } })
+    fireEvent.change(screen.getByLabelText('資金帳戶'), { target: { value: '1' } })
+    fireEvent.submit(screen.getByRole('button', { name: '建立收支' }).closest('form')!)
+    expect(document.getElementById('money-entry-amount-error')?.textContent).toBe('金額不得超過 999,999,999,999 元')
+    expect(screen.getByLabelText('金額').getAttribute('aria-describedby')).toBe('money-entry-amount-error')
+    expect(moneyEntriesApi.createMoneyEntry).not.toHaveBeenCalled()
+  })
+
+  it('associates server amount errors with the amount field', async () => {
+    vi.mocked(moneyEntriesApi.createMoneyEntry).mockRejectedValueOnce({
+      isAxiosError: true, response: { status: 422, data: { errors: { amount: ['金額驗證失敗'] } } },
+    })
+    render(<MemoryRouter><MoneyEntryCreate /></MemoryRouter>)
+    await screen.findByRole('option', { name: '營運現金' })
+    fireEvent.change(screen.getByLabelText('金額'), { target: { value: '1000' } })
+    fireEvent.change(screen.getByLabelText('分類'), { target: { value: '一般收入' } })
+    fireEvent.change(screen.getByLabelText('資金帳戶'), { target: { value: '1' } })
+    fireEvent.submit(screen.getByRole('button', { name: '建立收支' }).closest('form')!)
+    expect(await screen.findByText('金額驗證失敗')).toBeTruthy()
+    expect(screen.getByLabelText('金額').getAttribute('aria-describedby')).toBe('money-entry-amount-error')
+  })
+
   it('keeps field validation before exposing and focusing a general API error', async () => {
     const interaction = userEvent.setup()
     vi.mocked(moneyEntriesApi.createMoneyEntry).mockRejectedValue(new Error('network'))
@@ -191,11 +218,47 @@ describe('Money entry presentation', () => {
     expect(within(row!).getByText('待審核')).toBeTruthy()
     expect(within(row!).getByText('營運現金')).toBeTruthy()
     await interaction.click(within(row!).getByRole('button', { name: '核准' }))
-    expect(moneyEntriesApi.approveMoneyEntry).toHaveBeenCalledWith(9)
+    expect(moneyEntriesApi.approveMoneyEntry).toHaveBeenCalledWith(9, pendingEntry.review_token)
     expect((await screen.findByRole('alert')).textContent).toBe(
       '審核已送出，但列表可能不是最新；請重新整理後確認。',
     )
     expect(within(row!).getByText('待審核')).toBeTruthy()
+  })
+
+  it.each([
+    ['approve', 409, '收支內容已變更，請重新確認後再審核'],
+    ['approve', 422, '已結案車輛的收款不可核准'],
+    ['reject', 409, '收支內容已變更，請重新確認後再審核'],
+    ['reject', 422, '只有待審核的收支可以駁回，狀態不可逆'],
+  ] as const)('shows %s %s errors and refreshes without losing the reason', async (action, status, message) => {
+    const api = action === 'approve' ? moneyEntriesApi.approveMoneyEntry : moneyEntriesApi.rejectMoneyEntry
+    vi.mocked(api).mockRejectedValueOnce({
+      isAxiosError: true,
+      response: { status, data: status === 422 ? { message: 'Validation error', errors: { approval_status: [message] } } : { message } },
+    })
+    vi.mocked(moneyEntriesApi.listMoneyEntries)
+      .mockResolvedValueOnce({ data: [pendingEntry], meta: { current_page: 1, last_page: 1, per_page: 20, total: 1 } })
+      .mockResolvedValueOnce({ data: [], meta: { current_page: 1, last_page: 1, per_page: 20, total: 0 } })
+    renderList('/money-entries?approval=pending')
+    await userEvent.setup().click(await screen.findByRole('button', { name: action === 'approve' ? '核准' : '駁回' }))
+    await waitFor(() => expect(moneyEntriesApi.listMoneyEntries).toHaveBeenCalledTimes(2))
+    expect(await screen.findByText('尚無符合條件的收支紀錄')).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toBe(message)
+    expect(api).toHaveBeenCalledWith(pendingEntry.id, pendingEntry.review_token)
+  })
+
+  it('retains the review reason if reloading the list also fails', async () => {
+    vi.mocked(moneyEntriesApi.approveMoneyEntry).mockRejectedValueOnce({
+      isAxiosError: true,
+      response: { status: 409, data: { message: '收支內容已變更，請重新確認後再審核' } },
+    })
+    vi.mocked(moneyEntriesApi.listMoneyEntries)
+      .mockResolvedValueOnce({ data: [pendingEntry], meta: { current_page: 1, last_page: 1, per_page: 20, total: 1 } })
+      .mockRejectedValueOnce(new Error('offline'))
+    renderList()
+    await userEvent.setup().click(await screen.findByRole('button', { name: '核准' }))
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('收支列表載入失敗'))
+    expect(screen.getByRole('alert').textContent).toContain('收支內容已變更，請重新確認後再審核')
   })
 
   it.each(['admin', 'manager', 'sales'] as const)('limits account filtering for %s, including bookmarked URLs and mobile filters', async (role) => {

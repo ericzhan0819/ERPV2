@@ -5,6 +5,7 @@ namespace App\Http\Resources;
 use App\Models\SalaryPeriod;
 use App\Services\SalaryCommissionWarningService;
 use App\Services\SalaryEligibilityService;
+use App\Support\MoneyMath;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -75,13 +76,13 @@ class SalaryPeriodResource extends JsonResource
         }
 
         return [
-            'purchase_bonus_total' => (int) $this->settlements->sum('purchase_bonus_total'),
-            'sales_bonus_total' => (int) $this->settlements->sum('sales_bonus_total'),
-            'manual_addition_total' => (int) $this->settlements->sum('manual_addition_total'),
-            'manual_deduction_total' => (int) $this->settlements->sum('manual_deduction_total'),
-            'gross_pay' => (int) $this->settlements->sum('gross_pay'),
-            'deduction_total' => (int) $this->settlements->sum('deduction_total'),
-            'net_pay' => (int) $this->settlements->sum('net_pay'),
+            'purchase_bonus_total' => MoneyMath::total($this->settlements->pluck('purchase_bonus_total')),
+            'sales_bonus_total' => MoneyMath::total($this->settlements->pluck('sales_bonus_total')),
+            'manual_addition_total' => MoneyMath::total($this->settlements->pluck('manual_addition_total')),
+            'manual_deduction_total' => MoneyMath::total($this->settlements->pluck('manual_deduction_total')),
+            'gross_pay' => MoneyMath::total($this->settlements->pluck('gross_pay')),
+            'deduction_total' => MoneyMath::total($this->settlements->pluck('deduction_total')),
+            'net_pay' => MoneyMath::total($this->settlements->pluck('net_pay')),
             'company_reserve_total' => $this->company_reserve_total === null
                 ? null
                 : (int) $this->company_reserve_total,

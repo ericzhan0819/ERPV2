@@ -10,6 +10,7 @@ use App\Models\SalarySettlementItem;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Models\VehiclePhoto;
+use App\Support\MoneyMath;
 use App\Support\TaipeiMonthRange;
 use App\Support\VehicleMoneyCategories;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -739,22 +740,20 @@ class VehicleService
      */
     public function financialSummary(Vehicle $vehicle): array
     {
-        $incomeTotal = (int) MoneyEntry::query()
+        $incomeTotal = MoneyMath::sum(MoneyEntry::query()
             ->approved()
             ->where('vehicle_id', $vehicle->id)
-            ->where('direction', 'income')
-            ->sum('amount');
+            ->where('direction', 'income'), 'amount');
 
-        $expenseTotal = (int) MoneyEntry::query()
+        $expenseTotal = MoneyMath::sum(MoneyEntry::query()
             ->approved()
             ->where('vehicle_id', $vehicle->id)
-            ->where('direction', 'expense')
-            ->sum('amount');
+            ->where('direction', 'expense'), 'amount');
 
         return [
             'income_total' => $incomeTotal,
             'expense_total' => $expenseTotal,
-            'gross_profit' => $incomeTotal - $expenseTotal,
+            'gross_profit' => MoneyMath::subtract($incomeTotal, $expenseTotal),
         ];
     }
 
@@ -1208,19 +1207,7 @@ class VehicleService
             // 且 approved 收款總額達成交價才可放行。只計訂金/尾款這兩種實際收款分類，
             // 並扣除 approved 退款——不可計入「其他單車收入」等與此次銷售收款無關的
             // income entry，避免無關收入被拿來墊高已核准收款總額、繞過成交結案門檻。
-            $approvedCollectionTotal = (int) MoneyEntry::query()
-                ->approved()
-                ->where('vehicle_id', $lockedVehicle->id)
-                ->whereIn('category', VehicleMoneyCategories::SALES_COLLECTION_INCOME)
-                ->sum('amount');
-
-            $approvedRefundTotal = (int) MoneyEntry::query()
-                ->approved()
-                ->where('vehicle_id', $lockedVehicle->id)
-                ->where('category', VehicleMoneyCategories::SALES_REFUND)
-                ->sum('amount');
-
-            $approvedIncome = $approvedCollectionTotal - $approvedRefundTotal;
+            $approvedIncome = $this->approvedNetCollection($lockedVehicle);
 
             if ($approvedIncome < (int) $lockedVehicle->sold_price) {
                 throw ValidationException::withMessages([
@@ -1400,32 +1387,30 @@ class VehicleService
      */
     public function salesCollectionSummary(Vehicle $vehicle): array
     {
-        $approvedCollectionTotal = (int) MoneyEntry::query()
+        $approvedCollectionTotal = MoneyMath::sum(MoneyEntry::query()
             ->approved()
             ->where('vehicle_id', $vehicle->id)
-            ->whereIn('category', VehicleMoneyCategories::SALES_COLLECTION_INCOME)
-            ->sum('amount');
+            ->whereIn('category', VehicleMoneyCategories::SALES_COLLECTION_INCOME), 'amount');
 
-        $pendingCollectionTotal = (int) MoneyEntry::query()
+        $pendingCollectionTotal = MoneyMath::sum(MoneyEntry::query()
             ->where('vehicle_id', $vehicle->id)
             ->where('approval_status', MoneyEntry::APPROVAL_PENDING)
-            ->whereIn('category', VehicleMoneyCategories::SALES_COLLECTION_INCOME)
-            ->sum('amount');
+            ->whereIn('category', VehicleMoneyCategories::SALES_COLLECTION_INCOME), 'amount');
 
-        $approvedRefundTotal = (int) MoneyEntry::query()
+        $approvedRefundTotal = MoneyMath::sum(MoneyEntry::query()
             ->approved()
             ->where('vehicle_id', $vehicle->id)
-            ->where('category', VehicleMoneyCategories::SALES_REFUND)
-            ->sum('amount');
+            ->where('category', VehicleMoneyCategories::SALES_REFUND), 'amount');
 
-        $pendingRefundTotal = (int) MoneyEntry::query()
+        $pendingRefundTotal = MoneyMath::sum(MoneyEntry::query()
             ->where('vehicle_id', $vehicle->id)
             ->where('approval_status', MoneyEntry::APPROVAL_PENDING)
-            ->where('category', VehicleMoneyCategories::SALES_REFUND)
-            ->sum('amount');
+            ->where('category', VehicleMoneyCategories::SALES_REFUND), 'amount');
 
-        $netRecordedCollectionTotal = $approvedCollectionTotal + $pendingCollectionTotal
-            - $approvedRefundTotal - $pendingRefundTotal;
+        $netRecordedCollectionTotal = MoneyMath::add(
+            MoneyMath::subtract($approvedCollectionTotal, $approvedRefundTotal),
+            MoneyMath::subtract($pendingCollectionTotal, $pendingRefundTotal),
+        );
 
         $soldPrice = $vehicle->sold_price !== null ? (int) $vehicle->sold_price : null;
 
@@ -1436,7 +1421,7 @@ class VehicleService
             'approved_refund_total' => $approvedRefundTotal,
             'pending_refund_total' => $pendingRefundTotal,
             'net_recorded_collection_total' => $netRecordedCollectionTotal,
-            'remaining_amount' => $soldPrice !== null ? $soldPrice - $netRecordedCollectionTotal : null,
+            'remaining_amount' => $soldPrice !== null ? MoneyMath::subtract($soldPrice, $netRecordedCollectionTotal) : null,
         ];
     }
 
@@ -1573,16 +1558,27 @@ class VehicleService
         return str_contains($e->getMessage(), 'idempotency_key');
     }
 
-    private function buildFinalPaymentWarning(Vehicle $vehicle): ?string
+    private function approvedNetCollection(Vehicle $vehicle): int
     {
-        $incomeTotal = (int) MoneyEntry::query()
+        $approvedCollectionTotal = MoneyMath::sum(MoneyEntry::query()
             ->approved()
             ->where('vehicle_id', $vehicle->id)
-            ->where('direction', 'income')
-            ->sum('amount');
+            ->whereIn('category', VehicleMoneyCategories::SALES_COLLECTION_INCOME), 'amount');
+
+        $approvedRefundTotal = MoneyMath::sum(MoneyEntry::query()
+            ->approved()
+            ->where('vehicle_id', $vehicle->id)
+            ->where('category', VehicleMoneyCategories::SALES_REFUND), 'amount');
+
+        return MoneyMath::subtract($approvedCollectionTotal, $approvedRefundTotal);
+    }
+
+    private function buildFinalPaymentWarning(Vehicle $vehicle): ?string
+    {
+        $incomeTotal = $this->approvedNetCollection($vehicle);
 
         if ($vehicle->sold_price !== null && $incomeTotal !== (int) $vehicle->sold_price) {
-            return '訂金加尾款總額與成交價不相符，請確認金額是否正確';
+            return '已核准訂金與尾款扣除退款後的淨收款與成交價不相符，請確認金額是否正確';
         }
 
         return null;

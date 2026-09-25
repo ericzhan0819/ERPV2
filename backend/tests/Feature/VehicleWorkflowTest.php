@@ -181,8 +181,8 @@ class VehicleWorkflowTest extends TestCase
             ->assertStatus(422);
 
         Auth::forgetGuards();
-        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$depositEntry->id}/approve")->assertSuccessful();
-        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$finalPaymentEntry->id}/approve")->assertSuccessful();
+        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$depositEntry->id}/approve", ['expected_review_token' => $depositEntry->fresh()->reviewToken()])->assertSuccessful();
+        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$finalPaymentEntry->id}/approve", ['expected_review_token' => $finalPaymentEntry->fresh()->reviewToken()])->assertSuccessful();
 
         Auth::forgetGuards();
         $this->actingAs($admin, 'web')
@@ -278,7 +278,7 @@ class VehicleWorkflowTest extends TestCase
         $this->assertDatabaseHas('vehicles', ['id' => $vehicle->id, 'status' => 'reserved']);
 
         // 駁回待審退款後，關帳即可成功。
-        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$pendingRefund->id}/reject")->assertSuccessful();
+        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$pendingRefund->id}/reject", ['expected_review_token' => $pendingRefund->fresh()->reviewToken()])->assertSuccessful();
         $this->actingAs($admin, 'web')
             ->postJson("/api/vehicles/{$vehicle->id}/close-sale", [])
             ->assertSuccessful()
@@ -312,16 +312,41 @@ class VehicleWorkflowTest extends TestCase
         ]);
 
         $this->actingAs($admin, 'web')
-            ->patchJson("/api/money-entries/{$pendingRefund->id}/approve")
+            ->patchJson("/api/money-entries/{$pendingRefund->id}/approve", ['expected_review_token' => $pendingRefund->fresh()->reviewToken()])
             ->assertStatus(422);
 
         $this->assertDatabaseHas('money_entries', ['id' => $pendingRefund->id, 'approval_status' => 'pending']);
 
         // 駁回不受影響：駁回不會移動任何金額，車輛狀態不需再檢查。
         $this->actingAs($admin, 'web')
-            ->patchJson("/api/money-entries/{$pendingRefund->id}/reject")
+            ->patchJson("/api/money-entries/{$pendingRefund->id}/reject", ['expected_review_token' => $pendingRefund->fresh()->reviewToken()])
             ->assertSuccessful()
             ->assertJsonPath('data.approval_status', 'rejected');
+    }
+
+    public function test_final_payment_warning_uses_approved_net_sales_collections(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $account = CashAccount::factory()->create();
+        foreach ([460000 => false, 450000 => true] as $payment => $expectsWarning) {
+            $vehicle = Vehicle::factory()->create(['status' => 'reserved', 'sold_price' => 500000]);
+            foreach ([
+                ['訂金收入', 'income', 50000, 'approved'],
+                ['退款', 'expense', 10000, 'approved'],
+                ['其他單車收入', 'income', 10000, 'approved'],
+                ['尾款收入', 'income', 50000, 'pending'],
+                ['退款', 'expense', 50000, 'rejected'],
+            ] as [$category, $direction, $amount, $status]) {
+                MoneyEntry::factory()->create([
+                    'vehicle_id' => $vehicle->id, 'category' => $category,
+                    'direction' => $direction, 'amount' => $amount, 'approval_status' => $status,
+                ]);
+            }
+            $response = $this->actingAs($admin, 'web')->postJson("/api/vehicles/{$vehicle->id}/final-payment", [
+                'amount' => $payment, 'cash_account_id' => $account->id, 'idempotency_key' => (string) Str::uuid(),
+            ])->assertSuccessful();
+            $this->assertSame($expectsWarning, $response->json('warning') !== null);
+        }
     }
 
     public function test_final_payment_mismatch_returns_warning_but_still_succeeds(): void

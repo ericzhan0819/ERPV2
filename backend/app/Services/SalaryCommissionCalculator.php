@@ -7,6 +7,7 @@ use App\Models\CommissionPlanTier;
 use App\Models\MoneyEntry;
 use App\Models\Vehicle;
 use App\Support\CommissionPlanRules;
+use App\Support\MoneyMath;
 use App\Support\SalaryPeriodMonth;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
@@ -278,7 +279,7 @@ final class SalaryCommissionCalculator
             return [];
         }
 
-        $rows = MoneyEntry::query()
+        $rows = MoneyMath::aggregate(fn () => MoneyEntry::query()
             ->approved()
             ->whereIn('vehicle_id', $vehicleIds)
             ->select(['vehicle_id', 'direction'])
@@ -286,12 +287,12 @@ final class SalaryCommissionCalculator
             ->groupBy('vehicle_id', 'direction')
             ->orderBy('vehicle_id')
             ->orderBy('direction')
-            ->get();
+            ->get());
 
         $totals = [];
         foreach ($rows as $row) {
-            $amount = filter_var($row->total, FILTER_VALIDATE_INT);
-            if ($amount === false || $amount < 0) {
+            $amount = MoneyMath::integer($row->total);
+            if ($amount < 0) {
                 throw new OverflowException('車輛收支合計超出可安全計算的整數範圍');
             }
             $totals[(int) $row->vehicle_id][(string) $row->direction] = $amount;

@@ -11,6 +11,7 @@ use App\Models\SalaryProfile;
 use App\Models\SalarySettlement;
 use App\Models\SalarySettlementItem;
 use App\Models\User;
+use App\Support\MoneyMath;
 use App\Support\SalaryPeriodMonth;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Collection;
@@ -34,13 +35,13 @@ final class SalaryPeriodService
     /** @return Collection<int, SalaryPeriod> */
     public function listPeriods(): Collection
     {
-        return SalaryPeriod::query()
+        return MoneyMath::aggregate(fn () => SalaryPeriod::query()
             ->with('plan:id,name')
             ->withCount('settlements')
             ->withSum('settlements', 'net_pay')
             ->orderByDesc('period_month')
             ->orderByDesc('id')
-            ->get();
+            ->get());
     }
 
     public function getPeriod(SalaryPeriod $period): SalaryPeriod
@@ -217,6 +218,12 @@ final class SalaryPeriodService
                 ]);
             }
 
+            if ($lockedPeriod->settlements()->where('net_pay', '>', MoneyMath::MAX_AMOUNT)->exists()) {
+                throw ValidationException::withMessages([
+                    'net_pay' => ['單筆實發薪資不得超過 999,999,999,999 元，請先修正草稿'],
+                ]);
+            }
+
             $lockedPeriod->status = SalaryPeriod::STATUS_CONFIRMED;
             $lockedPeriod->confirmed_by = $actor->id;
             $lockedPeriod->confirmed_at = now();
@@ -274,6 +281,11 @@ final class SalaryPeriodService
                     ->get();
 
                 foreach ($settlements as $settlement) {
+                    if ($settlement->net_pay > MoneyMath::MAX_AMOUNT) {
+                        throw ValidationException::withMessages([
+                            'net_pay' => ["{$settlement->user->name} 的單筆實發薪資不得超過 999,999,999,999 元"],
+                        ]);
+                    }
                     if ($settlement->net_pay < 0) {
                         throw ValidationException::withMessages([
                             'net_pay' => ["{$settlement->user->name} 的實發薪資不得小於 0"],
@@ -463,11 +475,11 @@ final class SalaryPeriodService
 
     private function updateSettlementTotals(SalarySettlement $settlement): void
     {
-        $totals = $settlement->items()
+        $totals = MoneyMath::aggregate(fn () => $settlement->items()
             ->select('type')
             ->selectRaw('SUM(amount) as total')
             ->groupBy('type')
-            ->pluck('total', 'type')
+            ->pluck('total', 'type'))
             ->map(fn ($amount) => $this->validatedNonNegativeInteger($amount))
             ->all();
 
@@ -714,6 +726,9 @@ final class SalaryPeriodService
         if (! isset($data['amount']) || ! is_int($data['amount']) || $data['amount'] <= 0) {
             throw ValidationException::withMessages(['amount' => ['金額必須是正整數']]);
         }
+        if ($data['amount'] > MoneyMath::MAX_AMOUNT) {
+            throw ValidationException::withMessages(['amount' => ['金額不得超過 999,999,999,999 元']]);
+        }
         if (! isset($data['description']) || ! is_string($data['description']) || trim($data['description']) === '') {
             throw ValidationException::withMessages(['description' => ['說明為必填']]);
         }
@@ -721,8 +736,8 @@ final class SalaryPeriodService
 
     private function validatedNonNegativeInteger(mixed $value): int
     {
-        $validated = filter_var($value, FILTER_VALIDATE_INT);
-        if ($validated === false || $validated < 0) {
+        $validated = MoneyMath::integer($value);
+        if ($validated < 0) {
             throw new OverflowException('薪資合計超出可安全計算的整數範圍');
         }
 
@@ -732,15 +747,7 @@ final class SalaryPeriodService
     /** @param int[] $values */
     private function safeSum(array $values): int
     {
-        $total = 0;
-        foreach ($values as $value) {
-            if ($value > PHP_INT_MAX - $total) {
-                throw new OverflowException('薪資合計超出可安全計算的整數範圍');
-            }
-            $total += $value;
-        }
-
-        return $total;
+        return MoneyMath::total($values);
     }
 
     private function isPeriodMonthUniqueViolation(QueryException $exception): bool

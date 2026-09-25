@@ -181,12 +181,12 @@ class MoneyEntryApprovalTest extends TestCase
 
         Auth::forgetGuards();
         $this->actingAs($admin, 'web')
-            ->patchJson("/api/money-entries/{$shortcut->json('data.id')}/approve")
+            ->patchJson("/api/money-entries/{$shortcut->json('data.id')}/approve", ['expected_review_token' => MoneyEntry::findOrFail($shortcut->json('data.id'))->reviewToken()])
             ->assertSuccessful()
             ->assertJsonPath('data.approval_status', 'approved');
 
         $this->actingAs($admin, 'web')
-            ->patchJson("/api/money-entries/{$workflowEntryId}/reject")
+            ->patchJson("/api/money-entries/{$workflowEntryId}/reject", ['expected_review_token' => MoneyEntry::findOrFail($workflowEntryId)->reviewToken()])
             ->assertSuccessful()
             ->assertJsonPath('data.approval_status', 'rejected');
     }
@@ -201,8 +201,8 @@ class MoneyEntryApprovalTest extends TestCase
             'approval_status' => 'pending',
         ]);
 
-        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$entry->id}/approve")->assertStatus(422);
-        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$entry->id}/reject")->assertStatus(422);
+        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$entry->id}/approve", ['expected_review_token' => $entry->fresh()->reviewToken()])->assertStatus(422);
+        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$entry->id}/reject", ['expected_review_token' => $entry->fresh()->reviewToken()])->assertStatus(422);
     }
 
     public function test_pending_entry_excluded_from_balance_and_dashboard_and_vehicle_summary(): void
@@ -257,7 +257,7 @@ class MoneyEntryApprovalTest extends TestCase
         ]);
 
         $this->actingAs($admin, 'web')
-            ->patchJson("/api/money-entries/{$entry->id}/approve")
+            ->patchJson("/api/money-entries/{$entry->id}/approve", ['expected_review_token' => $entry->fresh()->reviewToken()])
             ->assertSuccessful()
             ->assertJsonPath('data.approval_status', 'approved');
 
@@ -285,7 +285,7 @@ class MoneyEntryApprovalTest extends TestCase
         ]);
 
         $this->actingAs($admin, 'web')
-            ->patchJson("/api/money-entries/{$entry->id}/reject")
+            ->patchJson("/api/money-entries/{$entry->id}/reject", ['expected_review_token' => $entry->fresh()->reviewToken()])
             ->assertSuccessful()
             ->assertJsonPath('data.approval_status', 'rejected');
 
@@ -307,8 +307,8 @@ class MoneyEntryApprovalTest extends TestCase
             'approval_status' => 'pending',
         ]);
 
-        $this->actingAs($manager, 'web')->patchJson("/api/money-entries/{$entry->id}/approve")->assertStatus(403);
-        $this->actingAs($sales, 'web')->patchJson("/api/money-entries/{$entry->id}/reject")->assertStatus(403);
+        $this->actingAs($manager, 'web')->patchJson("/api/money-entries/{$entry->id}/approve", ['expected_review_token' => $entry->fresh()->reviewToken()])->assertStatus(403);
+        $this->actingAs($sales, 'web')->patchJson("/api/money-entries/{$entry->id}/reject", ['expected_review_token' => $entry->fresh()->reviewToken()])->assertStatus(403);
     }
 
     public function test_approved_or_rejected_status_cannot_be_reversed(): void
@@ -327,9 +327,9 @@ class MoneyEntryApprovalTest extends TestCase
             'approval_status' => 'rejected',
         ]);
 
-        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$approvedEntry->id}/approve")->assertStatus(422);
-        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$rejectedEntry->id}/approve")->assertStatus(422);
-        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$approvedEntry->id}/reject")->assertStatus(422);
+        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$approvedEntry->id}/approve", ['expected_review_token' => $approvedEntry->fresh()->reviewToken()])->assertStatus(422);
+        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$rejectedEntry->id}/approve", ['expected_review_token' => $rejectedEntry->fresh()->reviewToken()])->assertStatus(422);
+        $this->actingAs($admin, 'web')->patchJson("/api/money-entries/{$approvedEntry->id}/reject", ['expected_review_token' => $approvedEntry->fresh()->reviewToken()])->assertStatus(422);
     }
 
     public function test_approved_or_rejected_manual_entry_cannot_be_edited_or_deleted(): void

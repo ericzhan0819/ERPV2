@@ -82,6 +82,21 @@ class MoneyEntry extends Model
         ];
     }
 
+    /** Bind a review to the persisted content, including edits within the same second. */
+    public function reviewToken(): string
+    {
+        $content = [
+            (int) $this->id, $this->vehicle_id === null ? null : (int) $this->vehicle_id, (int) $this->cash_account_id,
+            $this->entry_date?->toDateString(), $this->direction, $this->category,
+            $this->amount, $this->counterparty_name, $this->description,
+            $this->source_type, $this->approval_status,
+            $this->created_by === null ? null : (int) $this->created_by,
+            $this->updated_by === null ? null : (int) $this->updated_by,
+        ];
+
+        return hash_hmac('sha256', json_encode($content, JSON_THROW_ON_ERROR), config('app.key'));
+    }
+
     public function scopeApproved($query)
     {
         return $query->where('approval_status', self::APPROVAL_APPROVED);

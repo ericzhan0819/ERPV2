@@ -24,6 +24,7 @@ class MoneyEntryResource extends JsonResource
             && ($canSeeFull || (($user?->isSales() ?? false) && ($isOwner || $isSalesSafeCategory)));
 
         return [
+            'review_token' => $this->when($user?->isAdmin() ?? false, fn () => $this->resource->reviewToken()),
             'id' => $this->id,
             'entry_date' => $this->entry_date?->toDateString(),
             'direction' => $this->direction,
