@@ -7,6 +7,7 @@ use App\Models\MoneyEntry;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Services\MoneyEntryService;
+use App\Services\VehicleService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
@@ -25,6 +26,62 @@ class MoneyEntryReviewRegressionTest extends TestCase
             'amount' => $entry->amount,
             'cash_account_id' => $entry->cash_account_id,
         ];
+    }
+
+    public function test_oversized_pending_entries_cannot_be_approved_but_can_be_rejected(): void
+    {
+        $this->actingAs(User::factory()->admin()->create(), 'web');
+        foreach (['manual', 'vehicle_shortcut', 'vehicle_workflow'] as $source) {
+            $entry = MoneyEntry::factory()->create([
+                'source_type' => $source, 'approval_status' => 'pending', 'amount' => 1000000000000,
+            ]);
+            $payload = ['expected_review_token' => $entry->reviewToken()];
+            $this->patchJson("/api/money-entries/{$entry->id}/approve", $payload)
+                ->assertUnprocessable()->assertJsonValidationErrors('amount');
+            $this->assertDatabaseHas('money_entries', ['id' => $entry->id, 'approval_status' => 'pending', 'approved_by' => null]);
+            $this->patchJson("/api/money-entries/{$entry->id}/reject", $payload)
+                ->assertOk()->assertJsonPath('data.approval_status', 'rejected');
+        }
+        $entry = MoneyEntry::factory()->create(['source_type' => 'manual', 'approval_status' => 'pending', 'amount' => 999999999999]);
+        $this->patchJson("/api/money-entries/{$entry->id}/approve", ['expected_review_token' => $entry->reviewToken()])->assertOk();
+    }
+
+    public function test_sales_cannot_create_or_change_a_manual_entry_into_a_purchase_payment(): void
+    {
+        $sales = User::factory()->sales()->create();
+        $vehicle = Vehicle::factory()->create(['status' => 'preparing']);
+        $entry = MoneyEntry::factory()->create([
+            'source_type' => 'manual', 'approval_status' => 'pending', 'created_by' => $sales->id,
+            'category' => '維修支出', 'direction' => 'expense', 'vehicle_id' => $vehicle->id,
+        ]);
+        $payload = [...$this->payload($entry), 'category' => '購車付款', 'vehicle_id' => $vehicle->id, 'idempotency_key' => (string) Str::uuid()];
+        $this->actingAs($sales, 'web')->postJson('/api/money-entries', $payload)->assertForbidden();
+        $this->patchJson("/api/money-entries/{$entry->id}", $payload)->assertForbidden();
+        $this->assertSame('維修支出', $entry->fresh()->category);
+        $this->assertDatabaseCount('money_entries', 1);
+        $this->patchJson("/api/money-entries/{$entry->id}", [...$payload, 'category' => '維修支出'])->assertOk();
+
+        foreach (['admin', 'manager'] as $role) {
+            Auth::forgetGuards();
+            $this->actingAs(User::factory()->{$role}()->create(), 'web')->postJson('/api/money-entries', [
+                ...$payload, 'idempotency_key' => (string) Str::uuid(),
+            ])->assertCreated()->assertJsonPath('data.approval_status', $role === 'admin' ? 'approved' : 'pending');
+        }
+    }
+
+    public function test_existing_pending_vehicle_cost_can_be_approved_after_sale_and_account_deactivation(): void
+    {
+        $vehicle = Vehicle::factory()->create(['status' => 'sold']);
+        $account = CashAccount::factory()->create(['is_active' => false]);
+        $entry = MoneyEntry::factory()->create([
+            'source_type' => 'manual', 'approval_status' => 'pending', 'category' => '維修支出',
+            'direction' => 'expense', 'amount' => 8000, 'vehicle_id' => $vehicle->id, 'cash_account_id' => $account->id,
+        ]);
+        $this->actingAs(User::factory()->admin()->create(), 'web')
+            ->patchJson("/api/money-entries/{$entry->id}/approve", ['expected_review_token' => $entry->reviewToken()])
+            ->assertOk()->assertJsonPath('data.approval_status', 'approved');
+        $this->assertSame(-8000, app(MoneyEntryService::class)->balanceForAccount($account));
+        $this->assertSame(-8000, app(VehicleService::class)->financialSummary($vehicle)['gross_profit']);
     }
 
     public function test_omitted_vehicle_uses_persisted_binding_and_explicit_null_detaches(): void

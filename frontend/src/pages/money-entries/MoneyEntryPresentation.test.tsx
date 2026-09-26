@@ -131,6 +131,14 @@ describe('Money entry presentation', () => {
     expect(document.activeElement).toBe(amount)
   })
 
+  it.each(['admin', 'manager', 'sales'] as const)('limits the purchase-payment category for %s', async (role) => {
+    setRole(role)
+    render(<MemoryRouter initialEntries={['/money-entries/create?direction=expense']}><MoneyEntryCreate /></MemoryRouter>)
+    await screen.findByRole('option', { name: '營運現金' })
+    expect(Boolean(screen.queryByRole('option', { name: '購車付款' }))).toBe(role !== 'sales')
+    expect(screen.getByRole('option', { name: '維修支出' })).toBeTruthy()
+  })
+
   it('shows an oversized amount beside the field in Chinese without submitting', async () => {
     render(<MemoryRouter><MoneyEntryCreate /></MemoryRouter>)
     await screen.findByRole('option', { name: '營運現金' })

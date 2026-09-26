@@ -249,6 +249,10 @@ cd backend
 php artisan test
 ```
 
+MySQL/MariaDB duplicate-key 真並發測試使用獨立 PHP 行程、REPEATABLE READ 與同步屏障。`MoneyEntryMysqlConcurrencyTest` 覆蓋一般收支／快捷入口的相同內容 replay、不同金額拒絕，以及不同車輛保留訂金撞 key 時的完整 rollback；不代表已涵蓋所有並行情境。
+
+這類測試會重建資料庫，只可使用可清除的專用測試 schema。預設 SQLite 測試會跳過；實際執行前須同時設定 MySQL 測試連線、`RUN_MYSQL_CONCURRENCY_TESTS=1`、`MYSQL_CONCURRENCY_TEST_CONNECTION` 與 `MYSQL_CONCURRENCY_TEST_DATABASE`。連線／資料庫名稱必須與 allowlist 完全一致，schema 名稱須包含 test/testing/phpunit/ci，且不得含 prod/production/live/staging/dev/local；另需 pcntl、posix extension。
+
 Frontend：
 
 ```bash

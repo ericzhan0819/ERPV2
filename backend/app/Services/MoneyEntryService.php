@@ -11,6 +11,7 @@ use App\Support\VehicleMoneyCategories;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 class MoneyEntryService
@@ -147,6 +148,10 @@ class MoneyEntryService
      */
     public function createEntry(array $data, User $user): MoneyEntry
     {
+        if ($data['category'] === '購車付款') {
+            Gate::forUser($user)->authorize('createPurchasePayment', MoneyEntry::class);
+        }
+
         $idempotencyKey = (string) $data['idempotency_key'];
         $effectiveData = [
             'vehicle_id' => isset($data['vehicle_id']) ? (int) $data['vehicle_id'] : null,
@@ -217,6 +222,10 @@ class MoneyEntryService
      */
     public function updateEntry(MoneyEntry $entry, array $data, int $userId): MoneyEntry
     {
+        if ($data['category'] === '購車付款') {
+            Gate::forUser(User::query()->findOrFail($userId))->authorize('createPurchasePayment', MoneyEntry::class);
+        }
+
         return DB::transaction(function () use ($entry, $data, $userId) {
             $lockedEntry = MoneyEntry::query()->whereKey($entry->id)->lockForUpdate()->firstOrFail();
 
@@ -286,6 +295,11 @@ class MoneyEntryService
 
             $this->assertPendingApprovableEntry($lockedEntry, '核准');
             abort_unless(hash_equals($lockedEntry->reviewToken(), $expectedReviewToken), 409, '收支內容已變更，請重新確認後再審核');
+            if ($lockedEntry->amount > MoneyMath::MAX_AMOUNT) {
+                throw ValidationException::withMessages([
+                    'amount' => ['金額超過 999,999,999,999 元，不可核准，請修正或駁回後重新申請'],
+                ]);
+            }
             $this->lockVehicleForApprovalAndAssertCollectionInvariant($lockedEntry);
 
             $lockedEntry->approval_status = MoneyEntry::APPROVAL_APPROVED;

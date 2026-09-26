@@ -594,6 +594,8 @@ Query 參數（`IndexMoneyEntryRequest`）：`vehicle_id`、`cash_account_id`、
 
 ### POST /api/money-entries
 
+「購車付款」僅 admin／manager 可透過一般收支新增或編輯；sales 建立、重送或將既有申請改為此分類均回 403。其他分類仍依既有權限與分類規則處理。
+
 一般收支與車輛快捷／工作流的單筆收支金額（含 `deposit_amount`、`initial_purchase_payment.amount`）上限為 `999999999999`，超過回傳 422。
 
 Request body（`StoreMoneyEntryRequest`）：
@@ -637,6 +639,10 @@ Request body（`UpdateMoneyEntryRequest`）：同 Store，但不含 `idempotency
 只有 `admin` 可呼叫下列核准/駁回端點，`manager`（即使可看完整營運金額）與 `sales` 呼叫一律 `403`。approve/reject 皆為一次性、不可逆：只有 `pending` 狀態可以被核准或駁回，已核准/已駁回不可再變更；`source_type=legacy_unknown`（來源未確認的既有資料）不可核准/駁回。
 
 ### PATCH /api/money-entries/{id}/approve — 僅限管理員
+
+核准前會在資料列鎖定後檢查 `amount <= 999999999999`；超過上限的既有 pending 收支回 422 且維持 pending，仍可駁回。
+
+已結案車輛原有待審的維修等非收款支出仍可核准，正式成本與毛利會隨之調整；訂金、尾款與退款仍禁止在結案／取消後核准。帳戶停用只禁止新增收支，既有 pending 收支仍可核准。
 
 Request body：`expected_review_token`（必填，64 位小寫十六進位字串），使用管理員讀取該筆 `MoneyEntryResource.review_token` 的值。將 `approval_status` 改為 `approved`，並記錄 `approved_by`（核准者 id）與 `approved_at`（核准時間）。
 
@@ -684,6 +690,8 @@ Request body：`expected_review_token`（格式同核准端點；無「駁回原
 ## 8. Cash Accounts（資金帳戶）
 
 帳戶類型：`cash`（現金）、`bank`（銀行）、`other`（其他）。
+
+manager 保留完整營運總額與帳戶餘額，其中包含已核准薪資支出，因此可透過差額推算薪資總額；這不代表可讀薪資明細、薪資 API 或 `salary_settlement` 收支紀錄。
 
 帳戶目前餘額不儲存在資料庫，即時計算：`目前餘額 = 期初餘額 + approved 收入總額 - approved 支出總額`。新增／編輯的 `opening_balance` 範圍為 `0..999999999999`。帳戶餘額、Dashboard 月收支／毛利／現金趨勢、單車財務與銷售收款摘要、薪資月份合計採安全整數彙總；超出 PHP 整數範圍時回傳 422，不截斷、不轉為浮點數。
 

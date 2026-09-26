@@ -11,6 +11,8 @@ import type { Vehicle } from '../../types/vehicle'
 import { generateIdempotencyKey } from '../../utils/idempotency'
 import { formatBusinessDate } from '../../utils/dateTime'
 import { categoriesForDirection, directionLabels } from '../../utils/moneyEntryCategory'
+import { useAuth } from '../../hooks/useAuth'
+import { canViewFinancials } from '../../utils/permissions'
 import { FormAlert } from '../../components/FormAlert'
 
 function extractErrorMessage(err: unknown, fallback: string): string {
@@ -26,6 +28,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
 }
 
 export function MoneyEntryCreate() {
+  const { user } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const initialDirection = searchParams.get('direction') === 'expense' ? 'expense' : 'income'
@@ -62,7 +65,7 @@ export function MoneyEntryCreate() {
     return () => window.clearTimeout(timeout)
   }, [validationAttempt])
 
-  const categoryOptions = categoriesForDirection(direction)
+  const categoryOptions = categoriesForDirection(direction).filter((option) => option !== '購車付款' || canViewFinancials(user?.role))
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()

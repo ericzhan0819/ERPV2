@@ -42,6 +42,11 @@ class MoneyEntryPolicy
         return $user->hasAnyRole([User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SALES]);
     }
 
+    public function createPurchasePayment(User $user): bool
+    {
+        return $user->hasAnyRole([User::ROLE_ADMIN, User::ROLE_MANAGER]);
+    }
+
     public function update(User $user, MoneyEntry $moneyEntry): bool
     {
         return $this->ownsOrIsAdmin($user, $moneyEntry);

@@ -157,6 +157,22 @@ class SalaryMoneyEntryProtectionTest extends TestCase
             ->assertJsonFragment(['id' => $salaryEntry->id, 'amount' => 50000]);
     }
 
+    public function test_manager_financial_totals_include_salary_without_exposing_salary_entries(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $manager = User::factory()->manager()->create();
+        $account = CashAccount::factory()->create(['type' => 'cash', 'opening_balance' => 100000]);
+        $entry = MoneyEntry::factory()->create([
+            'cash_account_id' => $account->id, 'direction' => 'expense', 'category' => '薪資 / 佣金',
+            'amount' => 50000, 'source_type' => MoneyEntry::SOURCE_SALARY_SETTLEMENT, 'created_by' => $admin->id,
+        ]);
+        $this->actingAs($manager, 'web')->getJson('/api/dashboard/summary')
+            ->assertOk()->assertJsonPath('business_overview.monthly_expense', 50000)
+            ->assertJsonPath('business_overview.cash_balance', 50000);
+        $this->getJson('/api/money-entries')->assertOk()->assertJsonMissing(['id' => $entry->id]);
+        $this->getJson("/api/money-entries/{$entry->id}")->assertForbidden();
+    }
+
     public function test_resource_defense_in_depth_omits_salary_details_for_manager(): void
     {
         $admin = User::factory()->admin()->create();

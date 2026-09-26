@@ -8,6 +8,11 @@ The format is based on Keep a Changelog, and this project uses Semantic Versioni
 
 ### Fixed
 
+- Reject approval of oversized pending entries while allowing rejection.
+- Restrict manual purchase-payment creation and edits to admin and manager.
+- Document approval of existing pending costs after sale or account deactivation, and manager access to salary-inclusive financial totals.
+- Add gated MySQL duplicate-key race coverage for manual entries, vehicle shortcuts, and reservation key collisions across vehicles.
+
 - Validate money-entry categories against the final vehicle binding when updates omit `vehicle_id`.
 - Require a current `expected_review_token` for approval and rejection; API clients must send the admin-only `review_token` returned when reading the entry.
 - Show approval errors and refresh stale lists on 409 / 422 responses.
