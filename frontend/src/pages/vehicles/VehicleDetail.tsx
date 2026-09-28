@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 import { isAxiosError } from 'axios'
 import {
   closeSaleVehicle,
+  endVehicleReservation,
   getVehicle,
   listCommissionAgentOptions,
   listVehicleForSale,
@@ -222,7 +223,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
   return fallback
 }
 
-type ActiveModal = 'list' | 'reserve' | 'final-payment' | 'close-sale' | 'expense' | 'purchase-price' | 'public-description' | 'sales-pricing' | null
+type ActiveModal = 'unreserve' | 'cancel' | 'list' | 'reserve' | 'final-payment' | 'close-sale' | 'expense' | 'purchase-price' | 'public-description' | 'sales-pricing' | null
 
 export function VehicleDetail() {
   const { user } = useAuth()
@@ -279,6 +280,20 @@ export function VehicleDetail() {
   function closeModal() {
     setActiveModal(null)
     setFormError(null)
+  }
+
+  async function handleEndReservation(action: 'unreserve' | 'cancel') {
+    setSubmitting(true)
+    setFormError(null)
+    try {
+      await endVehicleReservation(vehicleId, action)
+      closeModal()
+      loadDetail('操作已送出，請重新整理確認最新資料。')
+    } catch (err) {
+      setFormError(extractErrorMessage(err, '操作失敗，請稍後再試'))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   async function handleList(form: { asking_price: string; floor_price: string; listing_date: string; sales_note: string }) {
@@ -495,6 +510,12 @@ export function VehicleDetail() {
           >
             收訂金並保留
           </button>
+        )}
+        {canManage && ['preparing', 'listed', 'reserved'].includes(vehicle.status) && (
+          <>
+            {vehicle.status === 'reserved' && <button className="min-h-11 rounded-lg border border-border-strong px-4 py-2 text-sm hover:bg-surface-2" onClick={() => setActiveModal('unreserve')}>退訂並重新上架</button>}
+            <button className="min-h-11 rounded-lg border border-border-strong px-4 py-2 text-sm text-error hover:bg-surface-2" onClick={() => setActiveModal('cancel')}>取消車輛</button>
+          </>
         )}
         {canSell && vehicle.status === 'reserved' && (
           <>
@@ -718,6 +739,15 @@ export function VehicleDetail() {
         </div>
       </Panel>
 
+      {(activeModal === 'unreserve' || activeModal === 'cancel') && (
+        <Modal title={activeModal === 'cancel' ? '取消車輛' : '退訂並重新上架'} onClose={() => { if (!submitting) closeModal() }}>
+          <form className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); void handleEndReservation(activeModal) }}>
+            <FormAlert message={formError} focusOnShow />
+            <p className="text-sm text-fg-muted">請先完成退款，已核准銷售淨收款須為零。{activeModal === 'cancel' ? '所有待審收支須先處理；取消後無法恢復，也無法再新增收支。' : '待審訂金、尾款及退款須先處理；買方與成交資料將清除，車輛將重新公開為可售。'}歷史收支紀錄會保留。</p>
+            <button type="submit" disabled={submitting} className="min-h-11 rounded-lg bg-primary px-4 py-2 text-primary-fg hover:bg-primary-hover disabled:opacity-50">{submitting ? '處理中...' : '確認操作'}</button>
+          </form>
+        </Modal>
+      )}
       {activeModal === 'list' && (
         <ListModal onClose={closeModal} onSubmit={handleList} error={formError} submitting={submitting} />
       )}
@@ -1291,7 +1321,7 @@ function CloseSaleModal({
         <FormAlert message={error} focusOnShow />
         <Field label="成交日期（預設今天）" value={sold_at} onChange={setSoldAt} type="date" />
         <p className="text-xs text-fg-muted">
-          成交日期決定薪資獎金月份；已確認或已發薪月份不能新增成交。收款日期不影響成交月份。
+          成交日期不得晚於今天或早於保留日，只有管理員可跨月回填。成交日期決定薪資獎金月份；已確認或已發薪月份不能新增成交。收款日期不影響成交月份。
         </p>
         <button
           type="submit"

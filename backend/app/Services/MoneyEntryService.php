@@ -379,6 +379,15 @@ class MoneyEntryService
                 'vehicle_id' => ['車輛已成交結案或取消，此筆訂金/尾款/退款不可再核准，如需修正請聯絡系統管理員手動處理'],
             ]);
         }
+
+        // 核准也要檢查目前狀態，避免部署前建立的待審收款繞過新增／編輯限制。
+        if (in_array($entry->category, ['訂金收入', '尾款收入'], true)
+            && $vehicleStatus !== 'reserved') {
+            throw ValidationException::withMessages([
+                'vehicle_id' => ['只有保留中的車輛可以核准訂金或尾款收入，請先確認車輛狀態或駁回此筆申請'],
+            ]);
+        }
+
     }
 
     private function isCreatorAdmin(int $userId): bool
@@ -430,6 +439,7 @@ class MoneyEntryService
         }
 
         $this->assertVehicleMutable($effectiveData['vehicle_id']);
+        $this->assertCategoryRules($effectiveData['category'], $effectiveData['direction'], $effectiveData['vehicle_id']);
         $this->assertCashAccountActive($effectiveData['cash_account_id']);
 
         $entry = new MoneyEntry([
@@ -591,6 +601,15 @@ class MoneyEntryService
 
     private function assertCategoryRules(string $category, string $direction, ?int $vehicleId): void
     {
+        if ($vehicleId !== null && in_array($category, ['訂金收入', '尾款收入'], true)) {
+            $status = Vehicle::query()->whereKey($vehicleId)->lockForUpdate()->value('status');
+            if ($status !== 'reserved') {
+                throw ValidationException::withMessages([
+                    'category' => ['訂金與尾款僅可記錄於保留中的車輛；首次收訂金請使用收訂金並保留流程'],
+                ]);
+            }
+        }
+
         $expectedDirection = self::CATEGORY_DIRECTIONS[$category] ?? null;
 
         if ($expectedDirection !== null && $expectedDirection !== $direction) {

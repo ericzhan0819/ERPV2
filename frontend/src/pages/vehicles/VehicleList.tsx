@@ -10,6 +10,7 @@ import { DebouncedSearchInput } from '../../components/DebouncedSearchInput'
 import { MobileFilterDrawer } from '../../components/MobileFilterDrawer'
 import { useAuth } from '../../hooks/useAuth'
 import { canManageVehicles } from '../../utils/permissions'
+import { vehicleStatusLabels as statusLabels } from '../../utils/vehicleStatus'
 import { vehicleCardVisibility } from '../../utils/vehicleCardPresentation'
 import {
   defaultVehicleStatuses,
@@ -25,14 +26,6 @@ const currencyFormatter = new Intl.NumberFormat('zh-TW', { style: 'currency', cu
 
 function formatCurrency(amount: number | null | undefined): string {
   return amount === null || amount === undefined ? '—' : currencyFormatter.format(amount)
-}
-
-const statusLabels: Record<VehicleStatus, string> = {
-  preparing: '整備中',
-  listed: '上架中',
-  reserved: '保留中',
-  sold: '已售出',
-  cancelled: '取消 / 退車',
 }
 
 const soldMonthPattern = /^(\d{4})-(0[1-9]|1[0-2])$/

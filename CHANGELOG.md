@@ -8,6 +8,15 @@ The format is based on Keep a Changelog, and this project uses Semantic Versioni
 
 ### Fixed
 
+- Require reserved vehicles when approving existing pending deposits and final payments.
+
+- Add guarded vehicle cancellation and reservation release, including vehicle-page controls and public availability updates.
+- Enforce Taipei sale-date boundaries and admin-only cross-month backdating.
+- Restrict manual and shortcut sales collections to reserved vehicles.
+- Preserve seller snapshots for unchanged customer links and merge customer roles when rebinding.
+- Treat nonnumeric placeholder phones as missing identities; preserve omitted listing fields.
+- Replay concurrent reservation retries after obtaining the vehicle lock.
+
 - Reject approval of oversized pending entries while allowing rejection.
 - Restrict manual purchase-payment creation and edits to admin and manager.
 - Document approval of existing pending costs after sale or account deactivation, and manager access to salary-inclusive financial totals.

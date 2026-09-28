@@ -165,6 +165,16 @@ class VehicleController extends Controller
         ]);
     }
 
+    public function unreserve(Request $request, Vehicle $vehicle): VehicleResource
+    {
+        return new VehicleResource($this->vehicleService->endReservationOrCancel($vehicle, false, $request->user()->id));
+    }
+
+    public function cancel(Request $request, Vehicle $vehicle): VehicleResource
+    {
+        return new VehicleResource($this->vehicleService->endReservationOrCancel($vehicle, true, $request->user()->id));
+    }
+
     public function closeSale(CloseSaleVehicleRequest $request, Vehicle $vehicle): VehicleResource
     {
         $vehicle = $this->vehicleService->closeSale($vehicle, $request->validated(), $request->user()->id);

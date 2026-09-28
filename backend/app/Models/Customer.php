@@ -52,7 +52,7 @@ class Customer extends Model
 
         $digits = preg_replace('/\D+/', '', $phone);
 
-        return $digits !== '' ? $digits : mb_strtolower($phone);
+        return $digits !== '' ? $digits : null;
     }
 
     public static function isIdentityUniqueViolation(QueryException $exception): bool

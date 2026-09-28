@@ -62,7 +62,7 @@ Dark mode 以 `bg → surface → surface-2` 的亮度差與邊框建立 elevati
 | `listed` | Blue／上架 | 上架中 | Tag |
 | `reserved` | Violet／保留 | 保留中 | Bookmark |
 | `sold` | Emerald／完成 | 已售出 | CircleCheck |
-| `cancelled` | Slate／停用 | 取消／退車 | XCircle |
+| `cancelled` | Slate／停用 | 已取消 | XCircle |
 
 Destructive 操作使用 `error` 語意，必須有明確文字；不可只顯示紅色 icon。
 
@@ -382,3 +382,7 @@ Card description、按鈕教學與常駐 help text 已在資訊可由標題、la
 Onboarding、通知、頁面、路由、KPI、報表或 Database-backed copy。
 
 後續若調整 UI Copy、Accessibility、RWD 或 Design Token，應同步更新本文件與對應自動化測試。
+
+### 車輛退訂與取消
+
+admin／manager 可在保留車輛執行「退訂並重新上架」，或取消整備中／上架中／保留中的車輛。確認視窗須說明退款及待審收支限制、買方資料清除、公開可售狀態與取消不可恢復的後果；歷史收支保留。API 拒絕時保持視窗並顯示原因。成交日期欄位須說明不得早於保留日或晚於今天，且跨月回填限管理員。

@@ -69,6 +69,52 @@ class MoneyEntryReviewRegressionTest extends TestCase
         }
     }
 
+    public function test_existing_pending_sales_collections_require_a_reserved_vehicle_for_approval(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $account = CashAccount::factory()->create();
+        $this->actingAs($admin, 'web');
+        foreach (['preparing', 'listed', 'reserved', 'sold', 'cancelled'] as $status) {
+            $vehicle = Vehicle::factory()->create(['status' => $status]);
+            foreach (['manual', 'vehicle_shortcut', 'vehicle_workflow'] as $source) {
+                foreach (['訂金收入', '尾款收入'] as $category) {
+                    $entry = MoneyEntry::factory()->create([
+                        'vehicle_id' => $vehicle->id, 'cash_account_id' => $account->id,
+                        'source_type' => $source, 'approval_status' => 'pending',
+                        'direction' => 'income', 'category' => $category, 'amount' => 100,
+                    ]);
+                    $payload = ['expected_review_token' => $entry->reviewToken()];
+                    $response = $this->patchJson("/api/money-entries/{$entry->id}/approve", $payload);
+                    if ($status === 'reserved') {
+                        $response->assertOk()->assertJsonPath('data.approval_status', 'approved');
+                        $this->assertSame($admin->id, $entry->fresh()->approved_by);
+                    } else {
+                        $response->assertUnprocessable()->assertJsonValidationErrors('vehicle_id');
+                        $this->assertDatabaseHas('money_entries', [
+                            'id' => $entry->id, 'approval_status' => 'pending',
+                            'approved_by' => null, 'approved_at' => null,
+                        ]);
+                        $this->patchJson("/api/money-entries/{$entry->id}/reject", $payload)
+                            ->assertOk()->assertJsonPath('data.approval_status', 'rejected');
+                    }
+                }
+            }
+        }
+        $this->assertSame(600, app(MoneyEntryService::class)->balanceForAccount($account));
+    }
+
+    public function test_refunds_can_still_be_approved_on_listed_vehicles(): void
+    {
+        $vehicle = Vehicle::factory()->create(['status' => 'listed']);
+        $entry = MoneyEntry::factory()->create([
+            'vehicle_id' => $vehicle->id, 'source_type' => 'vehicle_shortcut',
+            'approval_status' => 'pending', 'category' => '退款', 'direction' => 'expense',
+        ]);
+        $this->actingAs(User::factory()->admin()->create(), 'web')
+            ->patchJson("/api/money-entries/{$entry->id}/approve", ['expected_review_token' => $entry->reviewToken()])
+            ->assertOk()->assertJsonPath('data.approval_status', 'approved');
+    }
+
     public function test_existing_pending_vehicle_cost_can_be_approved_after_sale_and_account_deactivation(): void
     {
         $vehicle = Vehicle::factory()->create(['status' => 'sold']);

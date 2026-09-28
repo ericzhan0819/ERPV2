@@ -31,6 +31,7 @@ class MoneyEntryMysqlConcurrencyTest extends TestCase
             'manual different amount' => ['manual', true],
             'shortcut same payload' => ['shortcut', false],
             'shortcut different amount' => ['shortcut', true],
+            'reservation same vehicle same payload' => ['reservation', false],
             'reservation key collision across vehicles' => ['reservation', true],
         ];
     }
@@ -45,7 +46,7 @@ class MoneyEntryMysqlConcurrencyTest extends TestCase
         $actor = User::factory()->admin()->create(['is_active' => true]);
         $account = CashAccount::factory()->create(['is_active' => true]);
         $vehicle = Vehicle::factory()->create(['status' => $scenario === 'reservation' ? 'listed' : 'preparing']);
-        $loserVehicle = $scenario === 'reservation'
+        $loserVehicle = $scenario === 'reservation' && $conflict
             ? Vehicle::factory()->create(['status' => 'listed', 'buyer_name' => null, 'buyer_customer_id' => null])
             : $vehicle;
         $payload = [
@@ -98,7 +99,9 @@ class MoneyEntryMysqlConcurrencyTest extends TestCase
             $this->assertTrue(pcntl_wifexited($status) && pcntl_wexitstatus($status) === 0, json_encode($result));
             $this->assertTrue($result['ok'] ?? false, json_encode($result));
             $this->assertNotSame($parentConnection, $result['connection_id']);
-            $this->assertGreaterThanOrEqual(1, $result['rollbacks']);
+            if ($scenario !== 'reservation' || $conflict) {
+                $this->assertGreaterThanOrEqual(1, $result['rollbacks']);
+            }
             $this->assertGreaterThanOrEqual(1, $result['recovery_reads']);
             if ($conflict) {
                 $this->assertArrayHasKey('idempotency_key', $result['errors']);
@@ -110,6 +113,9 @@ class MoneyEntryMysqlConcurrencyTest extends TestCase
             $this->assertSame(1000, MoneyEntry::findOrFail($winnerId)->amount);
             if ($scenario === 'reservation') {
                 $this->assertSame('reserved', $vehicle->fresh()->status);
+                $this->assertDatabaseCount('customers', 1);
+            }
+            if ($scenario === 'reservation' && $conflict) {
                 $this->assertSame('listed', $loserVehicle->fresh()->status);
                 $this->assertNull($loserVehicle->fresh()->buyer_name);
                 $this->assertNull($loserVehicle->fresh()->buyer_customer_id);

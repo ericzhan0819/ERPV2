@@ -413,7 +413,6 @@ class VehicleService
      */
     public function updateVehicle(Vehicle $vehicle, array $data, int $userId): Vehicle
     {
-        $data = $this->applySellerCustomerSnapshot($data);
         $data = $this->normalizeIntakeCheckFields($data);
 
         return DB::transaction(function () use ($vehicle, $data, $userId) {
@@ -431,6 +430,17 @@ class VehicleService
             // 因此既有快照不可改用客戶目前資料重算，也不可採用這次帶入的自由文字，
             // 否則後續無關編輯會改寫歷史資料，或讓快照與連結客戶不一致。
             // 未變更連結時，以已儲存的賣方姓名與電話為準，填值前捨棄請求帶入的這兩欄。
+            if (array_key_exists('seller_customer_id', $data)
+                && (int) $data['seller_customer_id'] === (int) $lockedVehicle->seller_customer_id) {
+                unset($data['seller_customer_id']);
+            }
+
+            if (! empty($data['seller_customer_id'])) {
+                $customer = $this->ensureCustomerRole((int) $data['seller_customer_id'], Customer::TYPE_SELLER, $userId, 'seller_customer_id');
+                $data['seller_name'] = $customer->name;
+                $data['seller_phone'] = $customer->phone;
+            }
+
             if (! array_key_exists('seller_customer_id', $data) && $lockedVehicle->seller_customer_id) {
                 unset($data['seller_name'], $data['seller_phone']);
             }
@@ -694,7 +704,7 @@ class VehicleService
 
             if ($hasMoneyEntries) {
                 throw ValidationException::withMessages([
-                    'status' => ['已有收支紀錄的車輛不得刪除，請改用取消/退車流程'],
+                    'status' => ['已有收支紀錄的車輛不得刪除，請改用取消車輛流程'],
                 ]);
             }
 
@@ -712,7 +722,7 @@ class VehicleService
 
             if ($hasPhotos) {
                 throw ValidationException::withMessages([
-                    'status' => ['已有照片的車輛不得刪除，請先移除照片或改用取消/退車流程'],
+                    'status' => ['已有照片的車輛不得刪除，請先移除照片或改用取消車輛流程'],
                 ]);
             }
 
@@ -772,9 +782,9 @@ class VehicleService
 
             $lockedVehicle->fill([
                 'asking_price' => $data['asking_price'],
-                'floor_price' => $data['floor_price'] ?? null,
+                'floor_price' => array_key_exists('floor_price', $data) ? $data['floor_price'] : $lockedVehicle->floor_price,
                 'listing_date' => $data['listing_date'] ?? now()->toDateString(),
-                'sales_note' => $data['sales_note'] ?? null,
+                'sales_note' => array_key_exists('sales_note', $data) ? $data['sales_note'] : $lockedVehicle->sales_note,
                 // 「整備完成並上架」這個動作本身就是在宣告整備已完成，若不同步這裡，
                 // 車輛會在已上架/已售出狀態下仍顯示「整備未完成」，與操作語意矛盾。
                 'is_preparation_completed' => true,
@@ -798,12 +808,14 @@ class VehicleService
 
         for ($attempt = 1; $attempt <= self::CUSTOMER_IDENTITY_RACE_ATTEMPTS; $attempt++) {
             try {
-                return DB::transaction(fn () => $this->createReservationInsideTransaction(
+                $reservation = DB::transaction(fn () => $this->createReservationInsideTransaction(
                     $vehicle,
                     $idempotencyKey,
                     $effectiveData,
                     $userId
                 ));
+
+                return $reservation ?? $this->replayReservationInFreshTransaction(null, $vehicle->id, $idempotencyKey, $effectiveData);
             } catch (QueryException $exception) {
                 if (Customer::isIdentityUniqueViolation($exception)
                     && $attempt < self::CUSTOMER_IDENTITY_RACE_ATTEMPTS) {
@@ -814,7 +826,7 @@ class VehicleService
                     throw $exception;
                 }
 
-                return $this->replayRacedReservationAfterRollback(
+                return $this->replayReservationInFreshTransaction(
                     $exception,
                     $vehicle->id,
                     $idempotencyKey,
@@ -829,7 +841,7 @@ class VehicleService
     /**
      * @param  array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, sales_agent_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
      */
-    private function createReservationInsideTransaction(Vehicle $vehicle, string $idempotencyKey, array $effectiveData, int $userId): Vehicle
+    private function createReservationInsideTransaction(Vehicle $vehicle, string $idempotencyKey, array $effectiveData, int $userId): ?Vehicle
     {
         $existingEntry = MoneyEntry::query()
             ->where('idempotency_key', $idempotencyKey)
@@ -843,6 +855,12 @@ class VehicleService
             ->whereKey($vehicle->id)
             ->lockForUpdate()
             ->firstOrFail();
+
+        // 狀態已變更時先結束此唯讀交易並釋放車輛鎖，再以新交易重讀冪等鍵。
+        // 不在持有車輛鎖時鎖收支，避免與核准流程的「收支 → 車輛」順序相反。
+        if ($lockedVehicle->status !== 'listed') {
+            return null;
+        }
 
         $this->assertStatus($lockedVehicle, 'listed', '只有上架中的車輛可以收訂金並保留');
         $this->assertCommissionAgentsActive(['sales_agent_id' => $effectiveData['sales_agent_id']]);
@@ -890,18 +908,21 @@ class VehicleService
     /**
      * @param  array{buyer_name: string, buyer_phone: string|null, buyer_customer_id: int|null, sold_price: int, deposit_amount: int, cash_account_id: int, sales_agent_id: int, description: string|null, entry_date: string, entry_date_was_supplied: bool}  $effectiveData
      */
-    private function replayRacedReservationAfterRollback(QueryException $original, int $vehicleId, string $idempotencyKey, array $effectiveData): Vehicle
+    private function replayReservationInFreshTransaction(?QueryException $original, int $vehicleId, string $idempotencyKey, array $effectiveData): Vehicle
     {
         return DB::transaction(function () use ($original, $vehicleId, $idempotencyKey, $effectiveData) {
-            // 與收尾款相同：MySQL 的 REPEATABLE READ 回滾後可能還是舊快照，
-            // 所以要在新的交易中加鎖重讀 idempotency_key。
+            // 舊交易已結束並釋放車輛鎖；新交易依「收支 → 車輛」順序讀取已提交資料。
+            // 重送比較也必須讀目前車輛，不能沿用舊交易的 REPEATABLE READ 快照。
             $racedEntry = MoneyEntry::query()
                 ->where('idempotency_key', $idempotencyKey)
                 ->lockForUpdate()
                 ->first();
 
             if (! $racedEntry) {
-                throw $original;
+                if ($original !== null) {
+                    throw $original;
+                }
+                throw ValidationException::withMessages(['status' => ['只有上架中的車輛可以收訂金並保留']]);
             }
 
             return $this->replayOrRejectReservation($racedEntry, $vehicleId, $effectiveData);
@@ -919,7 +940,7 @@ class VehicleService
             ]);
         }
 
-        return Vehicle::query()->whereKey($entry->vehicle_id)->firstOrFail();
+        return Vehicle::query()->whereKey($entry->vehicle_id)->lockForUpdate()->firstOrFail();
     }
 
     /**
@@ -960,7 +981,7 @@ class VehicleService
 
         // 訂金收支本身沒有記錄 sold_price 與 buyer_phone，但保留請求會把這些欄位寫進車輛。
         // 重試必須確認車輛目前值仍與請求一致，否則會在兩欄已被修改時仍錯誤地回放成功。
-        $vehicle = Vehicle::query()->whereKey($entry->vehicle_id)->first();
+        $vehicle = Vehicle::query()->whereKey($entry->vehicle_id)->lockForUpdate()->first();
 
         if (! $vehicle) {
             return false;
@@ -1128,7 +1149,8 @@ class VehicleService
     private function replayRacedFinalPaymentAfterRollback(QueryException $original, int $vehicleId, string $idempotencyKey, array $effectiveData): array
     {
         return DB::transaction(function () use ($original, $vehicleId, $idempotencyKey, $effectiveData) {
-            // 回滾後要開新交易：MySQL 的 REPEATABLE READ 在原交易重讀時，仍可能看到競態前的快照，n+            // 因而漏掉已提交的勝出資料。改用加鎖讀取，才能看到該筆資料。
+            // 回滾後要開新交易：MySQL 的 REPEATABLE READ 在原交易重讀時，仍可能看到競態前的快照，
+            // 因而漏掉已提交的勝出資料。改用加鎖讀取，才能看到該筆資料。
             $racedEntry = MoneyEntry::query()
                 ->where('idempotency_key', $idempotencyKey)
                 ->lockForUpdate()
@@ -1142,6 +1164,39 @@ class VehicleService
         });
     }
 
+    public function endReservationOrCancel(Vehicle $vehicle, bool $cancel, int $userId): Vehicle
+    {
+        return DB::transaction(function () use ($vehicle, $cancel, $userId) {
+            $locked = Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
+            $allowed = $cancel ? ['preparing', 'listed', 'reserved'] : ['reserved'];
+            if (! in_array($locked->status, $allowed, true)) {
+                throw ValidationException::withMessages(['status' => ['目前車輛狀態無法執行此操作']]);
+            }
+            $pending = MoneyEntry::query()->where('vehicle_id', $locked->id)
+                ->where('approval_status', MoneyEntry::APPROVAL_PENDING);
+            if (! $cancel) {
+                $pending->whereIn('category', VehicleMoneyCategories::SALES_SAFE);
+            }
+            if ($pending->exists()) {
+                throw ValidationException::withMessages(['status' => ['尚有待審收支，請先核准或駁回']]);
+            }
+            if ($this->approvedNetCollection($locked) !== 0) {
+                throw ValidationException::withMessages(['status' => ['已核准銷售淨收款必須為零，請先完成退款']]);
+            }
+            $locked->fill([
+                'buyer_customer_id' => null, 'buyer_name' => null, 'buyer_phone' => null,
+                'sold_price' => null, 'sales_agent_id' => null,
+            ]);
+            $locked->reserved_at = null;
+            $locked->sold_at = null;
+            $locked->status = $cancel ? 'cancelled' : 'listed';
+            $locked->updated_by = $userId;
+            $locked->save();
+
+            return $locked;
+        });
+    }
+
     /**
      * @param  array<string, mixed>  $data
      */
@@ -1149,7 +1204,13 @@ class VehicleService
     {
         $soldAt = isset($data['sold_at'])
             ? Carbon::parse($data['sold_at'])->setTimezone(config('app.timezone'))
-            : now();
+            : now(config('app.timezone'));
+
+        $today = now(config('app.timezone'));
+        if ($soldAt->copy()->setTimezone(config('app.timezone'))->toDateString() > $today->toDateString()
+            || (! $this->isCreatorAdmin($userId) && $soldAt->format('Y-m') !== $today->format('Y-m'))) {
+            throw ValidationException::withMessages(['sold_at' => ['成交日期不得晚於今天，且只有管理員可跨月回填']]);
+        }
 
         return DB::transaction(function () use ($vehicle, $userId, $soldAt) {
             // 薪資確認先鎖 period 再鎖候選車；回填成交也採相同順序，避免一邊確認、
@@ -1171,6 +1232,11 @@ class VehicleService
                 ->firstOrFail();
 
             $this->assertStatus($lockedVehicle, 'reserved', '只有保留中的車輛可以成交結案');
+
+            if ($lockedVehicle->reserved_at !== null
+                && $soldAt->copy()->setTimezone(config('app.timezone'))->toDateString() < $lockedVehicle->reserved_at->copy()->setTimezone(config('app.timezone'))->toDateString()) {
+                throw ValidationException::withMessages(['sold_at' => ['成交日期不得早於保留日']]);
+            }
 
             if (! $lockedVehicle->sold_price || ! $lockedVehicle->buyer_name) {
                 throw ValidationException::withMessages([

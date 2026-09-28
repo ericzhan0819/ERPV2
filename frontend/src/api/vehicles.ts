@@ -136,3 +136,8 @@ export async function getVehiclePrintClosing(id: number): Promise<VehiclePrintCl
   const { data } = await apiClient.get<VehiclePrintClosingResponse>(`/api/vehicles/${id}/print/closing`)
   return data
 }
+
+export async function endVehicleReservation(id: number, action: 'unreserve' | 'cancel'): Promise<Vehicle> {
+  const { data } = await apiClient.post<{ data: Vehicle }>(`/api/vehicles/${id}/${action}`)
+  return data.data
+}

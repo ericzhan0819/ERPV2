@@ -47,6 +47,16 @@ class VehiclePolicy
         return $user->hasAnyRole([User::ROLE_ADMIN, User::ROLE_MANAGER]);
     }
 
+    public function cancel(User $user, Vehicle $vehicle): bool
+    {
+        return $user->hasAnyRole([User::ROLE_ADMIN, User::ROLE_MANAGER]);
+    }
+
+    public function unreserve(User $user, Vehicle $vehicle): bool
+    {
+        return $user->hasAnyRole([User::ROLE_ADMIN, User::ROLE_MANAGER]);
+    }
+
     public function reserve(User $user, Vehicle $vehicle): bool
     {
         return $user->hasAnyRole([User::ROLE_ADMIN, User::ROLE_MANAGER, User::ROLE_SALES]);

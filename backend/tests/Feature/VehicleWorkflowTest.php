@@ -110,9 +110,11 @@ class VehicleWorkflowTest extends TestCase
 
     public function test_close_sale_normalizes_offset_timestamp_to_taipei_business_time(): void
     {
+        $this->travelTo(Carbon::parse('2026-07-02 12:00:00'));
         $user = User::factory()->admin()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
         $vehicle = $this->createReservedVehicleWithDeposit($user, $cashAccount, 480000, 100000);
+        $vehicle->forceFill(['reserved_at' => '2026-06-30 12:00:00'])->save();
 
         $this->actingAs($user, 'web')
             ->postJson("/api/vehicles/{$vehicle->id}/final-payment", [

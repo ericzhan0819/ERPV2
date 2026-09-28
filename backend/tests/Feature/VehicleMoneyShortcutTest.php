@@ -68,7 +68,7 @@ class VehicleMoneyShortcutTest extends TestCase
     public function test_deposit_shortcut_creates_income_entry(): void
     {
         $user = User::factory()->create(['is_active' => true]);
-        $vehicle = Vehicle::factory()->create(['status' => 'preparing']);
+        $vehicle = Vehicle::factory()->create(['status' => 'reserved']);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
 
         $this->actingAs($user, 'web')
@@ -152,7 +152,7 @@ class VehicleMoneyShortcutTest extends TestCase
     public function test_deposit_shortcut_same_idempotency_key_different_amount_is_rejected(): void
     {
         $user = User::factory()->create(['is_active' => true]);
-        $vehicle = Vehicle::factory()->create(['status' => 'preparing']);
+        $vehicle = Vehicle::factory()->create(['status' => 'reserved']);
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
         $idempotencyKey = (string) Str::uuid();
 

@@ -222,7 +222,7 @@ Request body 採完整表單提交：
 
 ## 3. Vehicles
 
-車輛狀態：`preparing`（整備中）→ `listed`（上架中）→ `reserved`（保留中）→ `sold`（已售出），另有 `cancelled`（取消/退車）。
+車輛狀態：`preparing`（整備中）→ `listed`（上架中）→ `reserved`（保留中）→ `sold`（已售出），另有 `cancelled`（已取消）。
 
 ### GET /api/vehicles
 
@@ -447,6 +447,18 @@ admin 讀取車輛詳情時，若該車已被 confirmed／paid 薪資月份引�
 ---
 
 ## 4. Vehicle Workflow
+
+### 車輛退訂、取消與收款狀態限制
+
+- `POST /api/vehicles/{id}/unreserve`：僅 admin / manager。reserved 車輛在沒有待審訂金／尾款／退款，且已核准銷售淨收款為零時回到 listed。清除 buyer_customer_id、buyer_name、buyer_phone、sold_price、sales_agent_id、reserved_at、sold_at；歷史收支保留，官網 availability 回到 available。
+- `POST /api/vehicles/{id}/cancel`：僅 admin / manager。preparing / listed / reserved 可取消，須沒有任何 pending 收支，且已核准銷售淨收款為零。清除上述買方／成交資料，改為 cancelled；官網回 404，無法恢復或新增收支。已核准購車付款及整備支出保留，不自動沖銷。
+- 以上端點不需 request body，成功回傳 VehicleResource；不符合狀態或收款條件回 422。重複執行不會新增金流；原狀態已改變時回 422，呼叫端應重新載入車輛。
+- 核准訂金／尾款也要求車輛目前為 reserved，包含部署前既有的 pending 紀錄；不符合時回 422 並保持 pending，仍可駁回。退款維持既有規則，允許在 preparing／listed／reserved 核准。
+- 一般收支 create / update 及 `/deposit` 的訂金／尾款收入只允許 reserved；listed 首次收訂金必須使用 `/reserve`，同步建立買方資料及保留狀態。
+- `/close-sale` 的 sold_at 以台北日期判斷，不得晚於今天或早於 reserved_at 的日期；非 admin 僅能填當月，admin 可回填未鎖定月份。省略時使用現在時間。
+- 上架時省略 floor_price / sales_note 會保留原值，明確 null 才清空。
+- 更新車輛帶入相同 seller_customer_id 不刷新賣方歷史快照；真正改綁才取用新客戶資料並合併其買賣方類型。
+- 客戶電話不含任何數字時視為無電話，不參與自動合併或唯一性比對。此正規化套用於新建與後續儲存；既有客戶不批次合併、拆分或改寫車輛歷史關聯。
 
 ### POST /api/vehicles/{id}/list — 整備完成上架
 

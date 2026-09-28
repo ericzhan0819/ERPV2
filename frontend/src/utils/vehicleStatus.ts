@@ -6,7 +6,7 @@ export const vehicleStatusLabels: Record<VehicleStatus, string> = {
   listed: '上架中',
   reserved: '保留中',
   sold: '已售出',
-  cancelled: '取消 / 退車',
+  cancelled: '已取消',
 }
 
 export const vehicleStatusBadgeClasses: Record<VehicleStatus, string> = {

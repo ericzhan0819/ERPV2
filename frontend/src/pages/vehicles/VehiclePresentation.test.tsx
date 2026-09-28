@@ -28,6 +28,7 @@ vi.mock('../../api/vehiclePhotos', () => ({
 
 vi.mock('../../api/vehicles', () => ({
   closeSaleVehicle: vi.fn(),
+  endVehicleReservation: vi.fn(),
   createVehicle: vi.fn(),
   getVehicle: vi.fn(),
   listCommissionAgentOptions: vi.fn(),
@@ -236,6 +237,10 @@ describe('Vehicle presentation', () => {
     renderDetail()
     await screen.findByRole('heading', { name: vehicle.stock_no })
     expect(screen.queryByRole('button', { name: '修改開價與底價' })).toBeNull()
+    if (status === 'cancelled') {
+      expect(screen.getAllByText('已取消').length).toBeGreaterThan(0)
+      expect(screen.queryByText('取消 / 退車')).toBeNull()
+    }
   })
 
   it('keeps entered prices and associates API validation errors with the field', async () => {
@@ -341,6 +346,28 @@ describe('Vehicle presentation', () => {
     expect(document.activeElement).toBe(alert)
   })
 
+  it('confirms cancellation and keeps backend rejection visible', async () => {
+    vi.mocked(vehiclesApi.endVehicleReservation).mockRejectedValueOnce(new Error('pending'))
+    renderDetail()
+    await screen.findByRole('heading', { name: '車輛照片' })
+    fireEvent.click(screen.getByRole('button', { name: '取消車輛' }))
+    expect(screen.getByText(/取消後無法恢復/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '確認操作' }))
+    await waitFor(() => expect(vehiclesApi.endVehicleReservation).toHaveBeenCalledWith(7, 'cancel'))
+    expect(await screen.findByRole('alert')).toBeTruthy()
+    expect(screen.getByRole('dialog', { name: '取消車輛' })).toBeTruthy()
+  })
+
+  it('releases a reservation through the dedicated endpoint', async () => {
+    vi.mocked(vehiclesApi.endVehicleReservation).mockResolvedValueOnce({ ...vehicle, status: 'listed' })
+    renderDetail()
+    await screen.findByRole('heading', { name: '車輛照片' })
+    fireEvent.click(screen.getByRole('button', { name: '退訂並重新上架' }))
+    fireEvent.click(screen.getByRole('button', { name: '確認操作' }))
+    await waitFor(() => expect(vehiclesApi.endVehicleReservation).toHaveBeenCalledWith(7, 'unreserve'))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
   it('keeps high-risk vehicle outcomes and description fields in workflow modals', async () => {
     const interaction = userEvent.setup()
     renderDetail()
@@ -354,7 +381,7 @@ describe('Vehicle presentation', () => {
     expect(modalPanel.getAttribute('aria-modal')).toBe('true')
     expect(document.activeElement).toBe(screen.getByRole('button', { name: '關閉' }))
     expect(
-      screen.getByText('成交日期決定薪資獎金月份；已確認或已發薪月份不能新增成交。收款日期不影響成交月份。'),
+      screen.getByText(/成交日期決定薪資獎金月份；已確認或已發薪月份不能新增成交。收款日期不影響成交月份。/),
     ).toBeTruthy()
     const soldDateLabel = screen.getByText('成交日期（預設今天）')
     expect(soldDateLabel.nextElementSibling).toHaveProperty('type', 'date')

@@ -83,6 +83,10 @@ Route::middleware(['auth:sanctum', 'active', 'password.changed'])->group(functio
     Route::get('vehicles/{vehicle}/print/closing', [VehicleController::class, 'printClosing'])
         ->middleware('can:print,vehicle');
 
+    // 退訂與取消：admin、manager 可操作
+    Route::post('vehicles/{vehicle}/unreserve', [VehicleController::class, 'unreserve'])->middleware('can:unreserve,vehicle');
+    Route::post('vehicles/{vehicle}/cancel', [VehicleController::class, 'cancel'])->middleware('can:cancel,vehicle');
+
     // 銷售流程：admin、manager、sales 皆可操作
     Route::post('vehicles/{vehicle}/reserve', [VehicleController::class, 'reserve'])
         ->middleware('can:reserve,vehicle');

@@ -103,7 +103,7 @@ class RoleAccessTest extends TestCase
     {
         $sales = User::factory()->sales()->create(['is_active' => true]);
         $cashAccount = CashAccount::factory()->create();
-        $vehicle = Vehicle::factory()->create(['status' => 'listed']);
+        $vehicle = Vehicle::factory()->create(['status' => 'reserved']);
 
         $response = $this->actingAs($sales, 'web')->postJson("/api/vehicles/{$vehicle->id}/deposit", [
             'amount' => 20000,
