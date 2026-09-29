@@ -8,6 +8,8 @@ The format is based on Keep a Changelog, and this project uses Semantic Versioni
 
 ### Fixed
 
+- Prevent manual salary adjustments from calculating draft totals with a snapshot taken before a concurrent recalculation completes.
+
 - Require reserved vehicles when approving existing pending deposits and final payments.
 
 - Add guarded vehicle cancellation and reservation release, including vehicle-page controls and public availability updates.

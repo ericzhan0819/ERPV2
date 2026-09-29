@@ -8,6 +8,8 @@ use App\Models\CommissionPlan;
 use App\Models\MoneyEntry;
 use App\Models\SalaryPeriod;
 use App\Models\SalaryProfile;
+use App\Models\SalarySettlement;
+use App\Models\SalarySettlementItem;
 use App\Models\User;
 use App\Models\Vehicle;
 use App\Services\CommissionPlanService;
@@ -20,6 +22,7 @@ use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 use Tests\TestCase;
 use Throwable;
@@ -427,6 +430,167 @@ class SalarySettingsMysqlConcurrencyTest extends TestCase
             $this->assertSame(0, SalaryPeriod::query()->findOrFail($loserPeriod->id)->settlements()->whereNotNull('money_entry_id')->count());
         } finally {
             $this->cleanupParentResources($parentSocket, $pid, $resultPath);
+        }
+    }
+
+    /** @return array<string, array{string}> */
+    public static function adjustmentOperations(): array
+    {
+        return [
+            'addition' => ['add'],
+            'delete addition' => ['delete'],
+            'deduction using new earnings' => ['deduct'],
+        ];
+    }
+
+    #[DataProvider('adjustmentOperations')]
+    public function test_adjustment_totals_include_concurrent_draft_recalculation(string $operation): void
+    {
+        $this->prepareDisposableMysqlDatabase();
+        $admin = User::factory()->admin()->create(['is_active' => true]);
+        $employee = User::factory()->sales()->create(['is_active' => true]);
+        SalaryProfile::query()->create(array_merge($this->salaryProfilePayload(), [
+            'user_id' => $employee->id,
+            'base_salary' => 30000,
+            'fixed_allowance' => 0,
+            'labor_insurance_deduction' => 0,
+            'health_insurance_deduction' => 0,
+        ]));
+        app(CommissionPlanService::class)->createPlan($admin, array_merge($this->commissionPlanPayload(), [
+            'effective_from' => '2026-01-01',
+        ]));
+        $service = app(SalaryPeriodService::class);
+        $period = $service->createDraft($admin, '2026-06');
+        $settlement = $period->settlements->firstWhere('user_id', $employee->id);
+        $item = $operation === 'delete' ? $service->addAdjustment($admin, $settlement, [
+            'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
+            'amount' => 1000,
+            'description' => '加給',
+        ]) : null;
+        $vehicle = Vehicle::factory()->create([
+            'status' => 'sold',
+            'sold_at' => '2026-06-15 12:00:00',
+            'purchase_price' => 100000,
+            'sold_price' => 200000,
+            'purchase_agent_id' => $employee->id,
+            'sales_agent_id' => $employee->id,
+        ]);
+        foreach ([['income', '尾款收入', 200000], ['expense', '購車付款', 100000]] as [$direction, $category, $amount]) {
+            MoneyEntry::factory()->create([
+                'vehicle_id' => $vehicle->id,
+                'direction' => $direction,
+                'category' => $category,
+                'amount' => $amount,
+                'approval_status' => MoneyEntry::APPROVAL_APPROVED,
+                'source_type' => MoneyEntry::SOURCE_MANUAL,
+            ]);
+        }
+
+        [$parentSocket, $childSocket] = $this->createSocketPair();
+        $resultPath = $this->createResultPath('erpv2-salary-adjustment-race-');
+        // Do not share a live PDO socket across fork.
+        DB::purge();
+        $pid = pcntl_fork();
+        if ($pid === -1) {
+            @unlink($resultPath);
+            $this->fail('pcntl_fork failed.');
+        }
+        if ($pid === 0) {
+            fclose($parentSocket);
+            $this->runAdjustmentInChild($childSocket, $resultPath, $admin->id, $settlement->id, $item?->id, $operation);
+        }
+
+        fclose($childSocket);
+        stream_set_timeout($parentSocket, self::CHILD_HANDSHAKE_TIMEOUT_SECONDS);
+        try {
+            $this->assertChildSignal($parentSocket, 'R', 'Adjustment child did not initialize.');
+            DB::beginTransaction();
+            $service->recalculateDraft($admin, $period);
+            fwrite($parentSocket, 'G');
+            $this->assertChildSignal($parentSocket, 'S', 'Adjustment did not reach the period lock.');
+            stream_set_blocking($parentSocket, false);
+            usleep(300000);
+            $this->assertSame('', fread($parentSocket, 1), 'Adjustment must wait for the period lock.');
+            DB::commit();
+            stream_set_blocking($parentSocket, true);
+            stream_set_timeout($parentSocket, self::CHILD_HANDSHAKE_TIMEOUT_SECONDS);
+            $this->assertChildSignal($parentSocket, 'D', 'Adjustment did not finish after recalculation committed.');
+            $status = $this->waitForChildOrStop($pid);
+            $pid = 0;
+            $result = $this->readChildResult($resultPath);
+            $this->assertTrue(pcntl_wifexited($status) && pcntl_wexitstatus($status) === 0, json_encode($result));
+            $this->assertTrue($result['ok'] ?? false, json_encode($result));
+
+            $fresh = $settlement->fresh();
+            $expected = match ($operation) {
+                'add' => 55000,
+                'delete' => 54000,
+                'deduct' => 14000,
+            };
+            $this->assertSame(12000, $fresh->purchase_bonus_total);
+            $this->assertSame(12000, $fresh->sales_bonus_total);
+            $this->assertSame($expected, $fresh->net_pay);
+            $itemTotal = $fresh->items->sum(fn (SalarySettlementItem $row): int => in_array($row->type, [
+                SalarySettlementItem::TYPE_MANUAL_DEDUCTION,
+                SalarySettlementItem::TYPE_LABOR_INSURANCE,
+                SalarySettlementItem::TYPE_HEALTH_INSURANCE,
+            ], true) ? -$row->amount : $row->amount);
+            $this->assertSame($itemTotal, $fresh->net_pay);
+        } finally {
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
+            $this->cleanupParentResources($parentSocket, $pid, $resultPath);
+        }
+    }
+
+    /** @param resource $socket */
+    private function runAdjustmentInChild(
+        $socket,
+        string $resultPath,
+        int $adminId,
+        int $settlementId,
+        ?int $itemId,
+        string $operation,
+    ): never {
+        try {
+            DB::purge();
+            DB::statement('SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+            DB::statement('SET SESSION innodb_lock_wait_timeout = 5');
+            $admin = User::query()->findOrFail($adminId);
+            $settlement = SalarySettlement::query()->findOrFail($settlementId);
+            $item = $itemId === null ? null : SalarySettlementItem::query()->findOrFail($itemId);
+            stream_set_timeout($socket, self::CHILD_HANDSHAKE_TIMEOUT_SECONDS);
+            fwrite($socket, 'R');
+            $this->assertChildSignal($socket, 'G', 'Recalculation did not reach the commit barrier.');
+            $signalled = false;
+            DB::connection()->beforeExecuting(function (string $query) use ($socket, &$signalled): void {
+                if (! $signalled && str_contains($query, 'salary_periods') && str_contains($query, 'for update')) {
+                    $signalled = true;
+                    fwrite($socket, 'S');
+                }
+            });
+            $service = app(SalaryPeriodService::class);
+            if ($operation === 'delete') {
+                $service->deleteAdjustment($admin, $item);
+            } else {
+                $service->addAdjustment($admin, $settlement, [
+                    'type' => $operation === 'deduct'
+                        ? SalarySettlementItem::TYPE_MANUAL_DEDUCTION
+                        : SalarySettlementItem::TYPE_MANUAL_ADDITION,
+                    'amount' => $operation === 'deduct' ? 40000 : 1000,
+                    'description' => '調整',
+                ]);
+            }
+            $this->writeChildResult($resultPath, ['ok' => true]);
+            fwrite($socket, 'D');
+            fclose($socket);
+            exit(0);
+        } catch (Throwable $exception) {
+            $this->writeChildException($resultPath, $exception);
+            fwrite($socket, 'D');
+            fclose($socket);
+            exit(1);
         }
     }
 

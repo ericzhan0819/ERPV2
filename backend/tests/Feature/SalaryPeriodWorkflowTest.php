@@ -336,6 +336,43 @@ class SalaryPeriodWorkflowTest extends TestCase
         }
     }
 
+    public function test_adjustments_lock_period_before_transaction_reads(): void
+    {
+        $this->plan('六月方案', '2026-01-01', 2000);
+        $period = $this->service->createDraft($this->admin, '2026-06');
+        $settlement = $period->settlements->firstWhere('user_id', $this->agent->id);
+        $initialNetPay = $settlement->net_pay;
+        $outerLevel = DB::transactionLevel();
+        $phase = 'add';
+        $queries = ['add' => [], 'delete' => []];
+        DB::listen(function (QueryExecuted $query) use (&$phase, &$queries, $outerLevel): void {
+            if ($query->connection->transactionLevel() > $outerLevel
+                && str_starts_with(strtolower($query->sql), 'select')) {
+                $queries[$phase][] = strtolower(str_replace(['"', '`'], '', $query->sql));
+            }
+        });
+
+        $item = $this->service->addAdjustment($this->admin, $settlement, [
+            'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
+            'amount' => 1000,
+            'description' => '加給',
+        ]);
+        $this->assertSame($initialNetPay + 1000, $settlement->fresh()->net_pay);
+        $phase = 'delete';
+        $this->service->deleteAdjustment($this->admin, $item);
+        $this->assertSame($initialNetPay, $settlement->fresh()->net_pay);
+
+        foreach ($queries as $operation => $sql) {
+            // SQLite omits FOR UPDATE; the real lock is covered by the MySQL concurrency test.
+            $this->assertStringContainsString('from salary_periods', $sql[0], $operation);
+            $this->assertStringContainsString('from salary_settlements', $sql[1], $operation);
+            if (DB::connection()->getDriverName() === 'mysql') {
+                $this->assertStringContainsString('for update', $sql[0], $operation);
+                $this->assertStringContainsString('for update', $sql[1], $operation);
+            }
+        }
+    }
+
     public function test_confirm_blocks_current_anomalies_without_mutating_draft(): void
     {
         $this->plan('六月方案', '2026-01-01', 2000);

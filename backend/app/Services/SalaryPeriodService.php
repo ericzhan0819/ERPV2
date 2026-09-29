@@ -111,8 +111,10 @@ final class SalaryPeriodService
         $this->assertAdmin($actor);
         $this->assertAdjustmentData($data);
 
-        return DB::transaction(function () use ($actor, $settlement, $data) {
-            $periodId = SalarySettlement::query()->whereKey($settlement->id)->value('salary_period_id');
+        // Resolve routing IDs before the transaction so its read view starts after the period lock.
+        $periodId = SalarySettlement::query()->whereKey($settlement->id)->value('salary_period_id');
+
+        return DB::transaction(function () use ($actor, $settlement, $data, $periodId) {
             $period = SalaryPeriod::query()->whereKey($periodId)->lockForUpdate()->firstOrFail();
             $this->assertDraft($period);
             $lockedSettlement = SalarySettlement::query()
@@ -148,11 +150,13 @@ final class SalaryPeriodService
     {
         $this->assertAdmin($actor);
 
-        DB::transaction(function () use ($actor, $item) {
-            $relation = SalarySettlementItem::query()
-                ->join('salary_settlements', 'salary_settlements.id', '=', 'salary_settlement_items.salary_settlement_id')
-                ->where('salary_settlement_items.id', $item->id)
-                ->first(['salary_settlement_items.salary_settlement_id', 'salary_settlements.salary_period_id']);
+        // Revalidate these routing IDs under period → settlement → item locks below.
+        $relation = SalarySettlementItem::query()
+            ->join('salary_settlements', 'salary_settlements.id', '=', 'salary_settlement_items.salary_settlement_id')
+            ->where('salary_settlement_items.id', $item->id)
+            ->first(['salary_settlement_items.salary_settlement_id', 'salary_settlements.salary_period_id']);
+
+        DB::transaction(function () use ($actor, $item, $relation) {
             $period = SalaryPeriod::query()->whereKey($relation?->salary_period_id)->lockForUpdate()->firstOrFail();
             $this->assertDraft($period);
             $settlement = SalarySettlement::query()
