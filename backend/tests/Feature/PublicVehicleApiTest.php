@@ -190,6 +190,35 @@ class PublicVehicleApiTest extends TestCase
             ->assertJsonPath('message', 'Vehicle not found');
     }
 
+    public function test_public_vehicle_detail_for_oversized_numeric_id_returns_uniform_404(): void
+    {
+        Vehicle::factory()->create(['id' => PHP_INT_MAX, 'status' => 'listed']);
+
+        foreach (['99999999999999999999', '9223372036854775808', (string) PHP_INT_MAX.'0'] as $id) {
+            $this->getJson("/api/public/vehicles/{$id}")
+                ->assertNotFound()
+                ->assertJsonPath('message', 'Vehicle not found');
+        }
+    }
+
+    public function test_public_vehicle_detail_accepts_maximum_integer_id(): void
+    {
+        $vehicle = Vehicle::factory()->create(['id' => PHP_INT_MAX, 'status' => 'listed']);
+
+        $this->getJson("/api/public/vehicles/{$vehicle->id}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $vehicle->id);
+    }
+
+    public function test_public_vehicle_detail_accepts_leading_zeroes(): void
+    {
+        $vehicle = Vehicle::factory()->create(['status' => 'listed']);
+
+        $this->getJson('/api/public/vehicles/'.str_repeat('0', 30).$vehicle->id)
+            ->assertOk()
+            ->assertJsonPath('data.id', $vehicle->id);
+    }
+
     public function test_public_vehicle_detail_returns_public_description_but_list_does_not(): void
     {
         $vehicle = Vehicle::factory()->create([

@@ -8,6 +8,8 @@ The format is based on Keep a Changelog, and this project uses Semantic Versioni
 
 ### Fixed
 
+- Return the public vehicle API's uniform 404 response for numeric IDs beyond the integer range.
+
 - Reject deletion of unfinished upload photos, append newly visible photos after existing ordering, and report capacity held by incomplete uploads.
 - Preserve photo upload transaction errors when storage cleanup fails and log file paths for manual recovery.
 - Reject invalid UTF-8 or overlong photo filenames before creating upload batches.

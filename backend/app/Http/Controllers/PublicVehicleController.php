@@ -41,8 +41,14 @@ class PublicVehicleController extends Controller
         return PublicVehicleListResource::collection($vehicles);
     }
 
-    public function show(int $id): PublicVehicleResource
+    public function show(string $id): PublicVehicleResource
     {
+        $id = filter_var(ltrim($id, '0') ?: '0', FILTER_VALIDATE_INT);
+
+        if ($id === false) {
+            throw new NotFoundHttpException('Vehicle not found');
+        }
+
         $vehicle = Vehicle::query()
             ->whereIn('status', Vehicle::publicStatuses())
             ->with('photos')
