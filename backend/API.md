@@ -983,9 +983,9 @@ Query 參數：
 | 欄位 | 型別 | 說明 |
 |---|---|---|
 | idempotency_key | string | 必填，前端可用 UUID；同一把 key 帶相同檔案內容重試會回傳第一次的結果，不重複建立 |
-| photos[] | file[] | 必填，1~20 個檔案，單檔最大 8MB，僅接受 jpg/jpeg/png/webp |
+| photos[] | file[] | 必填，1~20 個檔案，單檔最大 8MB，僅接受 jpg/jpeg/png/webp；檔名須為有效 UTF-8，最多 255 字元 |
 
-成功回傳新建立照片的 `VehiclePhotoResource` 陣列（`201`）。第一張上傳的照片自動成為封面。超過每台車 60 張上限、或超過單次 20 張上限時回傳 `422`。
+成功回傳新建立照片的 `VehiclePhotoResource` 陣列（`201`）。第一張上傳的照片自動成為封面。超過每台車 60 張上限、或超過單次 20 張上限時回傳 `422`。未完成上傳的照片仍佔用額度；若上限錯誤涉及未完成上傳，訊息會列出目前可見照片數與未完成上傳佔用數。檔名無效或過長亦回傳 `422`。
 
 `idempotency_key` 重試規則（見第 12 節冪等性）：
 
@@ -993,7 +993,9 @@ Query 參數：
 - 同一把 key、檔案內容不同：回傳 `422`。
 - 同一把 key，前一次請求仍在處理中（處理租約仍在有效期內，例如兩個請求幾乎同時抵達）：回傳 `422`，訊息提示稍後再試，不回傳不完整或假造的結果。
 - 同一把 key，前一次請求的處理租約已過期（例如處理程序被中止、伺服器重啟，租約時長預設依單檔處理 TTL × 單次最多檔案數推算，至少 900 秒，可用 `VEHICLE_PHOTOS_UPLOAD_BATCH_PENDING_TTL_SECONDS` 調整）：視為前一次處理程序已放棄，自動續傳認領同一筆紀錄，只接著處理「上次還沒處理完的檔案」，不會重新處理已經真的建立過照片的部分，不需要人工介入資料庫；已放棄的那次處理如果其實還在跑，極端情況下可能對「還沒處理完的那幾個檔案」造成重複建立（詳見 `config/vehicle_photos.php` 的 `upload_batch_pending_ttl_seconds` 註解）。
-- 若租約過期後遲遲沒有任何請求回來續傳（例如使用者直接關掉分頁放棄重試），已經真的建立好的部分照片會持續以正常、可見的照片留著。`vehicle-photos:sweep-stale-uploads` 排程指令（預設每日執行一次）會清理超過永久放棄門檻（預設 24 小時，可用 `VEHICLE_PHOTOS_UPLOAD_BATCH_ABANDON_SWEEP_SECONDS` 調整）、仍未完成的批次：把殘留照片標記刪除、移除該筆上傳紀錄，讓車輛照片清單恢復成「這次失敗的上傳完全沒發生過」的一致狀態（詳見 `config/vehicle_photos.php` 的 `upload_batch_abandon_sweep_seconds` 註解）。
+- 若租約過期後遲遲沒有任何請求回來續傳（例如使用者直接關掉分頁放棄重試），已建立的部分照片保持隱藏並佔用額度，直到批次完成或被清理。`vehicle-photos:sweep-stale-uploads` 排程指令（預設每日執行一次）會清理超過永久放棄門檻（預設 24 小時，可用 `VEHICLE_PHOTOS_UPLOAD_BATCH_ABANDON_SWEEP_SECONDS` 調整）、仍未完成的批次：把殘留照片標記刪除、移除該筆上傳紀錄，讓車輛照片清單恢復成「這次失敗的上傳完全沒發生過」的一致狀態（詳見 `config/vehicle_photos.php` 的 `upload_batch_abandon_sweep_seconds` 註解）。
+
+若逐檔資料庫交易失敗且 storage 清理也失敗，API 保留原始錯誤；warning log 記錄 `disk`、`path`、`thumbnail_path` 供人工清理。這些未成功建立 DB row 的檔案不在 `purge-trashed` 清理範圍內；程序在寫檔後、DB commit 前中斷的孤兒檔，目前也沒有自動對帳機制。
 
 ### PATCH /api/vehicles/{id}/photos/reorder — 僅限 admin/manager
 
@@ -1001,7 +1003,7 @@ Query 參數：
 { "photo_ids": [12, 9, 7] }
 ```
 
-`photo_ids` 必須剛好等於此車輛目前所有照片 id（不可缺漏、重複，或包含其他車輛的照片），否則回傳 `422`。成功回傳依新順序排列的 `VehiclePhotoResource` 陣列。
+`photo_ids` 必須剛好等於此車輛目前所有可見照片 id（不可缺漏、重複，或包含其他車輛的照片），否則回傳 `422`。成功回傳依新順序排列的 `VehiclePhotoResource` 陣列。排序只包含可見照片；仍在上傳中的批次完成時，依批次內上傳順序接在當時可見照片之後，同 key 回放不改動已可見照片的排序。
 
 ### PATCH /api/vehicles/{id}/photos/{photoId}/cover — 僅限 admin/manager
 
@@ -1009,7 +1011,7 @@ Query 參數：
 
 ### DELETE /api/vehicles/{id}/photos/{photoId} — 僅限 admin/manager
 
-刪除單張照片（`{"message": "照片已刪除"}`）。若刪除的是封面照，自動改指定 `sort_order` 最小的下一張照片為封面；若刪除後已無任何照片，車輛沒有封面。
+刪除單張照片（`{"message": "照片已刪除"}`）。未完成批次的隱藏照片回傳 `404`，不影響批次進度。若刪除的是封面照，自動改指定 `sort_order` 最小的下一張照片為封面；若刪除後已無任何照片，車輛沒有封面。
 
 ### VehiclePhotoResource
 

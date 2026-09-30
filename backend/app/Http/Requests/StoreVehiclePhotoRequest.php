@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Http\UploadedFile;
 
 class StoreVehiclePhotoRequest extends FormRequest
 {
@@ -19,10 +21,19 @@ class StoreVehiclePhotoRequest extends FormRequest
             'idempotency_key' => ['required', 'string', 'max:100'],
             'photos' => ['required', 'array', 'min:1', 'max:'.$config['max_files_per_upload']],
             'photos.*' => [
+                'bail',
                 'required',
                 'file',
                 'max:'.$config['max_file_size_kb'],
                 'mimes:'.implode(',', $config['allowed_extensions']),
+                function (string $attribute, UploadedFile $file, Closure $fail): void {
+                    $name = $file->getClientOriginalName();
+                    if (! mb_check_encoding($name, 'UTF-8')) {
+                        $fail('照片檔名必須是有效的 UTF-8 文字。');
+                    } elseif (mb_strlen($name, 'UTF-8') > 255) {
+                        $fail('照片檔名不可超過 255 字元。');
+                    }
+                },
             ],
         ];
     }

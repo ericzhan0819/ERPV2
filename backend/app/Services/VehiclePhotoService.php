@@ -181,7 +181,7 @@ class VehiclePhotoService
                 ->count();
             if ($currentPhotoCount + count($filesToProcess) > $config['max_photos_per_vehicle']) {
                 throw ValidationException::withMessages([
-                    'photos' => "每台車最多只能有 {$config['max_photos_per_vehicle']} 張照片。",
+                    'photos' => $this->capacityErrorMessage($vehicle, $config['max_photos_per_vehicle']),
                 ]);
             }
 
@@ -195,7 +195,7 @@ class VehiclePhotoService
                         $currentCount = VehiclePhoto::where('vehicle_id', $vehicle->id)->count();
                         if ($currentCount + 1 > $config['max_photos_per_vehicle']) {
                             throw ValidationException::withMessages([
-                                'photos' => "每台車最多只能有 {$config['max_photos_per_vehicle']} 張照片。",
+                                'photos' => $this->capacityErrorMessage($vehicle, $config['max_photos_per_vehicle']),
                             ]);
                         }
 
@@ -258,7 +258,17 @@ class VehiclePhotoService
                         return $photo;
                     });
                 } catch (\Throwable $e) {
-                    $this->processor->delete($data['disk'], $data['path'], $data['thumbnail_path']);
+                    try {
+                        $this->processor->delete($data['disk'], $data['path'], $data['thumbnail_path']);
+                    } catch (\Throwable $cleanupError) {
+                        Log::warning('Vehicle photo cleanup failed after transaction rollback.', [
+                            'vehicle_id' => $vehicle->id,
+                            'disk' => $data['disk'],
+                            'path' => $data['path'],
+                            'thumbnail_path' => $data['thumbnail_path'],
+                            'exception' => $cleanupError,
+                        ]);
+                    }
 
                     throw $e;
                 }
@@ -503,7 +513,17 @@ class VehiclePhotoService
             return;
         }
 
-        VehiclePhoto::query()->whereIn('id', $photoIds)->update(['upload_batch_id' => null]);
+        // The caller holds the vehicle lock. Append newly visible photos in upload
+        // order; replay must preserve photos that are already visible and reordered.
+        $nextSortOrder = (int) ($vehicle->photos()->max('sort_order') ?? -1) + 1;
+        foreach ($photoIds as $photoId) {
+            $updated = VehiclePhoto::query()
+                ->where('vehicle_id', $vehicle->id)
+                ->whereKey($photoId)
+                ->whereNotNull('upload_batch_id')
+                ->update(['upload_batch_id' => null, 'sort_order' => $nextSortOrder]);
+            $nextSortOrder += $updated;
+        }
 
         $hasVisibleCover = VehiclePhoto::query()
             ->where('vehicle_id', $vehicle->id)
@@ -883,17 +903,11 @@ class VehiclePhotoService
         // 失敗或程序中斷，DB row 仍完整保留 disk/path/thumbnail_path 且已經是
         // 對外隱藏狀態，之後可以安全重試 storage 清理而不影響任何讀取行為。只有
         // storage 確定清乾淨後，才 forceDelete() 徹底移除這筆 tombstone row。
-        DB::transaction(function () use ($vehicle, $photo) {
+        DB::transaction(function () use ($vehicle, &$photo) {
             Vehicle::query()->whereKey($vehicle->id)->lockForUpdate()->firstOrFail();
 
-            // $photo 是進入 transaction 前、拿到 row lock 前就載入的實例，若在「載入」
-            // 與「拿到 lock」之間有另一個並發請求呼叫 setCover() 把封面換成這張照片，
-            // 這裡的 $photo->is_cover 會是過期的 false，導致以為刪除的不是封面、
-            // 不去補封面，讓車輛最終沒有任何封面照。
-            // 拿到 lock 後必須重新從 DB 讀一次目前真正的 is_cover 狀態。若照片在拿到
-            // lock 前已被另一個並發請求刪除，refresh() 會直接拋 ModelNotFoundException，
-            // 不會誤判成「不是封面」而靜默略過補封面。
-            $photo->refresh();
+            // Re-read visibility and cover state after acquiring the vehicle lock.
+            $photo = $vehicle->photos()->whereKey($photo->id)->firstOrFail();
             $wasCover = $photo->is_cover;
 
             if ($wasCover) {
@@ -918,7 +932,7 @@ class VehiclePhotoService
 
         // 稽核紀錄放在上面 transaction commit 之後、storage 實體清理之前：對使用者
         // 而言「刪除」在 DB transaction commit 那一刻就已經真正生效，此時 $photo
-        // 已經是 soft-deleted 之後的狀態（refresh() 過的最新 is_cover/deleted_at），
+        // 已經是 soft-deleted 之後的狀態（重新讀取後的最新 is_cover/deleted_at），
         // 不需要等 storage 清理這個 best-effort 收尾動作完成才記錄。
         $this->auditLogService->recordModelEvent($photo, AuditLog::ACTION_DELETED);
 
@@ -1274,6 +1288,20 @@ class VehiclePhotoService
         $this->auditLogService->recordVehiclePhotoReorder($vehicle, $submittedIds);
 
         return $result;
+    }
+
+    private function capacityErrorMessage(Vehicle $vehicle, int $limit): string
+    {
+        $counts = VehiclePhoto::where('vehicle_id', $vehicle->id)
+            ->selectRaw('COUNT(*) as total, COUNT(upload_batch_id) as pending')
+            ->first();
+        $pending = (int) $counts->pending;
+        $visible = (int) $counts->total - $pending;
+        $message = "每台車最多只能有 {$limit} 張照片。";
+
+        return $pending > 0
+            ? $message."目前可見 {$visible} 張，未完成上傳佔用 {$pending} 張，請稍後重試或等待系統清理。"
+            : $message;
     }
 
     private function assertBelongsToVehicle(Vehicle $vehicle, VehiclePhoto $photo): void

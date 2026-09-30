@@ -10,6 +10,7 @@ use App\Models\VehiclePhotoUploadBatch;
 use App\Services\VehiclePhotoImageProcessor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -636,5 +637,134 @@ class VehiclePhotoTest extends TestCase
             $maxPerVehicle,
             VehiclePhoto::where('vehicle_id', $vehicle->id)->count()
         );
+    }
+
+    private function incompleteBatch(Vehicle $vehicle, User $user, array $files, int $sortOrder = 0): array
+    {
+        $batch = VehiclePhotoUploadBatch::create([
+            'vehicle_id' => $vehicle->id,
+            'idempotency_key' => (string) Str::uuid(),
+            'idempotency_payload' => json_encode([
+                'vehicle_id' => $vehicle->id,
+                'files' => array_map(fn ($file) => [
+                    'sha256' => hash_file('sha256', $file->getRealPath()),
+                    'size' => $file->getSize(),
+                    'original_filename' => $file->getClientOriginalName(),
+                ], $files),
+            ], JSON_THROW_ON_ERROR),
+            'photo_ids' => [],
+            'processing_lease_expires_at' => now()->subDay(),
+        ]);
+        $photo = $this->makePhoto($vehicle, $user, 'incomplete', false, $sortOrder);
+        $photo->update(['upload_batch_id' => $batch->id]);
+        $batch->update(['photo_ids' => [$photo->id]]);
+
+        return [$batch, $photo];
+    }
+
+    public function test_hidden_photo_cannot_be_deleted_and_batch_can_resume_and_replay(): void
+    {
+        Storage::fake('public');
+        $vehicle = Vehicle::factory()->create();
+        $admin = User::factory()->admin()->create();
+        $files = [$this->fakeJpegUploadedFile('a.jpg'), $this->fakeJpegUploadedFile('b.jpg')];
+        [$batch, $photo] = $this->incompleteBatch($vehicle, $admin, $files);
+        Storage::disk('public')->put($photo->path, 'original');
+        Storage::disk('public')->put($photo->thumbnail_path, 'thumbnail');
+        $before = $photo->fresh()->getAttributes();
+        $batchBefore = $batch->fresh()->getAttributes();
+        foreach ([$admin, User::factory()->manager()->create()] as $user) {
+            $this->actingAs($user, 'web')->deleteJson("/api/vehicles/{$vehicle->id}/photos/{$photo->id}")
+                ->assertNotFound();
+            $this->assertSame($before, $photo->fresh()->getAttributes());
+            $this->assertSame($batchBefore, $batch->fresh()->getAttributes());
+            Storage::disk('public')->assertExists([$photo->path, $photo->thumbnail_path]);
+        }
+        for ($i = 0; $i < 2; $i++) {
+            $this->actingAs($admin, 'web')->postJson("/api/vehicles/{$vehicle->id}/photos", [
+                'idempotency_key' => $batch->idempotency_key,
+                'photos' => $files,
+            ])->assertOk()->assertJsonCount(2, 'data');
+        }
+    }
+
+    public function test_capacity_error_preserves_original_error_and_logs_failed_cleanup_paths(): void
+    {
+        Storage::fake('public');
+        Log::spy();
+        $vehicle = Vehicle::factory()->create();
+        $admin = User::factory()->admin()->create();
+        for ($i = 0; $i < 59; $i++) {
+            $this->makePhoto($vehicle, $admin, 'visible-'.$i, $i === 0, $i);
+        }
+        $this->incompleteBatch($vehicle, $admin, [
+            $this->fakeJpegUploadedFile('a.jpg'), $this->fakeJpegUploadedFile('b.jpg'),
+        ], 59);
+        $realProcessor = new VehiclePhotoImageProcessor;
+        $data = null;
+        $processor = \Mockery::mock(VehiclePhotoImageProcessor::class);
+        $processor->shouldReceive('process')->once()->andReturnUsing(function ($file, $vehicleId) use ($realProcessor, &$data) {
+            return $data = $realProcessor->process($file, $vehicleId);
+        });
+        $processor->shouldReceive('delete')->once()->andThrow(new \RuntimeException('storage down'));
+        $this->app->instance(VehiclePhotoImageProcessor::class, $processor);
+        $this->actingAs($admin, 'web')->postJson("/api/vehicles/{$vehicle->id}/photos", [
+            'idempotency_key' => 'capacity-cleanup',
+            'photos' => [$this->fakeJpegUploadedFile()],
+        ])->assertUnprocessable()->assertJsonPath('errors.photos.0',
+            '每台車最多只能有 60 張照片。目前可見 59 張，未完成上傳佔用 1 張，請稍後重試或等待系統清理。');
+        Log::shouldHaveReceived('warning')->once()->with(
+            'Vehicle photo cleanup failed after transaction rollback.',
+            \Mockery::on(fn ($context) => $context['disk'] === $data['disk']
+                && $context['path'] === $data['path']
+                && $context['thumbnail_path'] === $data['thumbnail_path'])
+        );
+        $this->assertSame(60, VehiclePhoto::count());
+        $batch = VehiclePhotoUploadBatch::where('idempotency_key', 'capacity-cleanup')->firstOrFail();
+        $this->assertSame([], $batch->photo_ids);
+        $this->assertNull($batch->processing_lease_expires_at);
+    }
+
+    public function test_finishing_upload_after_reorder_appends_unique_orders_and_replay_preserves_order(): void
+    {
+        Storage::fake('public');
+        $vehicle = Vehicle::factory()->create();
+        $admin = User::factory()->admin()->create();
+        $a = $this->makePhoto($vehicle, $admin, 'a', true, 0);
+        $b = $this->makePhoto($vehicle, $admin, 'b', false, 1);
+        $files = [$this->fakeJpegUploadedFile('x.jpg'), $this->fakeJpegUploadedFile('y.jpg')];
+        [$batch, $hidden] = $this->incompleteBatch($vehicle, $admin, $files, 2);
+        $c = $this->makePhoto($vehicle, $admin, 'c', false, 3);
+        $this->actingAs($admin, 'web')->patchJson("/api/vehicles/{$vehicle->id}/photos/reorder", [
+            'photo_ids' => [$c->id, $a->id, $b->id],
+        ])->assertOk();
+        $payload = ['idempotency_key' => $batch->idempotency_key, 'photos' => $files];
+        $this->postJson("/api/vehicles/{$vehicle->id}/photos", $payload)->assertOk();
+        $photos = $vehicle->photos()->get();
+        $this->assertSame([0, 1, 2, 3, 4], $photos->pluck('sort_order')->all());
+        $this->assertSame([$c->id, $a->id, $b->id, $hidden->id], $photos->take(4)->modelKeys());
+        $reversed = $photos->reverse()->values()->modelKeys();
+        $this->patchJson("/api/vehicles/{$vehicle->id}/photos/reorder", ['photo_ids' => $reversed])->assertOk();
+        $this->postJson("/api/vehicles/{$vehicle->id}/photos", $payload)->assertOk();
+        $this->assertSame($reversed, $vehicle->photos()->get()->modelKeys());
+    }
+
+    public function test_invalid_utf8_and_overlong_filenames_are_rejected_before_batch_creation(): void
+    {
+        Storage::fake('public');
+        $vehicle = Vehicle::factory()->create();
+        $admin = User::factory()->admin()->create();
+        foreach (["\xB0\xAA.jpg", str_repeat('車', 252).'.jpg'] as $name) {
+            $this->actingAs($admin, 'web')->postJson("/api/vehicles/{$vehicle->id}/photos", [
+                'idempotency_key' => (string) Str::uuid(),
+                'photos' => [$this->fakeJpegUploadedFile($name)],
+            ])->assertUnprocessable()->assertJsonValidationErrors('photos.0');
+        }
+        $this->assertSame(0, VehiclePhotoUploadBatch::count());
+        $this->assertSame([], Storage::disk('public')->allFiles());
+        $this->postJson("/api/vehicles/{$vehicle->id}/photos", [
+            'idempotency_key' => (string) Str::uuid(),
+            'photos' => [$this->fakeJpegUploadedFile(str_repeat('車', 251).'.jpg')],
+        ])->assertOk();
     }
 }
