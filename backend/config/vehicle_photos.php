@@ -16,7 +16,7 @@ return [
     | Storage disk
     |--------------------------------------------------------------------------
     |
-    | v1.2 使用 Laravel 內建 public disk（storage/app/public，需先執行
+    | 使用 Laravel 內建 public disk（storage/app/public，需先執行
     | `php artisan storage:link`）。DB 只記 disk + path，不記本機絕對路徑，
     | 未來若要搬到 Cloudflare R2，只需新增 disk 設定並改變這裡的值。
     |
@@ -81,7 +81,7 @@ return [
     // 的原生函式呼叫，中途沒有機會插入程式碼去續約。如果某一個步驟本身就跑得
     // 比 TTL 還久，lease 一樣會在那個步驟執行中過期，
     // 續約機制救不到）。這是 lease-based lock 的已知理論限制，沒有 fencing token 或
-    // 換成 queue + 單一 worker 架構的話無法 100% 杜絕，這兩者都超出 v1.2 同步上傳的
+    // 換成 queue + 單一 worker 架構的話無法 100% 杜絕，這兩者都超出 同步上傳的
     // 最小範圍。
     //
     // 因此改用「TTL 遠大於實測單一步驟最長耗時」來把風險壓到可接受範圍，而不是假裝

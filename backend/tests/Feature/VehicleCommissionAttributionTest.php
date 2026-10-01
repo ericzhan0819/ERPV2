@@ -92,6 +92,13 @@ class VehicleCommissionAttributionTest extends TestCase
         $admin = User::query()->where('email', 'admin@example.com')->firstOrFail();
 
         $this->assertDatabaseMissing('salary_profiles', ['user_id' => $admin->id]);
+        $this->actingAs($admin, 'web')->getJson('/api/vehicles')->assertStatus(409);
+        $this->patchJson('/api/me/password', [
+            'current_password' => 'password',
+            'password' => 'new-owner-password',
+            'password_confirmation' => 'new-owner-password',
+        ])->assertSuccessful();
+        $admin->refresh();
 
         $this->actingAs($admin, 'web')->postJson('/api/vehicles', [
             'brand' => 'Toyota',

@@ -50,3 +50,5 @@ Security-sensitive areas include, but are not limited to:
 ## Deployment Responsibility
 
 ERPV2 is provided under the MIT License without warranty. Operators are responsible for secure production configuration, including HTTPS, database credentials, Session / Cookie settings, trusted hosts / proxies, backups, filesystem permissions, and dependency updates.
+
+資料庫 trigger、照片與 private 審查證據必須同步備份；操作方式與隔離還原演練見 [備份文件](README.md#資料庫照片與審查證據備份)。

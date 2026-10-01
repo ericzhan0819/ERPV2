@@ -42,14 +42,15 @@ jobs:
       - name: Prepare test environment
         run: cp .env.example .env
 
-      - name: Audit dependencies
-        run: composer audit --locked --no-interaction
-
       - name: Check code style
         run: ./vendor/bin/pint --test
 
       - name: Run tests
         run: php artisan test
+
+      - name: Audit dependencies
+        if: ${{ !cancelled() }}
+        run: composer audit --locked --no-interaction
 
   frontend:
     name: Frontend
@@ -73,9 +74,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Audit dependencies
-        run: npm audit
-
       - name: Run tests
         run: npm test
 
@@ -87,3 +85,66 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Audit dependencies
+        if: ${{ !cancelled() }}
+        run: npm audit
+
+  mariadb:
+    name: MariaDB integration
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: ci-root-password
+          MARIADB_DATABASE: erpv2_ci_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      APP_ENV: testing
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: erpv2_ci_test
+      DB_USERNAME: root
+      DB_PASSWORD: ci-root-password
+      DB_URL: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: gd, mbstring, pdo_mysql, pcntl, posix
+          coverage: none
+          tools: composer:v2
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Prepare environment
+        run: cp .env.example .env
+      - name: Fresh schema installation
+        run: php artisan migrate --force
+      - name: Run gated integration tests
+        run: ./vendor/bin/phpunit -c phpunit.mysql.xml --log-junit mysql-results.xml
+      - name: Report results and reject skipped integration tests
+        if: ${{ !cancelled() }}
+        run: |
+          python3 - <<'PYTHON'
+          import os
+          import xml.etree.ElementTree as ET
+          root = ET.parse('mysql-results.xml').getroot()
+          cases = root.findall('.//testcase')
+          skipped = sum(case.find('skipped') is not None for case in cases)
+          failures = sum(case.find('failure') is not None or case.find('error') is not None for case in cases)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as report:
+              report.write(f'MariaDB: {len(cases)} tests, {skipped} skipped, {failures} failures/errors\n')
+          assert cases and skipped == 0 and failures == 0, 'MariaDB coverage must execute without skips'
+          PYTHON

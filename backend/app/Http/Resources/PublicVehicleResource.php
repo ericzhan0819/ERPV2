@@ -6,9 +6,9 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * 官網公開唯讀用途，刻意不共用內部 VehicleResource：只回傳 Website Phase 2
- * 列出的允許欄位，絕不回傳收購價 / 底價 / 成交價 / 客戶個資 / 收支 / 毛利 / 資金帳戶
- * / 內部備註 / approval_status / idempotency_key（第 10.2 節）。
+ * 官網公開唯讀用途，刻意不共用內部 VehicleResource：只回傳官網展示
+ * 允許欄位，絕不回傳收購價 / 底價 / 成交價 / 客戶個資 / 收支 / 毛利 / 資金帳戶
+ * / 內部備註 / approval_status / idempotency_key。
  */
 class PublicVehicleResource extends JsonResource
 {

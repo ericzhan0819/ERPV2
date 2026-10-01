@@ -12,6 +12,10 @@ class DatabaseSeeder extends Seeder
     /** 此段說明相鄰程式碼的用途與預期行為。 */
     public function run(): void
     {
+        if (! app()->environment(['local', 'testing'])) {
+            throw new \RuntimeException('Seeders are only available in local/testing environments.');
+        }
+
         $this->call([
             AdminUserSeeder::class,
             CashAccountSeeder::class,

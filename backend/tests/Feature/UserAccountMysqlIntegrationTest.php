@@ -39,13 +39,15 @@ class UserAccountMysqlIntegrationTest extends TestCase
             $this->assertSame(1, DB::table('users')->where('username', 'ERIC')->count());
         }
 
-        $this->artisan('migrate:rollback', ['--step' => 1])->assertSuccessful();
+        // Exercise this migration independently of newer migrations in the installation.
+        $migration = require database_path('migrations/2026_07_23_000000_add_username_and_password_change_state_to_users_table.php');
+        $migration->down();
 
         $this->assertFalse(Schema::hasColumn('users', 'username'));
         $this->assertFalse(Schema::hasColumn('users', 'must_change_password'));
         $this->assertFalse(Schema::hasIndex('users', self::USERNAME_UNIQUE_INDEX));
 
-        $this->artisan('migrate')->assertSuccessful();
+        $migration->up();
 
         $this->assertTrue(Schema::hasColumns('users', ['username', 'must_change_password']));
         $this->assertTrue(Schema::hasIndex('users', self::USERNAME_UNIQUE_INDEX));

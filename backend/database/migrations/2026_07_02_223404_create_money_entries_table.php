@@ -18,7 +18,7 @@ return new class extends Migration
             $table->enum('direction', ['income', 'expense']);
             $table->string('category');
             // amount 以「分」為單位儲存，不使用 float/decimal。
-            // 資料庫層以 CHECK 約束確保 amount > 0；FormRequest（第 7 部分）仍需補 integer|min:1 驗證。
+            // 資料庫層以 CHECK 約束確保 amount > 0；FormRequest 同時執行 integer|min:1 驗證。
             $table->unsignedBigInteger('amount');
 
             $table->string('counterparty_name')->nullable();

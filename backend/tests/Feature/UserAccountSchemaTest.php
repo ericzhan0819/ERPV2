@@ -91,21 +91,26 @@ class UserAccountSchemaTest extends TestCase
         $this->assertSame('sales01', $namedUser->username);
     }
 
-    public function test_admin_seeder_keeps_password_change_complete_without_overwriting_username(): void
+    public function test_admin_seeder_preserves_existing_account(): void
     {
         $this->seed(AdminUserSeeder::class);
 
         $admin = User::query()->where('email', 'admin@example.com')->firstOrFail();
         $admin->update([
             'username' => 'owner',
+            'password' => 'changed-password',
+            'is_active' => false,
             'must_change_password' => true,
         ]);
 
+        $hash = $admin->password;
         $this->seed(AdminUserSeeder::class);
         $admin->refresh();
 
         $this->assertSame('owner', $admin->username);
-        $this->assertFalse($admin->must_change_password);
+        $this->assertTrue($admin->must_change_password);
+        $this->assertFalse($admin->is_active);
+        $this->assertSame($hash, $admin->password);
     }
 
     public function test_migration_can_roll_back_and_run_again(): void

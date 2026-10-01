@@ -1,6 +1,6 @@
 # ERPV2 UX Design System
 
-本文件是 ERPV2 後台的正式 UI／UX 規範。v1.4 沿用既有 Midnight 品牌方向、slate 中性色與語意色彩 token，不新增第二套品牌、平行元件庫或一次性頁面風格。
+本文件是 ERPV2 後台的正式 UI／UX 規範。沿用既有 Midnight 品牌方向、slate 中性色與語意色彩 token，不新增第二套品牌、平行元件庫或一次性頁面風格。
 
 ERPV2 的資訊架構固定為：
 
@@ -179,7 +179,7 @@ Vehicle Card 是車輛工作區列表的正式呈現，欄位固定為：
 - Destructive 不得與 Primary 緊貼；需留出空間並在必要時要求確認。
 - 導覽使用 `Link`／`<a>`，送出或切換狀態使用 `<button>`，不可混用。
 
-本節是 v1.4 的收斂目標契約。既有頁面仍存在 `focus:ring-ring/30` 等舊寫法，須在第 2、4、6、7 部分修改對應頁面時逐步收斂；第 1 部分不宣稱全站既有控制項已完成一致化，也不為文件一致性一次改寫無關頁面。
+本節規定控制項的 focus 契約。維護仍使用 `focus:ring-ring/30` 的頁面時，應逐步對齊此規範。
 
 ---
 
@@ -222,7 +222,7 @@ Vehicle Card 是車輛工作區列表的正式呈現，欄位固定為：
 ## 9. Table
 
 - Table 只用於需要逐欄比較的結構化資料，例如收支、資金帳戶、使用者與稽核紀錄。
-- Dashboard 不使用 Table；v1.4 車輛工作區列表不得再使用 Table，固定改用 Vehicle Card Grid。
+- Dashboard 不使用 Table；車輛工作區列表不得再使用 Table，固定改用 Vehicle Card Grid。
 - 表頭使用 `surface-2 + text-fg-muted + font-medium`；列高至少 48px。
 - 金額右對齊並使用 `tabular-nums`；可排序欄位提供可操作表頭與 `aria-sort`。
 - 空狀態顯示原因與適當下一步，不留下空白表身。
@@ -296,14 +296,14 @@ App Layout 的 Safe Area 契約固定如下：
 
 - 先確認至少兩個實際使用處具有相同語意、狀態與行為，再抽成共用元件。
 - 目前跨頁共用的 Badge、ThemeToggle、CustomerSelect 應維持單一責任與語意 token。
-- Dashboard KPI Card、Vehicle Card 與 Filter 可在 v1.4 實際實作時抽取它們真正共用的 focus、surface 或 URL 行為；不得先建立巨大 `Card`、`Form` 或 `Filter` 萬用元件。
+- Dashboard KPI Card、Vehicle Card 與 Filter 可在維護時抽取它們真正共用的 focus、surface 或 URL 行為；不得先建立巨大 `Card`、`Form` 或 `Filter` 萬用元件。
 - 頁面特有的版面組合留在頁面內；共用元件不接收大量布林 props 來模擬所有變體。
 - API URL 集中於 `frontend/src/api`；共用呈現元件不自行發送業務 API 或重算正式統計。
 - 權限與敏感欄位仍由後端 Policy／Resource 正式保護；共用元件只負責呈現已授權資料。
 
 ---
 
-## 14. v1.4 明確不做
+## 14. 明確不做
 
 - 不新增品牌提案或可切換品牌皮膚。
 - 不建立完整通用元件平台、Storybook 或平行 Design System。
@@ -356,7 +356,7 @@ UI 文案只回答使用者當下需要知道的用途、可執行動作、不�
 ### 15.4 Form 與無障礙
 
 - Placeholder 只提供範例，不得取代 visible label、required marker 或格式規則。
-- 重要資訊不得只放在 hover tooltip。v1.6 不建立 Tooltip／Popover 平台，也不把被刪文字全部搬入資訊 icon。
+- 重要資訊不得只放在 hover tooltip。不建立 Tooltip／Popover 平台，也不把被刪文字全部搬入資訊 icon。
 - 刪除 help text 時同步檢查 `aria-describedby`；不得保留指向不存在 ID 的引用。圖表或其他元件若使用 `aria-labelledby`，同樣必須保證所有引用 ID 存在。
 - Per-field error 維持唯一 ID、`aria-invalid` 與欄位關聯；條件式 warning 不任意搶走 focus。
 - `sr-only` 只承接 assistive technology 需要的非關鍵描述；一般使用者也需要知道的風險、限制與後果必須直接可見。
@@ -370,15 +370,15 @@ UI 文案只回答使用者當下需要知道的用途、可執行動作、不�
 - UI Copy 不使用 Database-backed copy、不新增 i18n、analytics、onboarding tracking 或 runtime dependency。
 - 本章不改既有品牌、色彩、spacing、RWD、Safe Area、API、Business Logic、Workflow、角色或權限契約。
 
-### 15.6 v1.6 完成狀態
+### 15.6 完成狀態
 
-v1.6 已依上述契約完成全站 A／B／C／D／E 文案盤點與純前端實作。頁面副標、
+已依上述契約完成全站 A／B／C／D／E 文案盤點與純前端實作。頁面副標、
 Card description、按鈕教學與常駐 help text 已在資訊可由標題、label、狀態或
 控制項承接時移除；approved-only、成交月份、期末餘額、薪資鎖定、發薪、
 重設密碼、Session 失效與不可逆後果仍保留。
 
 共用 `FormAlert` 與既有 Modal 的焦點／label 關聯只用來維持錯誤可感知與
-鍵盤操作，不代表建立新互動平台。後續不得把 v1.6 擴張為 Tooltip／Popover、
+鍵盤操作，不代表建立新互動平台。文案維護不得擴張為 Tooltip／Popover、
 Onboarding、通知、頁面、路由、KPI、報表或 Database-backed copy。
 
 後續若調整 UI Copy、Accessibility、RWD 或 Design Token，應同步更新本文件與對應自動化測試。

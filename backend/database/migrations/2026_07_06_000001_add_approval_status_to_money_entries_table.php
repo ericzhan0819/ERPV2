@@ -12,7 +12,7 @@ return new class extends Migration
             // 只套用於 source_type=manual 的一般收支審核流程；vehicle_shortcut /
             // vehicle_workflow 建立時一律直接寫入 approved，不進審核佇列。
             // default('approved') 讓既有資料與遷移當下已存在的 row 一律回填為 approved，
-            // 避免 v1.1 上線後追溯影響既有餘額。
+            // 保留既有收支對正式餘額的影響。
             $table->string('approval_status', 20)->default('approved')->after('source_type');
             $table->foreignId('approved_by')->nullable()->after('approval_status')->constrained('users')->restrictOnDelete();
             $table->timestamp('approved_at')->nullable()->after('approved_by');

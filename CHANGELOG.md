@@ -8,6 +8,10 @@ The format is based on Keep a Changelog, and this project uses Semantic Versioni
 
 ### Fixed
 
+- Update Axios, Laravel and Flysystem security fixes; run dependency audits after functional checks and add MariaDB integration CI with skipped-test reporting.
+- Protect initial administrator setup and seed reruns, enforce disposable test databases, and isolate review-evidence test storage.
+- Document production frontend hosting, photo upload limits, upgrades and coordinated database/storage backup and restore; describe current contracts without obsolete development versions.
+
 - Bind salary adjustment retry keys to payloads, renew conflicting keys, refresh uncertain results without hiding dialog errors, and support explicitly creating a separate identical item.
 
 - Bind vehicle workflow retry keys to submitted payloads, renew conflicting keys, and let users explicitly start a separate identical payment or expense after verifying the previous entry.

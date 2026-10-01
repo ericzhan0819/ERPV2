@@ -8,6 +8,7 @@
 /.idea
 /.nova
 /.phpunit.cache
+/phpunit-isolation-*
 /.vscode
 /.zed
 /auth.json

@@ -1,4 +1,4 @@
-# API 文件 — 中古車行內部營運系統（1.0 + v1.1 + v1.2 + v1.3 + v1.4 + v1.5）
+# ERPV2 API 契約
 
 Base URL：`http://localhost:8000`（依 `.env` `APP_URL` 而定）
 
@@ -6,10 +6,10 @@ Base URL：`http://localhost:8000`（依 `.env` `APP_URL` 而定）
 
 1. 先呼叫 `GET /sanctum/csrf-cookie` 取得 CSRF cookie（Sanctum 內建路由）。
 2. 之後所有 request 都要帶 `X-XSRF-TOKEN`（axios 預設會自動處理，需搭配 `withCredentials: true`）。
-3. 除了 `POST /api/login`、`POST /api/logout`、`GET /api/public/*`（v1.2 官網公開唯讀 API）外，其餘 `/api/*` 都需要登入（`auth:sanctum` + `active` middleware）。
+3. 除了 `POST /api/login`、`POST /api/logout`、`GET /api/public/*`（官網公開唯讀 API）外，其餘 `/api/*` 都需要登入（`auth:sanctum` + `active` middleware）。
 4. 標註「僅限管理員」的路由另外掛 `admin` middleware，非管理員呼叫會回傳 `403`。
-5. v1.1 起部分路由改掛 `role:admin,manager` 或 `role:admin,manager,sales` middleware，依 `users.role` 判斷；不符合角色會回傳 `403 {"message": "權限不足"}`。
-6. v1.5 起，`must_change_password=true` 的登入者只能使用 `/api/me`、自助個人資料／密碼與登出；其他 authenticated 營運 API 固定回 `409 {"message":"請先修改密碼","code":"PASSWORD_CHANGE_REQUIRED"}`。停用帳號仍先由 `active` middleware 回 `403`，未登入仍回 `401`。
+5. 部分路由使用 `role:admin,manager` 或 `role:admin,manager,sales` middleware，依 `users.role` 判斷；不符合角色會回傳 `403 {"message": "權限不足"}`。
+6. `must_change_password=true` 的登入者只能使用 `/api/me`、自助個人資料／密碼與登出；其他 authenticated 營運 API 固定回 `409 {"message":"請先修改密碼","code":"PASSWORD_CHANGE_REQUIRED"}`。停用帳號仍先由 `active` middleware 回 `403`，未登入仍回 `401`。
 
 ERPV2 只支援上述 SPA cookie／Session 認證，不支援 Sanctum personal access token 或
 Bearer token。即使資料庫保留框架既有的 `personal_access_tokens` table，其中的 token
@@ -19,7 +19,7 @@ Bearer token。即使資料庫保留框架既有的 `personal_access_tokens` tab
 
 業務日期與月份邊界一律採 `Asia/Taipei`。API datetime 使用帶 `+08:00` offset 的 ISO 8601；帶其他 offset 的輸入會先轉為台北時間再保存。純日期欄位（例如 `entry_date`）使用 `YYYY-MM-DD`，不做時區換算。
 
-### v1.1 角色與敏感欄位遮蔽
+### 角色與敏感欄位遮蔽
 
 `sales` 角色呼叫下列端點時，回傳 JSON 會直接省略（而非回傳 `0`/`null`/空字串）以下欄位：
 
@@ -35,7 +35,7 @@ Bearer token。即使資料庫保留框架既有的 `personal_access_tokens` tab
 
 `GET /api/vehicles/{vehicle}` 對 `sales` 回傳的 payload 不含管理用 `summary`（單車收入/支出合計、毛利），改為 `sales_collection_summary`（銷售收款安全摘要，只計入訂金/尾款收入與退款，見下方車輛模組章節），`money_entries` 也只包含銷售收款安全紀錄與自己上報的車輛支出申請，不含購車付款或他人成本明細。未知角色（`role` 不在 `admin`/`manager`/`sales` 內）讀取內部車輛列表、詳情、車輛收支與照片一律回 `403`。
 
-v1.3 Phase 1 起，`source_type=salary_settlement` 的薪資支出只對 `admin` 可見。`manager`／`sales` 不會在一般 Money Entry 列表取得這些紀錄，也不能用 ID 枚舉單筆；Resource 另有防禦性遮蔽，不向非 admin 輸出金額、資金帳戶、員工姓名、說明或審核欄位。
+`source_type=salary_settlement` 的薪資支出只對 `admin` 可見。`manager`／`sales` 不會在一般 Money Entry 列表取得這些紀錄，也不能用 ID 枚舉單筆；Resource 另有防禦性遮蔽，不向非 admin 輸出金額、資金帳戶、員工姓名、說明或審核欄位。
 
 錯誤格式：
 
@@ -203,9 +203,9 @@ Request body 採完整表單提交：
 
 `trends` 的每個序列都固定包含今天在內的 30 個 `Asia/Taipei` 連續日期點；上例只節錄第一點。成交量依 `sold_at` 歸日，毛利依成交車輛歸日並只計 approved MoneyEntry，現金變化只計 cash 類型帳戶與 approved MoneyEntry，回傳每日期末餘額。
 
-`business_overview.cash_balance` 必須沿用 Cash Account 正式帳面餘額口徑，因此會計入所有 approved 收支，包括 `entry_date` 晚於今天的資料。`trends.cash_balance` 是歷史日趨勢，末點固定為今天，只累計到今天結束；若存在未來日期的 approved 收支，兩者刻意可能不同。本月收入／支出則依整個當月日期區間統計，所以同月內晚於今天的 approved 收支也會納入。本 API 不在 v1.4 改變既有收支日期驗證或正式餘額規則。
+`business_overview.cash_balance` 必須沿用 Cash Account 正式帳面餘額口徑，因此會計入所有 approved 收支，包括 `entry_date` 晚於今天的資料。`trends.cash_balance` 是歷史日趨勢，末點固定為今天，只累計到今天結束；若存在未來日期的 approved 收支，兩者刻意可能不同。本月收入／支出則依整個當月日期區間統計，所以同月內晚於今天的 approved 收支也會納入。本 API 不改變既有收支日期驗證或正式餘額規則。
 
-車輛 `sold_at` 同樣沿用既有驗證，可晚於今天。因此 `business_overview.monthly_sold_count` 與 `monthly_gross_profit` 會計入同月內的未來成交；`trends.sales_count` 與 `trends.gross_profit` 的末點固定為今天，只呈現截至今天的成交。存在未來成交時，月份 KPI 與 30 天趨勢刻意可能不同，本 API 不在 v1.4 改變既有成交日期驗證。
+車輛 `sold_at` 同樣沿用既有驗證，可晚於今天。因此 `business_overview.monthly_sold_count` 與 `monthly_gross_profit` 會計入同月內的未來成交；`trends.sales_count` 與 `trends.gross_profit` 的末點固定為今天，只呈現截至今天的成交。存在未來成交時，月份 KPI 與 30 天趨勢刻意可能不同，本 API 不改變既有成交日期驗證。
 
 `business_overview.sold_month` 是 Dashboard 後端依 `Asia/Taipei` 產生的正式月份（`YYYY-MM`）。本月成交與本月毛利皆使用此值導向 `/vehicles?status=sold&sold_month=YYYY-MM`，前端不得由瀏覽器時區另行推導。此欄位與其他財務月份 KPI 一樣，只回傳給 `admin`／`manager`；`sales` 與未知角色的原始 JSON 不包含此欄位。
 
@@ -216,7 +216,7 @@ Request body 採完整表單提交：
 - `sales`：取得三個工作 KPI、在庫數與成交量趨勢；財務欄位不會出現在 JSON。
 - 未知角色採 fail-safe，輸出同樣不含待審核收支與財務欄位。
 
-第 4 部分完成後，Dashboard API 只保留 `work_overview`、`business_overview` 與 `trends` 三個正式區塊；舊版頂層資金、月份與車輛狀態相容欄位已移除。
+Dashboard API 只保留 `work_overview`、`business_overview` 與 `trends` 三個正式區塊；舊版頂層資金、月份與車輛狀態相容欄位已移除。
 
 ---
 
@@ -436,9 +436,9 @@ Request body（`UpdateVehicleRequest`）：與 `StoreVehicleRequest` 欄位相�
 }
 ```
 
-`purchase_price` 於 `sales` 角色讀取時完全不會出現在 JSON 中；`asking_price`、`floor_price`、`sold_price` 則正常出現（見上方「v1.1 角色與敏感欄位遮蔽」）。
+`purchase_price` 於 `sales` 角色讀取時完全不會出現在 JSON 中；`asking_price`、`floor_price`、`sold_price` 則正常出現（見上方「角色與敏感欄位遮蔽」）。
 
-`purchase_agent_id`／`sales_agent_id` 是 v1.3 Phase 1 新增的正式獎金歸屬欄位，歷史資料保持 `null`，不從 `created_by`／`updated_by` 推定。內部 `VehicleResource` 回傳 ID，關聯已載入時另回傳使用者 ID／姓名；公開 Vehicle Resource 不回傳這些內部欄位。
+`purchase_agent_id`／`sales_agent_id` 是正式獎金歸屬欄位，歷史資料保持 `null`，不從 `created_by`／`updated_by` 推定。內部 `VehicleResource` 回傳 ID，關聯已載入時另回傳使用者 ID／姓名；公開 Vehicle Resource 不回傳這些內部欄位。
 
 admin 讀取車輛詳情時，若該車已被 confirmed／paid 薪資月份引用，頂層另回傳 `commission_attribution_lock`（月份 ID、`period_month`、狀態與鎖定原因）；未鎖定時為 `null`。manager／sales 不取得實際薪資月份鎖定資料。
 
@@ -642,7 +642,7 @@ Request body（`UpdateMoneyEntryRequest`）：同 Store，但不含 `idempotency
 
 `update`/`destroy` 除了上述端點層級的 `role:admin,manager,sales` middleware 外，另外掛 `MoneyEntryPolicy`（`can:update,money_entry` / `can:delete,money_entry`）：`manager`/`sales` 只能異動自己送出、且仍為 `pending` 的一般收支，不可修改或刪除其他人送出的、或已核准/已駁回的收支。
 
-`source_type=salary_settlement` 是 v1.3 專用來源：DB 與應用層共同限制只能由 admin 以 `expense`、`薪資 / 佣金`、`vehicle_id=null`、`approval_status=approved` 建立；不得進入一般 approve/reject，也不得透過一般 CRUD 修改或刪除。正式發薪 API 將於後續 PLAN 階段實作。
+`source_type=salary_settlement` 是發薪專用來源：DB 與應用層共同限制只能由 admin 以 `expense`、`薪資 / 佣金`、`vehicle_id=null`、`approval_status=approved` 建立；不得進入一般 approve/reject，也不得透過一般 CRUD 修改或刪除。正式發薪由 Salary Periods 的 pay API 執行。
 
 ### 收支審核（老闆身兼會計）— 核准/駁回僅限管理員
 
@@ -852,7 +852,7 @@ Request body（`UpdateCustomerRequest`）：欄位與 Store 相同。修改後�
 
 ## 10. Users（員工/帳號管理，皆僅限管理員）
 
-v1.1 起 `users.role` 為正式權限來源，固定三種角色：`admin`／`manager`／`sales`。`is_admin` 欄位在過渡期間持續與 `role` 同步（`role=admin` ⟷ `is_admin=true`，其餘 ⟷ `is_admin=false`），但不再作為權限判斷依據；是否仍有啟用中管理員一律以 `role=admin AND is_active=true` 判斷。
+`users.role` 為正式權限來源，固定三種角色：`admin`／`manager`／`sales`。`is_admin` 欄位在過渡期間持續與 `role` 同步（`role=admin` ⟷ `is_admin=true`，其餘 ⟷ `is_admin=false`），但不再作為權限判斷依據；是否仍有啟用中管理員一律以 `role=admin AND is_active=true` 判斷。
 
 ### GET /api/users
 
@@ -961,9 +961,11 @@ Query 參數：
 
 ---
 
-## 13. Vehicle Photos（車輛照片，v1.2）
+## 13. Vehicle Photos（車輛照片）
 
-車輛照片為 v1.2 新增模組，資料表 `vehicle_photos`。上傳的圖片一律重新編碼為 `webp`（移除 EXIF / GPS 等拍攝資訊），並產生縮圖；同一台車最多 60 張、單次上傳最多 20 張、單張檔案最大 8MB，僅接受 `jpg`／`jpeg`／`png`／`webp`。
+照片上傳的 PHP-FPM／Nginx 容量與逾時設定見 [部署文件](../README.md#照片上傳容量與逾時)。應用限制不會自動提高 Web server 的 request body 上限。
+
+車輛照片使用資料表 `vehicle_photos`。上傳的圖片一律重新編碼為 `webp`（移除 EXIF / GPS 等拍攝資訊），並產生縮圖；同一台車最多 60 張、單次上傳最多 20 張、單張檔案最大 8MB，僅接受 `jpg`／`jpeg`／`png`／`webp`。
 
 角色權限：
 
@@ -1038,7 +1040,7 @@ Query 參數：
 
 ---
 
-## 14. Public Vehicles（官網公開唯讀 API，v1.2 + Website Phase 2）
+## 14. Public Vehicles（官網公開唯讀 API）
 
 `GET /api/public/*` 不需登入，供官網 MVP 讀取可公開車輛資料。整組獨立於 `auth:sanctum` 群組之外，並維持 `throttle:60,1`（每 IP 每分鐘 60 次，超過回 `429`），避免匿名使用者以大 `per_page` 或高頻請求放大 DB 讀取與序列化成本。
 
@@ -1099,13 +1101,13 @@ listed／reserved 皆回傳單筆 `PublicVehicleResource`，包含 nullable `pub
 
 ### Public API throttle deployment 邊界
 
-目前內網 integration smoke 的列表與多筆詳情請求可在 `60 req/min/IP` 下完成，因此 Website Phase 2 不取消或放寬既有 throttle。這不是 production capacity guarantee：Next.js server-side fetch 可能讓多名訪客在 ERPV2 端共用 Website server／edge 的來源 IP，且 60 秒 cache 不能保證所有 detail、deep link 與 cache miss 都會合併。
+目前內網 integration smoke 的列表與多筆詳情請求可在 `60 req/min/IP` 下完成，官網整合維持既有 throttle。這不是 production capacity guarantee：Next.js server-side fetch 可能讓多名訪客在 ERPV2 端共用 Website server／edge 的來源 IP，且 60 秒 cache 不能保證所有 detail、deep link 與 cache miss 都會合併。
 
 正式公開部署前，必須依 Website server、reverse proxy、edge cache、trusted proxy 與固定來源 IP 的實際 topology 重新決定匿名配額或 trusted caller 策略。不得信任任意 `X-Forwarded-For`、以 internal API／Sanctum 繞過公開契約，或單純把匿名配額調成近乎無上限。
 
 ---
 
-## 15. Salary Profiles 與 Commission Plans（v1.3，僅限管理員）
+## 15. Salary Profiles 與 Commission Plans（僅限管理員）
 
 本節端點皆位於 `auth:sanctum` + `active` + `role:admin` 下，並另由 Policy 採 admin 白名單授權。`manager`、`sales` 與未知角色一律回傳 `403`，無法透過列表或 ID 枚舉取得薪資設定與獎金方案。
 
@@ -1173,7 +1175,7 @@ Request body：
 
 薪資資格與異常檢查是後端集中服務，由月份草稿、重算、確認及 draft 詳情共同使用。它只選取台北月份內的 `sold` 車輛，並對每台候選車檢查收／賣車人、pending 收支、approved 銷售淨收款、approved 購車付款、`legacy_unknown` 與 confirmed／paid 重複引用；異常車不會被靜默略過。
 
-## 16. Salary Periods（v1.3，僅限管理員）
+## 16. Salary Periods（僅限管理員）
 
 本節端點皆位於 `auth:sanctum` + `active` + `role:admin` 下，並由 `SalaryPeriodPolicy`／`SalarySettlementPolicy` 再做白名單授權。`manager`、`sales` 與未知角色一律回傳 `403`，不可透過月份、員工或加扣項 ID 枚舉薪資資料。
 

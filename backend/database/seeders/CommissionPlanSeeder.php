@@ -14,6 +14,10 @@ class CommissionPlanSeeder extends Seeder
 
     public function run(): void
     {
+        if (! app()->environment(['local', 'testing'])) {
+            throw new RuntimeException('Seeders are only available in local/testing environments.');
+        }
+
         $tiers = [
             ['min_sales_count' => 1, 'sales_bonus_bps' => 2000, 'sort_order' => 1],
             ['min_sales_count' => 3, 'sales_bonus_bps' => 3000, 'sort_order' => 2],

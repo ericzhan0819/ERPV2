@@ -17,6 +17,12 @@ class MoneyEntrySourceTypeReviewCommandTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Storage::fake('local');
+    }
+
     private function makeLegacyUnknownEntry(): MoneyEntry
     {
         $cashAccount = CashAccount::factory()->create(['is_active' => true]);
