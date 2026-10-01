@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { extractFieldErrors } from '../../utils/fieldErrors'
+import { useId, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { isAxiosError } from 'axios'
@@ -39,34 +40,42 @@ function buildPayload(form: FormState): CustomerPayload {
 }
 
 function Field({
+  error,
   label,
   value,
   onChange,
   required,
 }: {
+  error?: string
   label: string
   value: string
   onChange: (value: string) => void
   required?: boolean
 }) {
+  const inputId = useId()
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-fg-muted">
+      <label htmlFor={inputId} className="mb-1 block text-sm font-medium text-fg-muted">
         {label}
         {required && <span className="text-error"> *</span>}
       </label>
       <input
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? `${inputId}-error` : undefined}
+        id={inputId}
         type="text"
         required={required}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
       />
+      {error && <p id={`${inputId}-error`} className="mt-1 text-sm text-error">{error}</p>}
     </div>
   )
 }
 
 export function CustomerCreate() {
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const navigate = useNavigate()
   const [form, setForm] = useState<FormState>(initialState)
   const [error, setError] = useState<string | null>(null)
@@ -78,12 +87,14 @@ export function CustomerCreate() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    setFieldErrors({})
     setError(null)
     setSubmitting(true)
     try {
       const customer = await createCustomer(buildPayload(form))
       navigate(`/customers/${customer.id}`)
     } catch (err) {
+      setFieldErrors(extractFieldErrors(err))
       if (isAxiosError(err) && err.response?.data?.message) {
         setError(err.response.data.message)
       } else {
@@ -101,14 +112,15 @@ export function CustomerCreate() {
       <form onSubmit={handleSubmit} className="max-w-3xl rounded-2xl border border-border bg-surface p-6 shadow-sm">
         <FormAlert message={error} focusOnShow className="mb-4" />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="姓名" value={form.name} onChange={(v) => set('name', v)} required />
-          <Field label="電話" value={form.phone} onChange={(v) => set('phone', v)} />
-          <Field label="Line ID" value={form.line_id} onChange={(v) => set('line_id', v)} />
+          <Field label="姓名" value={form.name} error={fieldErrors["name"]} onChange={(v) => set('name', v)} required />
+          <Field label="電話" value={form.phone} error={fieldErrors["phone"]} onChange={(v) => set('phone', v)} />
+          <Field label="Line ID" value={form.line_id} error={fieldErrors["line_id"]} onChange={(v) => set('line_id', v)} />
           <div>
-            <label className="mb-1 block text-sm font-medium text-fg-muted">
+            <label htmlFor="customercreate-field-1" className="mb-1 block text-sm font-medium text-fg-muted">
               類型<span className="text-error"> *</span>
             </label>
-            <select
+            <select aria-invalid={Boolean(fieldErrors["customer_type"])} aria-describedby={fieldErrors["customer_type"] ? 'customercreate-field-1-error' : undefined}
+              id="customercreate-field-1"
               required
               value={form.customer_type}
               onChange={(e) => set('customer_type', e.target.value as CustomerType)}
@@ -119,19 +131,22 @@ export function CustomerCreate() {
               <option value="both">買賣方</option>
               <option value="other">其他</option>
             </select>
+              {fieldErrors["customer_type"] && <p id="customercreate-field-1-error" className="mt-1 text-sm text-error">{fieldErrors["customer_type"]}</p>}
           </div>
-          <Field label="來源" value={form.source} onChange={(v) => set('source', v)} />
-          <Field label="地址" value={form.address} onChange={(v) => set('address', v)} />
+          <Field label="來源" value={form.source} error={fieldErrors["source"]} onChange={(v) => set('source', v)} />
+          <Field label="地址" value={form.address} error={fieldErrors["address"]} onChange={(v) => set('address', v)} />
         </div>
 
         <div className="mt-4">
-          <label className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
-          <textarea
+          <label htmlFor="customercreate-field-2" className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
+          <textarea aria-invalid={Boolean(fieldErrors["notes"])} aria-describedby={fieldErrors["notes"] ? 'customercreate-field-2-error' : undefined}
+            id="customercreate-field-2"
             value={form.notes}
             onChange={(e) => set('notes', e.target.value)}
             rows={3}
             className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
           />
+              {fieldErrors["notes"] && <p id="customercreate-field-2-error" className="mt-1 text-sm text-error">{fieldErrors["notes"]}</p>}
         </div>
 
         <div className="mt-6 flex gap-3">

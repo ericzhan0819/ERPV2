@@ -1,4 +1,5 @@
-import { Fragment, useCallback, useEffect, useState } from 'react'
+import { DebouncedSearchInput } from '../../components/DebouncedSearchInput'
+import { Fragment, useEffect, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { listAuditLogs } from '../../api/auditLogs'
 import { FormAlert } from '../../components/FormAlert'
@@ -120,7 +121,8 @@ export function AuditLogList() {
   const [error, setError] = useState<string | null>(null)
   const hasActiveFilters = Boolean(search || action || subjectType || dateFrom || dateTo)
 
-  const reload = useCallback(() => {
+  useEffect(() => {
+    let active = true
     setLoading(true)
     setError(null)
 
@@ -133,16 +135,15 @@ export function AuditLogList() {
       page,
     })
       .then((response) => {
+        if (!active) return
         setLogs(response.data)
         setMeta(response.meta)
       })
-      .catch(() => setError('稽核紀錄載入失敗'))
-      .finally(() => setLoading(false))
+      .catch(() => { if (active) setError('稽核紀錄載入失敗') })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
   }, [action, dateFrom, dateTo, page, search, subjectType])
 
-  useEffect(() => {
-    reload()
-  }, [reload])
 
   function resetPage() {
     setPage(1)
@@ -166,13 +167,14 @@ export function AuditLogList() {
       </div>
 
       <div className="flex flex-wrap gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm">
-        <input
-          type="search"
+        <DebouncedSearchInput
+          id="audit-search"
+          label="搜尋稽核紀錄"
           placeholder="搜尋操作者或操作對象"
           value={search}
-          onChange={(event) => {
+          onCommit={(value) => {
             resetPage()
-            setSearch(event.target.value)
+            setSearch(value)
           }}
           className="w-64 rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
         />

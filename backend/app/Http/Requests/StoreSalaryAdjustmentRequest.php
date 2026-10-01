@@ -17,6 +17,7 @@ class StoreSalaryAdjustmentRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'idempotency_key' => ['required', 'string', 'max:100'],
             'user_id' => ['required', 'integer', 'exists:users,id'],
             'type' => ['required', Rule::in(SalarySettlementItem::MANUAL_TYPES)],
             'amount' => ['required', 'integer', 'min:1', 'max:'.MoneyMath::MAX_AMOUNT],
@@ -63,6 +64,7 @@ class StoreSalaryAdjustmentRequest extends FormRequest
     public function attributes(): array
     {
         return [
+            'idempotency_key' => '請求識別碼',
             'user_id' => '員工',
             'type' => '項目類型',
             'amount' => '金額',

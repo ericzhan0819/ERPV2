@@ -7,7 +7,7 @@ import { useAuth } from '../hooks/useAuth'
 import { apiErrorMessage, loginSuccessPath } from './authFormState'
 
 export function Login() {
-  const { login } = useAuth()
+  const { login, sessionExpired } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const notice =
@@ -48,7 +48,7 @@ export function Login() {
           aria-live="polite"
           className="mt-4 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm text-success empty:hidden"
         >
-          {notice}
+          {sessionExpired ? '工作階段已失效，請重新登入。' : notice}
         </p>
         <FormAlert message={error} focusOnShow className="mt-4" />
 

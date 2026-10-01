@@ -91,9 +91,9 @@ describe('CashAccountList presentation', () => {
     expect(row).not.toBeNull()
     await interaction.click(within(row!).getByRole('button', { name: '編輯' }))
     expect(screen.getByRole('button', { name: '儲存' })).toBeTruthy()
-    expect(screen.getByRole('textbox', { name: '帳戶名稱' })).toBeTruthy()
-    expect(screen.getByRole('combobox', { name: '類型' })).toBeTruthy()
-    expect(screen.getByRole('spinbutton', { name: '期初餘額' })).toBeTruthy()
+    expect(screen.getByRole('textbox', { name: /^帳戶名稱/ })).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: /^類型/ })).toBeTruthy()
+    expect(screen.getByRole('spinbutton', { name: /^期初餘額/ })).toBeTruthy()
     expect(screen.queryByText(/啟用／停用請使用列表中的/)).toBeNull()
 
     await interaction.click(screen.getByRole('button', { name: '取消' }))
@@ -111,9 +111,9 @@ describe('CashAccountList presentation', () => {
     renderCashAccounts('admin')
 
     await interaction.click(screen.getByRole('button', { name: '新增帳戶' }))
-    expect(screen.getByRole('textbox', { name: '帳戶名稱' })).toBeTruthy()
-    expect(screen.getByRole('combobox', { name: '類型' })).toBeTruthy()
-    expect(screen.getByRole('spinbutton', { name: '期初餘額' })).toBeTruthy()
+    expect(screen.getByRole('textbox', { name: /^帳戶名稱/ })).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: /^類型/ })).toBeTruthy()
+    expect(screen.getByRole('spinbutton', { name: /^期初餘額/ })).toBeTruthy()
     expect(screen.getByRole('checkbox', { name: '啟用中' })).toBeTruthy()
   })
 

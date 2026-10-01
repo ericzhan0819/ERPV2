@@ -20,6 +20,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 use Tests\TestCase;
@@ -96,6 +97,7 @@ class SalaryPaymentTest extends TestCase
         $this->expectValidation(fn () => $this->service->confirm($this->admin, $period), 'net_pay');
         $this->assertSame(SalaryPeriod::STATUS_DRAFT, $period->fresh()->status);
         $this->actingAs($this->admin, 'web')->postJson("/api/salary-periods/{$period->id}/adjustments", [
+            'idempotency_key' => (string) Str::uuid(),
             'amount' => 1000000000000, 'type' => 'manual_addition', 'description' => '測試',
         ])->assertUnprocessable()->assertJsonValidationErrors('amount');
 

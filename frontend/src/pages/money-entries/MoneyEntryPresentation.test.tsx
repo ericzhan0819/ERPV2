@@ -25,7 +25,8 @@ vi.mock('../../api/moneyEntries', () => ({
 }))
 
 vi.mock('../../api/vehicles', () => ({
-  listVehicleOptions: vi.fn(),
+  listVehicles: vi.fn(),
+  getVehicle: vi.fn(),
 }))
 
 vi.mock('../../hooks/useAuth', () => ({
@@ -92,7 +93,8 @@ describe('Money entry presentation', () => {
     vi.mocked(cashAccountsApi.listCashAccountOptions).mockResolvedValue([
       { id: 1, name: '營運現金', type: 'cash', is_active: true },
     ])
-    vi.mocked(vehiclesApi.listVehicleOptions).mockResolvedValue([])
+    vi.mocked(vehiclesApi.listVehicles).mockResolvedValue({ data: [], meta: { current_page: 1, last_page: 1, per_page: 25, total: 0 } })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
 
   it('keeps the vehicle-binding rule concise and exposes validation beside each required field', async () => {
@@ -104,7 +106,7 @@ describe('Money entry presentation', () => {
     )
 
     expect(screen.getByText('一般營運收支不綁車；單車收支必須選擇關聯車輛。')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText('日期'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText(/^日期/), { target: { value: '' } })
     fireEvent.submit(screen.getByRole('button', { name: '建立收支' }).closest('form')!)
 
     const expectedErrors = [
@@ -115,17 +117,17 @@ describe('Money entry presentation', () => {
     ] as const
 
     for (const [label, message, errorId] of expectedErrors) {
-      const field = screen.getByLabelText(label)
+      const field = screen.getByLabelText(new RegExp(`^${label}`))
       expect(field.getAttribute('aria-describedby')).toBe(errorId)
       expect(field.getAttribute('aria-invalid')).toBe('true')
       expect(document.getElementById(errorId)?.textContent).toBe(message)
     }
     await waitFor(() => {
-      expect(document.activeElement).toBe(screen.getByLabelText('日期'))
+      expect(document.activeElement).toBe(screen.getByLabelText(/^日期/))
     })
     expect(moneyEntriesApi.createMoneyEntry).not.toHaveBeenCalled()
 
-    const amount = screen.getByLabelText('金額') as HTMLInputElement
+    const amount = screen.getByLabelText(/^金額/) as HTMLInputElement
     await interaction.type(amount, '1000')
     expect(amount.value).toBe('1000')
     expect(document.activeElement).toBe(amount)
@@ -142,12 +144,12 @@ describe('Money entry presentation', () => {
   it('shows an oversized amount beside the field in Chinese without submitting', async () => {
     render(<MemoryRouter><MoneyEntryCreate /></MemoryRouter>)
     await screen.findByRole('option', { name: '營運現金' })
-    fireEvent.change(screen.getByLabelText('金額'), { target: { value: '1000000000000' } })
-    fireEvent.change(screen.getByLabelText('分類'), { target: { value: '一般收入' } })
-    fireEvent.change(screen.getByLabelText('資金帳戶'), { target: { value: '1' } })
+    fireEvent.change(screen.getByLabelText(/^金額/), { target: { value: '1000000000000' } })
+    fireEvent.change(screen.getByLabelText(/^分類/), { target: { value: '一般收入' } })
+    fireEvent.change(screen.getByLabelText(/^資金帳戶/), { target: { value: '1' } })
     fireEvent.submit(screen.getByRole('button', { name: '建立收支' }).closest('form')!)
     expect(document.getElementById('money-entry-amount-error')?.textContent).toBe('金額不得超過 999,999,999,999 元')
-    expect(screen.getByLabelText('金額').getAttribute('aria-describedby')).toBe('money-entry-amount-error')
+    expect(screen.getByLabelText(/^金額/).getAttribute('aria-describedby')).toBe('money-entry-amount-error')
     expect(moneyEntriesApi.createMoneyEntry).not.toHaveBeenCalled()
   })
 
@@ -157,12 +159,12 @@ describe('Money entry presentation', () => {
     })
     render(<MemoryRouter><MoneyEntryCreate /></MemoryRouter>)
     await screen.findByRole('option', { name: '營運現金' })
-    fireEvent.change(screen.getByLabelText('金額'), { target: { value: '1000' } })
-    fireEvent.change(screen.getByLabelText('分類'), { target: { value: '一般收入' } })
-    fireEvent.change(screen.getByLabelText('資金帳戶'), { target: { value: '1' } })
+    fireEvent.change(screen.getByLabelText(/^金額/), { target: { value: '1000' } })
+    fireEvent.change(screen.getByLabelText(/^分類/), { target: { value: '一般收入' } })
+    fireEvent.change(screen.getByLabelText(/^資金帳戶/), { target: { value: '1' } })
     fireEvent.submit(screen.getByRole('button', { name: '建立收支' }).closest('form')!)
     expect(await screen.findByText('金額驗證失敗')).toBeTruthy()
-    expect(screen.getByLabelText('金額').getAttribute('aria-describedby')).toBe('money-entry-amount-error')
+    expect(screen.getByLabelText(/^金額/).getAttribute('aria-describedby')).toBe('money-entry-amount-error')
   })
 
   it('keeps field validation before exposing and focusing a general API error', async () => {
@@ -175,18 +177,18 @@ describe('Money entry presentation', () => {
     )
 
     await screen.findByRole('option', { name: '營運現金' })
-    await interaction.type(screen.getByLabelText('金額'), '1000')
-    await interaction.selectOptions(screen.getByLabelText('資金帳戶'), '1')
+    await interaction.type(screen.getByLabelText(/^金額/), '1000')
+    await interaction.selectOptions(screen.getByLabelText(/^資金帳戶/), '1')
     await interaction.click(screen.getByRole('button', { name: '建立收支' }))
     expect(document.getElementById('money-entry-category-error')?.textContent).toBe('請選擇分類')
     expect(moneyEntriesApi.createMoneyEntry).not.toHaveBeenCalled()
 
-    await interaction.selectOptions(screen.getByLabelText('分類'), '一般收入')
+    await interaction.selectOptions(screen.getByLabelText(/^分類/), '一般收入')
     await interaction.click(screen.getByRole('button', { name: '建立收支' }))
 
     const error = await screen.findByRole('alert')
     expect(error.textContent).toBe('新增收支失敗，請稍後再試')
-    const firstField = screen.getByLabelText('日期')
+    const firstField = screen.getByLabelText(/^日期/)
     expect(error.compareDocumentPosition(firstField) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(document.getElementById('money-entry-category-error')).toBeNull()
     expect(document.activeElement).toBe(error)
@@ -204,6 +206,15 @@ describe('Money entry presentation', () => {
     expect(screen.getByLabelText('已套用篩選條件').textContent).toContain('審核：待審核')
     expect(screen.getAllByRole('button', { name: '清除篩選條件' })).toHaveLength(2)
     expect(screen.queryByText('尚無收支紀錄')).toBeNull()
+  })
+
+  it('cancels irreversible rejection without sending a request', async () => {
+    vi.mocked(moneyEntriesApi.listMoneyEntries).mockResolvedValue({ data: [pendingEntry], meta: { current_page: 1, last_page: 1, per_page: 20, total: 1 } })
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderList()
+    fireEvent.click(await screen.findByRole('button', { name: /^駁回 / }))
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('無法恢復'))
+    expect(moneyEntriesApi.rejectMoneyEntry).not.toHaveBeenCalled()
   })
 
   it('keeps approval status and admin approve/reject outcomes', async () => {
@@ -225,7 +236,7 @@ describe('Money entry presentation', () => {
     expect(row).not.toBeNull()
     expect(within(row!).getByText('待審核')).toBeTruthy()
     expect(within(row!).getByText('營運現金')).toBeTruthy()
-    await interaction.click(within(row!).getByRole('button', { name: '核准' }))
+    await interaction.click(within(row!).getByRole('button', { name: /^核准 / }))
     expect(moneyEntriesApi.approveMoneyEntry).toHaveBeenCalledWith(9, pendingEntry.review_token)
     expect((await screen.findByRole('alert')).textContent).toBe(
       '審核已送出，但列表可能不是最新；請重新整理後確認。',
@@ -248,7 +259,7 @@ describe('Money entry presentation', () => {
       .mockResolvedValueOnce({ data: [pendingEntry], meta: { current_page: 1, last_page: 1, per_page: 20, total: 1 } })
       .mockResolvedValueOnce({ data: [], meta: { current_page: 1, last_page: 1, per_page: 20, total: 0 } })
     renderList('/money-entries?approval=pending')
-    await userEvent.setup().click(await screen.findByRole('button', { name: action === 'approve' ? '核准' : '駁回' }))
+    await userEvent.setup().click(await screen.findByRole('button', { name: action === 'approve' ? /^核准 / : /^駁回 / }))
     await waitFor(() => expect(moneyEntriesApi.listMoneyEntries).toHaveBeenCalledTimes(2))
     expect(await screen.findByText('尚無符合條件的收支紀錄')).toBeTruthy()
     expect(screen.getByRole('alert').textContent).toBe(message)
@@ -264,7 +275,7 @@ describe('Money entry presentation', () => {
       .mockResolvedValueOnce({ data: [pendingEntry], meta: { current_page: 1, last_page: 1, per_page: 20, total: 1 } })
       .mockRejectedValueOnce(new Error('offline'))
     renderList()
-    await userEvent.setup().click(await screen.findByRole('button', { name: '核准' }))
+    await userEvent.setup().click(await screen.findByRole('button', { name: /^核准 / }))
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('收支列表載入失敗'))
     expect(screen.getByRole('alert').textContent).toContain('收支內容已變更，請重新確認後再審核')
   })
@@ -286,7 +297,7 @@ describe('Money entry presentation', () => {
       await userEvent.setup().click(screen.getByRole('button', { name: /篩選/ }))
       expect(screen.queryByLabelText('資金帳戶')).toBeNull()
     } else {
-      expect(screen.getByLabelText('資金帳戶')).toBeTruthy()
+      expect(screen.getByLabelText(/^資金帳戶/)).toBeTruthy()
     }
   })
 
@@ -303,7 +314,7 @@ describe('Money entry presentation', () => {
     expect(row).not.toBeNull()
     expect(within(row!).getByText(/3,000/)).toBeTruthy()
     expect(screen.queryByRole('columnheader', { name: '資金帳戶' })).toBeNull()
-    expect(within(row!).queryByRole('button', { name: '核准' })).toBeNull()
+    expect(within(row!).queryByRole('button', { name: /^核准 / })).toBeNull()
     expect(within(row!).getByText('待審核')).toBeTruthy()
   })
 })

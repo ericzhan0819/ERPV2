@@ -1,3 +1,4 @@
+import type { VehicleStatus } from './vehicle'
 export type CustomerType = 'buyer' | 'seller' | 'both' | 'other'
 
 export interface Customer {
@@ -45,7 +46,7 @@ export interface CustomerListResponse {
 export interface CustomerRelatedVehicle {
   id: number
   stock_no: string
-  status: string
+  status: VehicleStatus
   brand: string
   model: string
   sold_at: string | null

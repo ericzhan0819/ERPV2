@@ -136,6 +136,7 @@ class SalaryHttpBoundaryTest extends TestCase
         );
 
         $adjustmentResponse = $this->assertRequestPasses(StoreSalaryAdjustmentRequest::class, [
+            'idempotency_key' => (string) Str::uuid(),
             'user_id' => $user->id,
             'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
             'amount' => '1000',
@@ -184,6 +185,7 @@ class SalaryHttpBoundaryTest extends TestCase
         $settlement = $period->settlements->firstWhere('user_id', $employee->id);
 
         $response = $this->postJson('/api/_test/salary-adjustment', [
+            'idempotency_key' => (string) Str::uuid(),
             'user_id' => $employee->id,
             'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
             'amount' => '1000',
@@ -347,6 +349,7 @@ class SalaryHttpBoundaryTest extends TestCase
 
         $draft = $service->createDraft($admin, '2026-06');
         $service->addAdjustment($admin, $draft->settlements->firstWhere('user_id', $employee->id), [
+            'idempotency_key' => (string) Str::uuid(),
             'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
             'amount' => 500,
             'description' => '測試加給',
@@ -415,6 +418,7 @@ class SalaryHttpBoundaryTest extends TestCase
             ->assertJsonPath('data.period_month', '2026-06');
 
         $adjustment = $this->postJson("/api/salary-periods/{$periodId}/adjustments", [
+            'idempotency_key' => (string) Str::uuid(),
             'user_id' => $employee->id,
             'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
             'amount' => '1000',
@@ -476,6 +480,7 @@ class SalaryHttpBoundaryTest extends TestCase
                 fn () => $this->getJson("/api/salary-periods/{$period->id}"),
                 fn () => $this->postJson("/api/salary-periods/{$period->id}/recalculate"),
                 fn () => $this->postJson("/api/salary-periods/{$period->id}/adjustments", [
+                    'idempotency_key' => (string) Str::uuid(),
                     'user_id' => $sales->id,
                     'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
                     'amount' => 100,

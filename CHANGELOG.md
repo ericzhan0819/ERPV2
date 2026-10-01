@@ -8,6 +8,18 @@ The format is based on Keep a Changelog, and this project uses Semantic Versioni
 
 ### Fixed
 
+- Bind salary adjustment retry keys to payloads, renew conflicting keys, refresh uncertain results without hiding dialog errors, and support explicitly creating a separate identical item.
+
+- Bind vehicle workflow retry keys to submitted payloads, renew conflicting keys, and let users explicitly start a separate identical payment or expense after verifying the previous entry.
+
+- Preserve vehicle collection and expense retry keys across dialog reopening, refresh uncertain results, and prevent closing dialogs during submission.
+- Recheck sessions after CSRF expiry and refresh current permissions after forbidden responses, with a visible sign-in expiry notice.
+- Require explicit role-change confirmation and confirmation before irreversible money-entry rejection.
+- Search and paginate vehicle options, retaining bookmarked selections beyond the first page.
+- Ignore stale customer and audit search results; include sold vehicles when selecting a closing month.
+- Associate form labels and validation messages, improve accessible action names, restore financial scope and payment consequence notices, and handle unknown routes.
+- Make salary adjustments idempotent, retain deleted-request history, and show adjustment errors inside the dialog. Upgrade requires the new salary adjustment request migration and an `idempotency_key` on adjustment requests.
+
 - Return the public vehicle API's uniform 404 response for numeric IDs beyond the integer range.
 
 - Reject deletion of unfinished upload photos, append newly visible photos after existing ordering, and report capacity held by incomplete uploads.

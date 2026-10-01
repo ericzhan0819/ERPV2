@@ -21,6 +21,7 @@ use App\Services\VehicleService;
 use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
@@ -438,6 +439,7 @@ class SalarySettingsMysqlConcurrencyTest extends TestCase
     {
         return [
             'addition' => ['add'],
+            'same-key replay after commit' => ['replay'],
             'delete addition' => ['delete'],
             'deduction using new earnings' => ['deduct'],
         ];
@@ -463,6 +465,7 @@ class SalarySettingsMysqlConcurrencyTest extends TestCase
         $period = $service->createDraft($admin, '2026-06');
         $settlement = $period->settlements->firstWhere('user_id', $employee->id);
         $item = $operation === 'delete' ? $service->addAdjustment($admin, $settlement, [
+            'idempotency_key' => (string) Str::uuid(),
             'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
             'amount' => 1000,
             'description' => '加給',
@@ -506,6 +509,14 @@ class SalarySettingsMysqlConcurrencyTest extends TestCase
             $this->assertChildSignal($parentSocket, 'R', 'Adjustment child did not initialize.');
             DB::beginTransaction();
             $service->recalculateDraft($admin, $period);
+            if ($operation === 'replay') {
+                $service->addAdjustment($admin, $settlement, [
+                    'idempotency_key' => 'concurrent-adjustment-replay',
+                    'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
+                    'amount' => 1000,
+                    'description' => '調整',
+                ]);
+            }
             fwrite($parentSocket, 'G');
             $this->assertChildSignal($parentSocket, 'S', 'Adjustment did not reach the period lock.');
             stream_set_blocking($parentSocket, false);
@@ -523,13 +534,17 @@ class SalarySettingsMysqlConcurrencyTest extends TestCase
 
             $fresh = $settlement->fresh();
             $expected = match ($operation) {
-                'add' => 55000,
+                'add', 'replay' => 55000,
                 'delete' => 54000,
                 'deduct' => 14000,
             };
             $this->assertSame(12000, $fresh->purchase_bonus_total);
             $this->assertSame(12000, $fresh->sales_bonus_total);
             $this->assertSame($expected, $fresh->net_pay);
+            if ($operation === 'replay') {
+                $this->assertSame(1, DB::table('salary_adjustment_requests')->where('idempotency_key', 'concurrent-adjustment-replay')->count());
+                $this->assertSame(1, $fresh->items()->where('type', SalarySettlementItem::TYPE_MANUAL_ADDITION)->count());
+            }
             $itemTotal = $fresh->items->sum(fn (SalarySettlementItem $row): int => in_array($row->type, [
                 SalarySettlementItem::TYPE_MANUAL_DEDUCTION,
                 SalarySettlementItem::TYPE_LABOR_INSURANCE,
@@ -575,6 +590,7 @@ class SalarySettingsMysqlConcurrencyTest extends TestCase
                 $service->deleteAdjustment($admin, $item);
             } else {
                 $service->addAdjustment($admin, $settlement, [
+                    'idempotency_key' => $operation === 'replay' ? 'concurrent-adjustment-replay' : (string) Str::uuid(),
                     'type' => $operation === 'deduct'
                         ? SalarySettlementItem::TYPE_MANUAL_DEDUCTION
                         : SalarySettlementItem::TYPE_MANUAL_ADDITION,

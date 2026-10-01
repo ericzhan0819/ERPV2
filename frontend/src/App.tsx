@@ -151,7 +151,7 @@ function App() {
           <Route path="/salary/profiles" element={<ProtectedRoute allowedRoles={['admin']}><SalaryProfiles /></ProtectedRoute>} />
           <Route path="/salary/commission-plans" element={<ProtectedRoute allowedRoles={['admin']}><CommissionPlans /></ProtectedRoute>} />
         </Route>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </AuthProvider>
   )

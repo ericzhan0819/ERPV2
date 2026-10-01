@@ -1,3 +1,4 @@
+import { onCurrentUserRefreshed } from '../auth/currentUserRefreshed'
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import * as authApi from '../api/auth'
@@ -56,6 +57,7 @@ interface AuthContextValue {
   user: User | null
   loading: boolean
   logoutStatus: LogoutStatus
+  sessionExpired?: boolean
   login: (login: string, password: string) => Promise<User>
   updateProfile: (payload: CurrentUserProfilePayload) => Promise<User>
   updatePassword: (payload: CurrentUserPasswordPayload) => Promise<User>
@@ -67,6 +69,7 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [sessionExpired, setSessionExpired] = useState(false)
   const [loading, setLoading] = useState(true)
   const [logoutStatus, setLogoutStatus] = useState<LogoutStatus>('idle')
   const userRef = useRef<User | null>(null)
@@ -189,6 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return
         }
 
+        if (userRef.current) setSessionExpired(true)
         meRequestValidRef.current = false
         userRef.current = result.user
         setUser(result.user)
@@ -217,8 +221,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  useEffect(() => onCurrentUserRefreshed((nextUser, generation) => {
+    if (generation !== readAuthRequestGeneration()) return
+    const result = applyCurrentUserResponse(userRef.current, nextUser, logoutStatusRef.current)
+    if (!result.accepted) return
+    userRef.current = result.user
+    setUser(result.user)
+  }), [])
+
   const login = useCallback(async (login: string, password: string) => {
     const loggedInUser = await authApi.login(login, password)
+    setSessionExpired(false)
     // 新登入取得的使用者資料最具權威性，先讓本次掛載期間較早的 /api/me 回應失效。
     meRequestValidRef.current = false
     const nextGeneration = createAuthGeneration()
@@ -315,6 +328,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         loading,
         logoutStatus,
+        sessionExpired,
         login,
         updateProfile,
         updatePassword,

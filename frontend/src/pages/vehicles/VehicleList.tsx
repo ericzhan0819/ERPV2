@@ -133,7 +133,7 @@ function VehicleFilterFields({
         <input
           type="month"
           value={soldMonthPattern.test(filters.soldMonth) ? filters.soldMonth : ''}
-          onChange={(event) => onChange({ soldMonth: event.target.value })}
+          onChange={(event) => onChange({ soldMonth: event.target.value, ...(event.target.value ? { statuses: Array.from(new Set([...filters.statuses, 'sold' as const])) } : {}) })}
           className="min-h-11 rounded-lg border border-border-strong bg-surface px-3 py-2 text-base text-fg focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring sm:text-sm"
         />
       </label>
@@ -178,7 +178,6 @@ function VehicleCard({ vehicle, showFloorPrice }: { vehicle: VehicleListItem; sh
   return (
     <Link
       to={`/vehicles/${vehicle.id}`}
-      aria-label={`查看 ${vehicle.brand} ${vehicle.model} 詳情`}
       className="group min-w-0 overflow-hidden rounded-xl border border-border bg-surface shadow-sm transition-colors hover:border-border-strong hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
     >
       <VehicleCover vehicle={vehicle} />

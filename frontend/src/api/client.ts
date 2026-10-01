@@ -1,5 +1,8 @@
-import axios from 'axios'
+import axios, { type AxiosError } from 'axios'
+import type { User } from '../types/auth'
+import { notifyCurrentUserRefreshed } from '../auth/currentUserRefreshed'
 import {
+  getRequestAuthGeneration,
   handleAuthSessionInvalidatedError,
   trackAuthSessionRequest,
 } from '../auth/authSessionInvalidated'
@@ -24,7 +27,21 @@ apiClient.interceptors.request.use((config) =>
 
 apiClient.interceptors.response.use(
   (response) => response,
-  (error: unknown) => {
+  async (error: AxiosError<{ message?: string }>) => {
+    const status = error.response?.status
+    const generation = getRequestAuthGeneration(error)
+    if ((status === 419 || status === 403) && error.config?.url !== '/api/me'
+      && generation !== undefined && generation === readAuthRequestGeneration()) {
+      try {
+        const { data } = await apiClient.get<{ data: User }>('/api/me')
+        if (generation === readAuthRequestGeneration()) notifyCurrentUserRefreshed(data.data, generation)
+      } catch {
+        // /api/me 的 401 由既有 interceptor 使工作階段失效；不重送原寫入。
+      }
+    }
+    if (status === 419 && error.response) {
+      error.response.data = { ...error.response.data, message: '工作階段已過期，請重新整理或登入。' }
+    }
     handleAuthSessionInvalidatedError(error)
     handlePasswordChangeRequiredError(error)
     return Promise.reject(error)

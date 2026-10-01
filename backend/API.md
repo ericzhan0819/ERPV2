@@ -1211,6 +1211,7 @@ Request body：
 
 ```json
 {
+  "idempotency_key": "550e8400-e29b-41d4-a716-446655440000",
   "user_id": 12,
   "type": "manual_addition",
   "amount": 1000,
@@ -1219,6 +1220,8 @@ Request body：
 ```
 
 `type` 只接受 `manual_addition` 或 `manual_deduction`，`amount` 必須為正整數且不得超過 `999999999999`，`description` 必填且最多 255 字元。前端不得指定 settlement、vehicle、snapshot、totals 或狀態欄位。回應與月份詳情使用相同 item 欄位集合；手動項目固定包含 `vehicle_id: null` 與 `vehicle: null`，不會因 relation 未預載而省略 key。
+
+`idempotency_key` 必填且最多 100 字元。相同 key、操作者、月份／員工、類型、金額與去除前後空白的說明重送時，回傳原項目，不再次增加薪資或稽核紀錄；原月份已確認後仍可重播既有項目。相同 key 不同內容回傳 `422`。刪除項目後仍保留請求紀錄，舊 key 重送回傳 `422`，不會重新建立。升級需先執行新增的 migration，再部署使用此欄位的前端。
 
 ### DELETE /api/salary-periods/{salaryPeriod}/adjustments/{item}
 

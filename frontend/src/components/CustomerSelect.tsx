@@ -9,6 +9,8 @@ interface CustomerSelectValue {
 }
 
 interface CustomerSelectProps extends CustomerSelectValue {
+  nameError?: string
+  phoneError?: string
   nameLabel: string
   phoneLabel?: string
   required?: boolean
@@ -20,6 +22,8 @@ interface CustomerSelectProps extends CustomerSelectValue {
  * 未選既有客戶時，姓名與電話維持自由輸入，後端會在車輛流程中自動建立客戶。
  */
 export function CustomerSelect({
+  nameError,
+  phoneError,
   customerId,
   name,
   phone,
@@ -167,6 +171,8 @@ export function CustomerSelect({
           {required && <span className="text-error"> *</span>}
         </label>
         <input
+          aria-invalid={Boolean(nameError)}
+          aria-describedby={nameError ? `${nameInputId}-error` : undefined}
           id={nameInputId}
           type="text"
           required={required}
@@ -184,6 +190,7 @@ export function CustomerSelect({
           className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
         />
 
+        {nameError && <p id={`${nameInputId}-error`} className="mt-1 text-sm text-error">{nameError}</p>}
         {customerId && (
           <div className="mt-1 flex items-center justify-between gap-2 text-xs">
             <span id={selectedCustomerHintId} className="text-success">已選擇既有客戶，電話由客戶資料帶入</span>
@@ -247,10 +254,12 @@ export function CustomerSelect({
           required={required && !customerId}
           readOnly={Boolean(customerId)}
           value={phone}
-          aria-describedby={customerId ? selectedCustomerHintId : undefined}
+          aria-invalid={Boolean(phoneError)}
+          aria-describedby={[customerId ? selectedCustomerHintId : '', phoneError ? `${phoneInputId}-error` : ''].filter(Boolean).join(' ') || undefined}
           onChange={(event) => onChange({ customerId: '', name, phone: event.target.value })}
           className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30 read-only:bg-surface-2 read-only:text-fg-muted"
         />
+        {phoneError && <p id={`${phoneInputId}-error`} className="mt-1 text-sm text-error">{phoneError}</p>}
       </div>
     </div>
   )

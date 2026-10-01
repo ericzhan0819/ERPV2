@@ -1,3 +1,5 @@
+import { isAxiosError } from 'axios'
+import { extractFieldErrors } from '../../utils/fieldErrors'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { listCashAccounts } from '../../api/cashAccounts'
@@ -69,6 +71,8 @@ export function SalaryPeriodDetail() {
   const [focusError, setFocusError] = useState(false)
   const [busy, setBusy] = useState(false)
   const actionInFlight = useRef(false)
+  const adjustmentKeys = useRef<Record<string, { key: string; payload: string }>>({})
+  const [adjustmentErrors, setAdjustmentErrors] = useState<Record<string, string>>({})
   const [expanded, setExpanded] = useState<number | null>(null)
   const [adjustment, setAdjustment] = useState<AdjustmentForm | null>(null)
   const [accounts, setAccounts] = useState<CashAccountOption[]>([])
@@ -80,12 +84,16 @@ export function SalaryPeriodDetail() {
     idempotency_key: generateIdempotencyKey(),
   })
 
-  function load(refreshErrorMessage = '薪資月份載入失敗') {
-    setFocusError(false)
-    setError(null)
+  function load(refreshErrorMessage = '薪資月份載入失敗', preserveError = false) {
+    if (!preserveError) {
+      setFocusError(false)
+      setError(null)
+    }
     getSalaryPeriod(id)
       .then(setPeriod)
-      .catch((caught) => setError(apiError(caught, refreshErrorMessage)))
+      .catch((caught) => setError((current) => preserveError
+        ? [current, refreshErrorMessage].filter(Boolean).join('；')
+        : apiError(caught, refreshErrorMessage)))
   }
 
   useEffect(load, [id])
@@ -101,9 +109,10 @@ export function SalaryPeriodDetail() {
       .catch(() => setCommissionProfilesFailed(true))
   }, [])
 
-  async function runAction(action: () => Promise<unknown>) {
+  async function runAction(action: () => Promise<unknown>, adjustmentKeySlot?: string) {
     if (actionInFlight.current) return
     actionInFlight.current = true
+    setAdjustmentErrors({})
     setBusy(true)
     setFocusError(true)
     setError(null)
@@ -111,7 +120,12 @@ export function SalaryPeriodDetail() {
       await action()
       load('薪資操作已送出，但畫面可能不是最新；請重新整理後確認。')
     } catch (caught) {
+      const errors = extractFieldErrors(caught)
+      if (adjustmentKeySlot && errors.idempotency_key) delete adjustmentKeys.current[adjustmentKeySlot]
+      setAdjustmentErrors(errors)
       setError(apiError(caught, '薪資操作失敗'))
+      const status = isAxiosError(caught) ? caught.response?.status : undefined
+      if (!status || status >= 500) load('無法重新讀取薪資月份，請重新整理核對前次結果。', true)
     } finally {
       actionInFlight.current = false
       setBusy(false)
@@ -120,10 +134,25 @@ export function SalaryPeriodDetail() {
 
   async function addAdjustment() {
     if (!adjustment) return
+    const slot = `${id}:${adjustment.user_id}`
     await runAction(async () => {
-      await addSalaryAdjustment(id, { ...adjustment, amount: Number(adjustment.amount) })
+      const payload = { ...adjustment, amount: Number(adjustment.amount), description: adjustment.description.trim() }
+      const serialized = JSON.stringify(payload)
+      const previous = adjustmentKeys.current[slot]
+      const key = previous?.payload === serialized ? previous.key : generateIdempotencyKey()
+      adjustmentKeys.current[slot] = { key, payload: serialized }
+      await addSalaryAdjustment(id, { ...payload, idempotency_key: key })
+      delete adjustmentKeys.current[slot]
       setAdjustment(null)
-    })
+    }, slot)
+  }
+
+  function startNewAdjustment() {
+    if (!adjustment || actionInFlight.current || !window.confirm('請先核對薪資明細，確認前一筆加扣項已建立。繼續後會新增另一筆，即使內容完全相同。確定新增另一筆？')) return
+    delete adjustmentKeys.current[`${id}:${adjustment.user_id}`]
+    setAdjustmentErrors({})
+    setError(null)
+    setAdjustment(null)
   }
 
   if (!period) {
@@ -142,7 +171,7 @@ export function SalaryPeriodDetail() {
   return (
     <div className="flex flex-col gap-6">
       <PeriodHeader period={period} />
-      <FormAlert message={error} focusOnShow={focusError} className="rounded-lg bg-error/10 p-3" />
+      <FormAlert message={adjustment ? null : error} focusOnShow={focusError} className="rounded-lg bg-error/10 p-3" />
       <CompanySummary period={period} />
 
       {period.status === 'draft' && (
@@ -204,12 +233,16 @@ export function SalaryPeriodDetail() {
             )}
             expanded={expanded === settlement.id}
             onToggle={() => setExpanded(expanded === settlement.id ? null : settlement.id)}
-            onAddAdjustment={() => setAdjustment({
-              user_id: settlement.user_id,
-              type: 'manual_addition',
-              amount: '',
-              description: '',
-            })}
+            onAddAdjustment={() => {
+              setError(null)
+              setAdjustmentErrors({})
+              setAdjustment({
+                user_id: settlement.user_id,
+                type: 'manual_addition',
+                amount: '',
+                description: '',
+              })
+            }}
             onDeleteItem={(itemId) => runAction(() => deleteSalaryAdjustment(id, itemId))}
           />
         ))}
@@ -217,11 +250,14 @@ export function SalaryPeriodDetail() {
 
       {adjustment && (
         <AdjustmentModal
+          onStartNew={adjustmentKeys.current[`${id}:${adjustment.user_id}`] ? startNewAdjustment : undefined}
+          fieldErrors={adjustmentErrors}
+          error={error}
           form={adjustment}
           busy={busy}
           onChange={setAdjustment}
           onSave={addAdjustment}
-          onCancel={() => setAdjustment(null)}
+          onCancel={() => { if (!busy) { setAdjustment(null); setError(null) } }}
         />
       )}
     </div>
@@ -302,7 +338,7 @@ function PaymentPanel({ period, accounts, form, busy, onChange, onPay }: {
     onChange({ ...form, [field]: value, idempotency_key: generateIdempotencyKey() })
   }
   function pay() {
-    if (window.confirm(`確定由所選帳戶發放 ${formatCurrency(period.totals.net_pay)}？`)) onPay()
+    if (window.confirm(`確定由所選帳戶發放 ${formatCurrency(period.totals.net_pay)}？發薪會建立薪資收支，本月份轉為唯讀，無法撤回。`)) onPay()
   }
   return (
     <section className="rounded-2xl border border-border bg-surface p-5">
@@ -506,7 +542,10 @@ function SettlementItems({ settlement, draft, onDeleteItem }: {
   )
 }
 
-function AdjustmentModal({ form, busy, onChange, onSave, onCancel }: {
+function AdjustmentModal({ onStartNew, fieldErrors, error, form, busy, onChange, onSave, onCancel }: {
+  onStartNew?: () => void
+  fieldErrors: Record<string, string>
+  error: string | null
   form: AdjustmentForm
   busy: boolean
   onChange: (form: AdjustmentForm) => void
@@ -525,10 +564,17 @@ function AdjustmentModal({ form, busy, onChange, onSave, onCancel }: {
         className="max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-4 shadow-lg sm:p-6"
       >
         <h2 id="salary-adjustment-dialog-title" className="font-semibold">新增手動加扣項</h2>
+        {onStartNew && <div className="mt-3 rounded-lg border border-warning/40 p-3 text-sm">
+          <p>前次結果尚未確認；相同內容送出會重試前筆，修改內容會新增另一筆。請先核對薪資明細。</p>
+          <button type="button" disabled={busy} onClick={onStartNew} className="mt-2 min-h-11 font-medium text-primary disabled:opacity-50">已確認前筆已建立，新增另一筆</button>
+        </div>}
+        <FormAlert message={error} focusOnShow />
         <div className="mt-4 grid gap-3">
           <label className="text-sm">
             類型 <span className="text-error">*</span>
             <select
+              aria-invalid={Boolean(fieldErrors.type)}
+              aria-describedby={fieldErrors.type ? "adjustment-type-error" : undefined}
               value={form.type}
               onChange={(event) => onChange({ ...form, type: event.target.value as AdjustmentForm['type'] })}
               className="form-control-touch mt-1 w-full rounded-lg border border-border-strong px-3 py-2"
@@ -536,25 +582,32 @@ function AdjustmentModal({ form, busy, onChange, onSave, onCancel }: {
               <option value="manual_addition">其他加給</option>
               <option value="manual_deduction">其他扣款</option>
             </select>
+            {fieldErrors.type && <span id="adjustment-type-error" className="mt-1 block text-sm text-error">{fieldErrors.type}</span>}
           </label>
           <label className="text-sm">
             金額 <span className="text-error">*</span>
             <input
               type="number"
               min="1"
+              aria-invalid={Boolean(fieldErrors.amount)}
+              aria-describedby={fieldErrors.amount ? "adjustment-amount-error" : undefined}
               value={form.amount}
               onChange={(event) => onChange({ ...form, amount: event.target.value })}
               className="form-control-touch mt-1 w-full rounded-lg border border-border-strong px-3 py-2"
             />
+            {fieldErrors.amount && <span id="adjustment-amount-error" className="mt-1 block text-sm text-error">{fieldErrors.amount}</span>}
           </label>
           <label className="text-sm">
             說明 <span className="text-error">*</span>
             <input
               maxLength={255}
+              aria-invalid={Boolean(fieldErrors.description)}
+              aria-describedby={fieldErrors.description ? "adjustment-description-error" : undefined}
               value={form.description}
               onChange={(event) => onChange({ ...form, description: event.target.value })}
               className="form-control-touch mt-1 w-full rounded-lg border border-border-strong px-3 py-2"
             />
+            {fieldErrors.description && <span id="adjustment-description-error" className="mt-1 block text-sm text-error">{fieldErrors.description}</span>}
           </label>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2">
@@ -565,7 +618,7 @@ function AdjustmentModal({ form, busy, onChange, onSave, onCancel }: {
           >
             新增
           </button>
-          <button ref={initialFocusRef} onClick={onCancel} className="min-h-11 rounded-lg border border-border-strong px-4 py-2 text-sm">取消</button>
+          <button disabled={busy} ref={initialFocusRef} onClick={onCancel} className="min-h-11 rounded-lg border border-border-strong px-4 py-2 text-sm">取消</button>
         </div>
       </div>
     </div>

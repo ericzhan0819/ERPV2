@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { extractFieldErrors } from '../../utils/fieldErrors'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { isAxiosError } from 'axios'
 import { createUser, deleteUser, listUsers, resetUserPassword, setUserActive, setUserRole, updateUser } from '../../api/users'
@@ -50,6 +51,12 @@ const emptyCreateForm: CreateFormState = {
 const emptyEditForm: EditFormState = { name: '', email: '', phone: '', job_title: '', hire_date: '', notes: '' }
 
 export function UserList() {
+  const [createFieldErrors, setCreateFieldErrors] = useState<Record<string, string>>({})
+  const [editFieldErrors, setEditFieldErrors] = useState<Record<string, string>>({})
+  const [resetFieldErrors, setResetFieldErrors] = useState<Record<string, string>>({})
+  const [roleDrafts, setRoleDrafts] = useState<Record<number, UserRole>>({})
+  const [roleBusy, setRoleBusy] = useState<number | null>(null)
+  const roleInFlight = useRef(false)
   const { user: currentUser } = useAuth()
   const isAdmin = currentUser?.role === 'admin'
 
@@ -105,6 +112,7 @@ export function UserList() {
   async function handleCreateSubmit(event: FormEvent) {
     event.preventDefault()
     setCreateSubmitAttempt((current) => current + 1)
+    setCreateFieldErrors({})
     setCreateError(null)
     setSuccessMessage(null)
 
@@ -140,6 +148,7 @@ export function UserList() {
       setSuccessMessage('員工已建立；首次登入需使用 Email 與預設密碼，並立即修改密碼。')
       loadUsers('操作已送出，但員工列表可能不是最新；請重新整理後確認。')
     } catch (err) {
+      setCreateFieldErrors(extractFieldErrors(err))
       setCreateError(extractErrorMessage(err, '新增使用者失敗，請稍後再試'))
     } finally {
       setSubmitting(false)
@@ -149,6 +158,7 @@ export function UserList() {
   function startEdit(user: User) {
     setSuccessMessage(null)
     setEditingId(user.id)
+    setEditFieldErrors({})
     setEditError(null)
     setEditForm({
       name: user.name,
@@ -163,6 +173,7 @@ export function UserList() {
   async function handleEditSubmit(event: FormEvent, id: number) {
     event.preventDefault()
     setEditSubmitAttempt((current) => current + 1)
+    setEditFieldErrors({})
     setEditError(null)
     setSuccessMessage(null)
 
@@ -190,6 +201,7 @@ export function UserList() {
       setEditingId(null)
       loadUsers('操作已送出，但員工列表可能不是最新；請重新整理後確認。')
     } catch (err) {
+      setEditFieldErrors(extractFieldErrors(err))
       setEditError(extractErrorMessage(err, '更新使用者失敗，請稍後再試'))
     } finally {
       setSubmitting(false)
@@ -224,10 +236,14 @@ export function UserList() {
   }
 
   async function handleRoleChange(user: User, role: UserRole) {
+    if (roleInFlight.current) return
     setSuccessMessage(null)
     if (role === user.role) {
       return
     }
+    if (!window.confirm(`確定將 ${user.name} 的角色由${roleLabel(user.role)}改為${roleLabel(role)}？權限會立即變更。`)) return
+    roleInFlight.current = true
+    setRoleBusy(user.id)
     setError(null)
     setFocusPageError(true)
     try {
@@ -235,6 +251,9 @@ export function UserList() {
       loadUsers('操作已送出，但員工列表可能不是最新；請重新整理後確認。')
     } catch (err) {
       setError(extractErrorMessage(err, '更新角色失敗'))
+    } finally {
+      roleInFlight.current = false
+      setRoleBusy(null)
     }
   }
 
@@ -242,12 +261,14 @@ export function UserList() {
     setSuccessMessage(null)
     setResettingId(user.id)
     setResetPassword('')
+    setResetFieldErrors({})
     setResetError(null)
   }
 
   async function handleResetSubmit(event: FormEvent, id: number) {
     event.preventDefault()
     setResetSubmitAttempt((current) => current + 1)
+    setResetFieldErrors({})
     setResetError(null)
     setSuccessMessage(null)
 
@@ -264,6 +285,7 @@ export function UserList() {
       setSuccessMessage('密碼已重設；員工既有登入會失效，需以新密碼重新登入並修改密碼。')
       loadUsers('操作已送出，但員工列表可能不是最新；請重新整理後確認。')
     } catch (err) {
+      setResetFieldErrors(extractFieldErrors(err))
       setResetError(extractErrorMessage(err, '重設密碼失敗'))
     } finally {
       setSubmitting(false)
@@ -289,7 +311,8 @@ export function UserList() {
           onClick={() => {
             setSuccessMessage(null)
             setCreating((v) => !v)
-            setCreateError(null)
+            setCreateFieldErrors({})
+    setCreateError(null)
             setCreateForm(emptyCreateForm)
           }}
           className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-fg hover:bg-primary-hover"
@@ -303,28 +326,33 @@ export function UserList() {
           <FormAlert message={createError} signal={createSubmitAttempt} focusOnShow className="mb-4" />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">姓名 *</label>
-              <input
+              <label htmlFor="userlist-field-1" className="mb-1 block text-sm font-medium text-fg-muted">姓名 *</label>
+              <input aria-invalid={Boolean(createFieldErrors["name"])} aria-describedby={createFieldErrors["name"] ? 'userlist-field-1-error' : undefined}
+                id="userlist-field-1"
                 type="text"
                 required
                 value={createForm.name}
                 onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
+              {createFieldErrors["name"] && <p id="userlist-field-1-error" className="mt-1 text-sm text-error">{createFieldErrors["name"]}</p>}
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">電子郵件 *</label>
-              <input
+              <label htmlFor="userlist-field-2" className="mb-1 block text-sm font-medium text-fg-muted">電子郵件 *</label>
+              <input aria-invalid={Boolean(createFieldErrors["email"])} aria-describedby={createFieldErrors["email"] ? 'userlist-field-2-error' : undefined}
+                id="userlist-field-2"
                 type="email"
                 required
                 value={createForm.email}
                 onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
+              {createFieldErrors["email"] && <p id="userlist-field-2-error" className="mt-1 text-sm text-error">{createFieldErrors["email"]}</p>}
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">密碼 *</label>
-              <input
+              <label htmlFor="userlist-field-3" className="mb-1 block text-sm font-medium text-fg-muted">密碼 *</label>
+              <input aria-invalid={Boolean(createFieldErrors["password"])} aria-describedby={createFieldErrors["password"] ? 'userlist-field-3-error' : undefined}
+                id="userlist-field-3"
                 type="password"
                 required
                 minLength={8}
@@ -332,10 +360,13 @@ export function UserList() {
                 onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
+              {createFieldErrors["password"] && <p id="userlist-field-3-error" className="mt-1 text-sm text-error">{createFieldErrors["password"]}</p>}
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">角色 *</label>
-              <select
+              <label htmlFor="userlist-field-4" className="mb-1 block text-sm font-medium text-fg-muted">角色 *</label>
+              <select aria-invalid={Boolean(createFieldErrors["role"])} aria-describedby={createFieldErrors["role"] ? 'userlist-field-4-error' : undefined}
+                id="userlist-field-4"
+                required
                 value={createForm.role}
                 onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value as UserRole }))}
                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
@@ -346,42 +377,51 @@ export function UserList() {
                   </option>
                 ))}
               </select>
+              {createFieldErrors["role"] && <p id="userlist-field-4-error" className="mt-1 text-sm text-error">{createFieldErrors["role"]}</p>}
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">電話</label>
-              <input
+              <label htmlFor="userlist-field-5" className="mb-1 block text-sm font-medium text-fg-muted">電話</label>
+              <input aria-invalid={Boolean(createFieldErrors["phone"])} aria-describedby={createFieldErrors["phone"] ? 'userlist-field-5-error' : undefined}
+                id="userlist-field-5"
                 type="text"
                 value={createForm.phone}
                 onChange={(e) => setCreateForm((f) => ({ ...f, phone: e.target.value }))}
                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
+              {createFieldErrors["phone"] && <p id="userlist-field-5-error" className="mt-1 text-sm text-error">{createFieldErrors["phone"]}</p>}
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">職稱</label>
-              <input
+              <label htmlFor="userlist-field-6" className="mb-1 block text-sm font-medium text-fg-muted">職稱</label>
+              <input aria-invalid={Boolean(createFieldErrors["job_title"])} aria-describedby={createFieldErrors["job_title"] ? 'userlist-field-6-error' : undefined}
+                id="userlist-field-6"
                 type="text"
                 value={createForm.job_title}
                 onChange={(e) => setCreateForm((f) => ({ ...f, job_title: e.target.value }))}
                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
+              {createFieldErrors["job_title"] && <p id="userlist-field-6-error" className="mt-1 text-sm text-error">{createFieldErrors["job_title"]}</p>}
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">到職日</label>
-              <input
+              <label htmlFor="userlist-field-7" className="mb-1 block text-sm font-medium text-fg-muted">到職日</label>
+              <input aria-invalid={Boolean(createFieldErrors["hire_date"])} aria-describedby={createFieldErrors["hire_date"] ? 'userlist-field-7-error' : undefined}
+                id="userlist-field-7"
                 type="date"
                 value={createForm.hire_date}
                 onChange={(e) => setCreateForm((f) => ({ ...f, hire_date: e.target.value }))}
                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
+              {createFieldErrors["hire_date"] && <p id="userlist-field-7-error" className="mt-1 text-sm text-error">{createFieldErrors["hire_date"]}</p>}
             </div>
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
-              <textarea
+              <label htmlFor="userlist-field-8" className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
+              <textarea aria-invalid={Boolean(createFieldErrors["notes"])} aria-describedby={createFieldErrors["notes"] ? 'userlist-field-8-error' : undefined}
+                id="userlist-field-8"
                 value={createForm.notes}
                 onChange={(e) => setCreateForm((f) => ({ ...f, notes: e.target.value }))}
                 rows={2}
                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
+              {createFieldErrors["notes"] && <p id="userlist-field-8-error" className="mt-1 text-sm text-error">{createFieldErrors["notes"]}</p>}
             </div>
           </div>
 
@@ -456,60 +496,72 @@ export function UserList() {
                           <FormAlert message={editError} signal={editSubmitAttempt} focusOnShow />
                           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
-                              <label className="mb-1 block text-sm font-medium text-fg-muted">姓名 *</label>
-                              <input
+                              <label htmlFor="userlist-field-9" className="mb-1 block text-sm font-medium text-fg-muted">姓名 *</label>
+                              <input aria-invalid={Boolean(editFieldErrors["name"])} aria-describedby={editFieldErrors["name"] ? 'userlist-field-9-error' : undefined}
+                                id="userlist-field-9"
                                 type="text"
                                 required
                                 value={editForm.name}
                                 onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
                                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                               />
+              {editFieldErrors["name"] && <p id="userlist-field-9-error" className="mt-1 text-sm text-error">{editFieldErrors["name"]}</p>}
                             </div>
                             <div>
-                              <label className="mb-1 block text-sm font-medium text-fg-muted">電子郵件 *</label>
-                              <input
+                              <label htmlFor="userlist-field-10" className="mb-1 block text-sm font-medium text-fg-muted">電子郵件 *</label>
+                              <input aria-invalid={Boolean(editFieldErrors["email"])} aria-describedby={editFieldErrors["email"] ? 'userlist-field-10-error' : undefined}
+                                id="userlist-field-10"
                                 type="email"
                                 required
                                 value={editForm.email}
                                 onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
                                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                               />
+              {editFieldErrors["email"] && <p id="userlist-field-10-error" className="mt-1 text-sm text-error">{editFieldErrors["email"]}</p>}
                             </div>
                             <div>
-                              <label className="mb-1 block text-sm font-medium text-fg-muted">電話</label>
-                              <input
+                              <label htmlFor="userlist-field-11" className="mb-1 block text-sm font-medium text-fg-muted">電話</label>
+                              <input aria-invalid={Boolean(editFieldErrors["phone"])} aria-describedby={editFieldErrors["phone"] ? 'userlist-field-11-error' : undefined}
+                                id="userlist-field-11"
                                 type="text"
                                 value={editForm.phone}
                                 onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
                                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                               />
+              {editFieldErrors["phone"] && <p id="userlist-field-11-error" className="mt-1 text-sm text-error">{editFieldErrors["phone"]}</p>}
                             </div>
                             <div>
-                              <label className="mb-1 block text-sm font-medium text-fg-muted">職稱</label>
-                              <input
+                              <label htmlFor="userlist-field-12" className="mb-1 block text-sm font-medium text-fg-muted">職稱</label>
+                              <input aria-invalid={Boolean(editFieldErrors["job_title"])} aria-describedby={editFieldErrors["job_title"] ? 'userlist-field-12-error' : undefined}
+                                id="userlist-field-12"
                                 type="text"
                                 value={editForm.job_title}
                                 onChange={(e) => setEditForm((f) => ({ ...f, job_title: e.target.value }))}
                                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                               />
+              {editFieldErrors["job_title"] && <p id="userlist-field-12-error" className="mt-1 text-sm text-error">{editFieldErrors["job_title"]}</p>}
                             </div>
                             <div>
-                              <label className="mb-1 block text-sm font-medium text-fg-muted">到職日</label>
-                              <input
+                              <label htmlFor="userlist-field-13" className="mb-1 block text-sm font-medium text-fg-muted">到職日</label>
+                              <input aria-invalid={Boolean(editFieldErrors["hire_date"])} aria-describedby={editFieldErrors["hire_date"] ? 'userlist-field-13-error' : undefined}
+                                id="userlist-field-13"
                                 type="date"
                                 value={editForm.hire_date}
                                 onChange={(e) => setEditForm((f) => ({ ...f, hire_date: e.target.value }))}
                                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                               />
+              {editFieldErrors["hire_date"] && <p id="userlist-field-13-error" className="mt-1 text-sm text-error">{editFieldErrors["hire_date"]}</p>}
                             </div>
                             <div className="sm:col-span-2">
-                              <label className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
-                              <textarea
+                              <label htmlFor="userlist-field-14" className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
+                              <textarea aria-invalid={Boolean(editFieldErrors["notes"])} aria-describedby={editFieldErrors["notes"] ? 'userlist-field-14-error' : undefined}
+                                id="userlist-field-14"
                                 value={editForm.notes}
                                 onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
                                 rows={2}
                                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                               />
+              {editFieldErrors["notes"] && <p id="userlist-field-14-error" className="mt-1 text-sm text-error">{editFieldErrors["notes"]}</p>}
                             </div>
                           </div>
                           <div className="flex gap-3">
@@ -541,8 +593,9 @@ export function UserList() {
                         <form onSubmit={(e) => handleResetSubmit(e, user.id)} className="flex flex-col gap-4">
                           <FormAlert message={resetError} signal={resetSubmitAttempt} focusOnShow />
                           <div className="max-w-sm">
-                            <label className="mb-1 block text-sm font-medium text-fg-muted">{user.name} 的新密碼</label>
-                            <input
+                            <label htmlFor="userlist-field-15" className="mb-1 block text-sm font-medium text-fg-muted">{user.name} 的新密碼 <span className="text-error">*</span></label>
+                            <input aria-invalid={Boolean(resetFieldErrors.password)} aria-describedby={resetFieldErrors.password ? 'userlist-field-15-error' : undefined}
+                              id="userlist-field-15"
                               type="password"
                               required
                               minLength={8}
@@ -550,6 +603,7 @@ export function UserList() {
                               onChange={(e) => setResetPassword(e.target.value)}
                               className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                             />
+              {resetFieldErrors.password && <p id="userlist-field-15-error" className="mt-1 text-sm text-error">{resetFieldErrors.password}</p>}
                           </div>
 
                           <div className="flex gap-3">
@@ -584,9 +638,9 @@ export function UserList() {
                     <td className="px-4 py-3">{user.job_title || '-'}</td>
                     <td className="px-4 py-3">
                       <select
-                        value={user.role}
-                        disabled={isSelf}
-                        onChange={(e) => handleRoleChange(user, e.target.value as UserRole)}
+                        value={roleDrafts[user.id] ?? user.role}
+                        disabled={isSelf || roleBusy !== null}
+                        onChange={(e) => setRoleDrafts({ ...roleDrafts, [user.id]: e.target.value as UserRole })}
                         aria-label={`${user.name}的角色：${roleLabel(user.role)}`}
                         aria-describedby={isSelf ? selfRestrictionId : undefined}
                         className="rounded-lg border border-border-strong px-2 py-1 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-60"
@@ -597,6 +651,7 @@ export function UserList() {
                           </option>
                         ))}
                       </select>
+                      {!isSelf && <button type="button" disabled={roleBusy !== null || !roleDrafts[user.id] || roleDrafts[user.id] === user.role} onClick={() => handleRoleChange(user, roleDrafts[user.id])} className="ml-2 min-h-11 rounded-lg border border-border-strong px-3 text-sm disabled:opacity-50">套用角色</button>}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col items-start gap-1">

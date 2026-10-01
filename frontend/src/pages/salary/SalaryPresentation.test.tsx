@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, waitFor, within, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as cashAccountsApi from '../../api/cashAccounts'
@@ -97,6 +97,31 @@ function salaryPeriod(
   }
 }
 
+function adjustmentPeriod(): SalaryPeriod {
+    const period = salaryPeriod('draft')
+    period.settlements = [{
+      id: 1,
+      user_id: 2,
+      user: { id: 2, name: '測試員工' },
+      eligible_sales_count: 0,
+      sales_bonus_bps: 0,
+      base_salary: 30000,
+      fixed_allowance: 0,
+      labor_insurance_deduction: 0,
+      health_insurance_deduction: 0,
+      purchase_bonus_total: 0,
+      sales_bonus_total: 0,
+      manual_addition_total: 0,
+      manual_deduction_total: 0,
+      gross_pay: 30000,
+      deduction_total: 0,
+      net_pay: 30000,
+      has_payment_entry: false,
+      items: [],
+    }]
+    return period
+}
+
 function renderSalaryDetail(period: SalaryPeriod) {
   vi.mocked(salaryPeriodsApi.getSalaryPeriod).mockResolvedValue(period)
   render(
@@ -111,6 +136,7 @@ function renderSalaryDetail(period: SalaryPeriod) {
 describe('salary copy presentation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(salaryPeriodsApi.addSalaryAdjustment).mockReset()
     vi.mocked(cashAccountsApi.listCashAccounts).mockResolvedValue([])
     vi.mocked(salaryProfilesApi.listSalaryProfiles).mockResolvedValue([])
     vi.mocked(usersApi.listUsers).mockResolvedValue([])
@@ -237,28 +263,116 @@ describe('salary copy presentation', () => {
     ).toBe(false)
   })
 
+  it.each([undefined, 503])('refreshes uncertain adjustment results (%s) without losing dialog errors or retry identity', async (status) => {
+    const period = adjustmentPeriod()
+    const failure = status ? { isAxiosError: true, response: { status, data: {} } } : new Error('network')
+    vi.mocked(salaryPeriodsApi.addSalaryAdjustment).mockRejectedValue(failure)
+    renderSalaryDetail(period)
+    await screen.findByRole('button', { name: '新增加扣項' })
+    const updated = { ...period, totals: { ...period.totals, net_pay: 31000 } }
+    vi.mocked(salaryPeriodsApi.getSalaryPeriod).mockResolvedValue(updated)
+    for (let attempt = 0; attempt < 2; attempt++) {
+      fireEvent.click(screen.getByRole('button', { name: '新增加扣項' }))
+      const dialog = within(screen.getByRole('dialog'))
+      fireEvent.change(dialog.getByRole('spinbutton'), { target: { value: '1000' } })
+      fireEvent.change(dialog.getByLabelText(/說明/), { target: { value: '加給' } })
+      fireEvent.click(dialog.getByRole('button', { name: '新增' }))
+      await waitFor(() => expect(salaryPeriodsApi.getSalaryPeriod).toHaveBeenCalledTimes(attempt + 2))
+      await waitFor(() => expect(dialog.getByRole('alert').textContent).toBe('薪資操作失敗'))
+      expect((dialog.getByRole('spinbutton') as HTMLInputElement).value).toBe('1000')
+      expect(dialog.getByRole('alert')).toBe(document.activeElement)
+      expect(screen.getByText('全公司實發合計').parentElement?.textContent).toContain('31,000')
+      fireEvent.click(dialog.getByRole('button', { name: '取消' }))
+    }
+    const calls = vi.mocked(salaryPeriodsApi.addSalaryAdjustment).mock.calls
+    expect(calls[0][1].idempotency_key).toBe(calls[1][1].idempotency_key)
+  })
+
+  it('changes adjustment keys for changed content, key conflicts, and successful new entries', async () => {
+    vi.mocked(salaryPeriodsApi.addSalaryAdjustment)
+      .mockRejectedValueOnce(new Error('network'))
+      .mockRejectedValueOnce({ isAxiosError: true, response: { status: 422, data: { errors: { idempotency_key: ['識別碼衝突'] } } } })
+      .mockResolvedValue(undefined)
+    renderSalaryDetail(adjustmentPeriod())
+    fireEvent.click(await screen.findByRole('button', { name: '新增加扣項' }))
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (attempt === 3) fireEvent.click(screen.getByRole('button', { name: '新增加扣項' }))
+      const dialog = within(screen.getByRole('dialog'))
+      fireEvent.change(dialog.getByRole('spinbutton'), { target: { value: attempt === 0 ? '1000' : '2000' } })
+      fireEvent.change(dialog.getByLabelText(/說明/), { target: { value: '加給' } })
+      fireEvent.click(dialog.getByRole('button', { name: '新增' }))
+      await waitFor(() => expect(salaryPeriodsApi.addSalaryAdjustment).toHaveBeenCalledTimes(attempt + 1))
+      if (attempt < 2) {
+        await waitFor(() => expect(dialog.getByRole('alert').textContent).toContain(attempt === 0 ? '薪資操作失敗' : '識別碼衝突'))
+        expect(salaryPeriodsApi.getSalaryPeriod).toHaveBeenCalledTimes(2)
+      } else {
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+      }
+    }
+    expect(new Set(vi.mocked(salaryPeriodsApi.addSalaryAdjustment).mock.calls.map((call) => call[1].idempotency_key)).size).toBe(4)
+  })
+
+  it('allows a separate identical adjustment after explicit confirmation of the previous item', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    vi.mocked(salaryPeriodsApi.addSalaryAdjustment).mockRejectedValue(new Error('network'))
+    renderSalaryDetail(adjustmentPeriod())
+    await screen.findByRole('button', { name: '新增加扣項' })
+    for (let attempt = 0; attempt < 2; attempt++) {
+      fireEvent.click(screen.getByRole('button', { name: '新增加扣項' }))
+      const dialog = within(screen.getByRole('dialog'))
+      fireEvent.change(dialog.getByRole('spinbutton'), { target: { value: '1000' } })
+      fireEvent.change(dialog.getByLabelText(/說明/), { target: { value: '加給' } })
+      fireEvent.click(dialog.getByRole('button', { name: '新增' }))
+      await waitFor(() => expect(dialog.getByRole('alert').textContent).toBe('薪資操作失敗'))
+      if (attempt === 0) {
+        fireEvent.click(dialog.getByRole('button', { name: '已確認前筆已建立，新增另一筆' }))
+        expect(screen.getByRole('dialog')).toBeTruthy()
+        confirm.mockReturnValue(true)
+        fireEvent.click(dialog.getByRole('button', { name: '已確認前筆已建立，新增另一筆' }))
+        expect(screen.queryByRole('dialog')).toBeNull()
+      }
+    }
+    const calls = vi.mocked(salaryPeriodsApi.addSalaryAdjustment).mock.calls
+    expect(calls[0][1].idempotency_key).not.toBe(calls[1][1].idempotency_key)
+    confirm.mockRestore()
+  })
+
+  it('preserves the action error when refreshing the uncertain result also fails', async () => {
+    vi.mocked(salaryPeriodsApi.addSalaryAdjustment).mockRejectedValue(new Error('network'))
+    renderSalaryDetail(adjustmentPeriod())
+    fireEvent.click(await screen.findByRole('button', { name: '新增加扣項' }))
+    vi.mocked(salaryPeriodsApi.getSalaryPeriod).mockRejectedValue(new Error('offline'))
+    const dialog = within(screen.getByRole('dialog'))
+    fireEvent.change(dialog.getByRole('spinbutton'), { target: { value: '1000' } })
+    fireEvent.change(dialog.getByLabelText(/說明/), { target: { value: '加給' } })
+    fireEvent.click(dialog.getByRole('button', { name: '新增' }))
+    await waitFor(() => expect(dialog.getByRole('alert').textContent).toBe('薪資操作失敗；無法重新讀取薪資月份，請重新整理核對前次結果。'))
+    expect((dialog.getByLabelText(/說明/) as HTMLInputElement).value).toBe('加給')
+  })
+
+  it('keeps adjustment errors inside the dialog and preserves the retry key after reopening', async () => {
+    const period = adjustmentPeriod()
+    vi.mocked(salaryPeriodsApi.addSalaryAdjustment).mockRejectedValue({ isAxiosError: true, response: { status: 422, data: { errors: { amount: ['金額無效'] } } } })
+    renderSalaryDetail(period)
+    await screen.findByRole('button', { name: '新增加扣項' })
+    for (let attempt = 0; attempt < 2; attempt++) {
+      fireEvent.click(screen.getByRole('button', { name: '新增加扣項' }))
+      const dialog = within(screen.getByRole('dialog'))
+      fireEvent.change(dialog.getByRole('spinbutton'), { target: { value: '1000' } })
+      fireEvent.change(dialog.getByLabelText(/說明/), { target: { value: '加給' } })
+      fireEvent.click(dialog.getByRole('button', { name: '新增' }))
+      await waitFor(() => expect(dialog.getByRole('spinbutton').getAttribute('aria-invalid')).toBe('true'))
+      expect(screen.getAllByRole('alert')).toHaveLength(1)
+      expect(dialog.getByRole('alert')).toBe(document.activeElement)
+      fireEvent.click(dialog.getByRole('button', { name: '取消' }))
+    }
+    const calls = vi.mocked(salaryPeriodsApi.addSalaryAdjustment).mock.calls
+    expect(calls).toHaveLength(2)
+    expect(calls[0][1].idempotency_key).toBe(calls[1][1].idempotency_key)
+  })
+
   it('keeps the adjustment dialog keyboard-operable and returns focus', async () => {
-    const period = salaryPeriod('draft')
-    period.settlements = [{
-      id: 1,
-      user_id: 2,
-      user: { id: 2, name: '測試員工' },
-      eligible_sales_count: 0,
-      sales_bonus_bps: 0,
-      base_salary: 30000,
-      fixed_allowance: 0,
-      labor_insurance_deduction: 0,
-      health_insurance_deduction: 0,
-      purchase_bonus_total: 0,
-      sales_bonus_total: 0,
-      manual_addition_total: 0,
-      manual_deduction_total: 0,
-      gross_pay: 30000,
-      deduction_total: 0,
-      net_pay: 30000,
-      has_payment_entry: false,
-      items: [],
-    }]
+    const period = adjustmentPeriod()
     const interaction = userEvent.setup()
     renderSalaryDetail(period)
 

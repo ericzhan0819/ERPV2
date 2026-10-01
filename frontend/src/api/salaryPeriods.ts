@@ -17,7 +17,7 @@ export async function recalculateSalaryPeriod(id: number): Promise<SalaryPeriod>
   const { data } = await apiClient.post<{ data: SalaryPeriod }>(`/api/salary-periods/${id}/recalculate`)
   return data.data
 }
-export async function addSalaryAdjustment(id: number, payload: { user_id: number; type: 'manual_addition' | 'manual_deduction'; amount: number; description: string }): Promise<void> {
+export async function addSalaryAdjustment(id: number, payload: { idempotency_key: string; user_id: number; type: 'manual_addition' | 'manual_deduction'; amount: number; description: string }): Promise<void> {
   await apiClient.post(`/api/salary-periods/${id}/adjustments`, payload)
 }
 export async function deleteSalaryAdjustment(periodId: number, itemId: number): Promise<void> {

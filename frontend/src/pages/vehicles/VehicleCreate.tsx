@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { extractFieldErrors } from '../../utils/fieldErrors'
+import { useId, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { isAxiosError } from 'axios'
@@ -120,6 +121,7 @@ function buildPayload(form: FormState, idempotencyKey: string): CreateVehiclePay
 }
 
 interface FieldProps {
+  error?: string
   label: string
   value: string
   onChange: (value: string) => void
@@ -128,14 +130,18 @@ interface FieldProps {
   readOnly?: boolean
 }
 
-function Field({ label, value, onChange, type = 'text', required, readOnly }: FieldProps) {
+function Field({ label, value, onChange, type = 'text', required, readOnly, error }: FieldProps) {
+  const inputId = useId()
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-fg-muted">
+      <label htmlFor={inputId} className="mb-1 block text-sm font-medium text-fg-muted">
         {label}
         {required && <span className="text-error"> *</span>}
       </label>
       <input
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? `${inputId}-error` : undefined}
+        id={inputId}
         type={type}
         required={required}
         readOnly={readOnly}
@@ -143,6 +149,7 @@ function Field({ label, value, onChange, type = 'text', required, readOnly }: Fi
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30 read-only:bg-surface-2 read-only:text-fg-muted"
       />
+      {error && <p id={`${inputId}-error`} className="mt-1 text-sm text-error">{error}</p>}
     </div>
   )
 }
@@ -161,6 +168,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 export function VehicleCreate() {
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const navigate = useNavigate()
   const [form, setForm] = useState<FormState>(initialState)
   const [cashAccounts, setCashAccounts] = useState<CashAccountOption[]>([])
@@ -183,6 +191,7 @@ export function VehicleCreate() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    setFieldErrors({})
     setSubmitAttempt((current) => current + 1)
     setError(null)
 
@@ -201,6 +210,7 @@ export function VehicleCreate() {
       const vehicle = await createVehicle(buildPayload(form, idempotencyKeyRef.current))
       navigate(`/vehicles/${vehicle.id}`)
     } catch (err) {
+      setFieldErrors(extractFieldErrors(err))
       if (isAxiosError(err) && err.response?.data?.message) {
         setError(err.response.data.message)
       } else {
@@ -219,26 +229,28 @@ export function VehicleCreate() {
         <FormAlert message={error} signal={submitAttempt} focusOnShow className="mb-4" />
         <SectionTitle>基本車輛資料</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="廠牌" value={form.brand} onChange={(v) => set('brand', v)} required />
-          <Field label="車型" value={form.model} onChange={(v) => set('model', v)} required />
-          <Field label="年式" value={form.year} onChange={(v) => set('year', v)} type="number" />
-          <Field label="車牌" value={form.license_plate} onChange={(v) => set('license_plate', v)} />
-          <Field label="VIN / 車身號碼" value={form.vin} onChange={(v) => set('vin', v)} />
-          <Field label="里程" value={form.mileage_km} onChange={(v) => set('mileage_km', v)} type="number" />
-          <Field label="顏色" value={form.color} onChange={(v) => set('color', v)} />
-          <Field label="排氣量" value={form.displacement} onChange={(v) => set('displacement', v)} />
-          <Field label="變速系統" value={form.transmission} onChange={(v) => set('transmission', v)} />
-          <Field label="燃料" value={form.fuel_type} onChange={(v) => set('fuel_type', v)} />
-          <Field label="停放位置" value={form.parking_location} onChange={(v) => set('parking_location', v)} />
+          <Field label="廠牌" value={form.brand} error={fieldErrors["brand"]} onChange={(v) => set('brand', v)} required />
+          <Field label="車型" value={form.model} error={fieldErrors["model"]} onChange={(v) => set('model', v)} required />
+          <Field label="年式" value={form.year} error={fieldErrors["year"]} onChange={(v) => set('year', v)} type="number" />
+          <Field label="車牌" value={form.license_plate} error={fieldErrors["license_plate"]} onChange={(v) => set('license_plate', v)} />
+          <Field label="VIN / 車身號碼" value={form.vin} error={fieldErrors["vin"]} onChange={(v) => set('vin', v)} />
+          <Field label="里程" value={form.mileage_km} error={fieldErrors["mileage_km"]} onChange={(v) => set('mileage_km', v)} type="number" />
+          <Field label="顏色" value={form.color} error={fieldErrors["color"]} onChange={(v) => set('color', v)} />
+          <Field label="排氣量" value={form.displacement} error={fieldErrors["displacement"]} onChange={(v) => set('displacement', v)} />
+          <Field label="變速系統" value={form.transmission} error={fieldErrors["transmission"]} onChange={(v) => set('transmission', v)} />
+          <Field label="燃料" value={form.fuel_type} error={fieldErrors["fuel_type"]} onChange={(v) => set('fuel_type', v)} />
+          <Field label="停放位置" value={form.parking_location} error={fieldErrors["parking_location"]} onChange={(v) => set('parking_location', v)} />
         </div>
 
         <div className="my-6 border-t border-border" />
 
         <SectionTitle>買入資料</SectionTitle>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="買入日期" value={form.purchase_date} onChange={(v) => set('purchase_date', v)} type="date" />
-          <Field label="買入來源" value={form.purchase_source_type} onChange={(v) => set('purchase_source_type', v)} />
+          <Field label="買入日期" value={form.purchase_date} error={fieldErrors["purchase_date"]} onChange={(v) => set('purchase_date', v)} type="date" />
+          <Field label="買入來源" value={form.purchase_source_type} error={fieldErrors["purchase_source_type"]} onChange={(v) => set('purchase_source_type', v)} />
           <CustomerSelect
+            nameError={fieldErrors.seller_name ?? fieldErrors.seller_customer_id}
+            phoneError={fieldErrors.seller_phone}
             nameLabel="原車主 / 供應商"
             customerId={form.seller_customer_id}
             name={form.seller_name}
@@ -253,12 +265,13 @@ export function VehicleCreate() {
               }))
             }}
           />
-          <Field label="收購價" value={form.purchase_price} onChange={(v) => set('purchase_price', v)} type="number" />
+          <Field label="收購價" value={form.purchase_price} error={fieldErrors["purchase_price"]} onChange={(v) => set('purchase_price', v)} type="number" />
           <div>
-            <label className="mb-1 block text-sm font-medium text-fg-muted">
+            <label htmlFor="vehiclecreate-field-1" className="mb-1 block text-sm font-medium text-fg-muted">
               收車人<span className="text-error"> *</span>
             </label>
-            <select
+            <select aria-invalid={Boolean(fieldErrors["purchase_agent_id"])} aria-describedby={fieldErrors["purchase_agent_id"] ? 'vehiclecreate-field-1-error' : undefined}
+              id="vehiclecreate-field-1"
               required
               value={form.purchase_agent_id}
               onChange={(event) => set('purchase_agent_id', event.target.value)}
@@ -269,6 +282,7 @@ export function VehicleCreate() {
                 <option key={agent.id} value={agent.id}>{agent.name}</option>
               ))}
             </select>
+              {fieldErrors["purchase_agent_id"] && <p id="vehiclecreate-field-1-error" className="mt-1 text-sm text-error">{fieldErrors["purchase_agent_id"]}</p>}
           </div>
         </div>
 
@@ -284,17 +298,18 @@ export function VehicleCreate() {
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
               label="付款金額"
-              value={form.payment_amount}
+              value={form.payment_amount} error={fieldErrors["initial_purchase_payment.amount"]}
               onChange={(v) => set('payment_amount', v)}
               type="number"
               required
             />
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">
+              <label htmlFor="vehiclecreate-field-2" className="mb-1 block text-sm font-medium text-fg-muted">
                 付款帳戶
                 <span className="text-error"> *</span>
               </label>
-              <select
+              <select aria-invalid={Boolean(fieldErrors["initial_purchase_payment.cash_account_id"])} aria-describedby={fieldErrors["initial_purchase_payment.cash_account_id"] ? 'vehiclecreate-field-2-error' : undefined}
+                id="vehiclecreate-field-2"
                 required
                 value={form.payment_cash_account_id}
                 onChange={(e) => set('payment_cash_account_id', e.target.value)}
@@ -309,21 +324,24 @@ export function VehicleCreate() {
                     </option>
                   ))}
               </select>
+              {fieldErrors["initial_purchase_payment.cash_account_id"] && <p id="vehiclecreate-field-2-error" className="mt-1 text-sm text-error">{fieldErrors["initial_purchase_payment.cash_account_id"]}</p>}
             </div>
             <Field
               label="付款日期"
-              value={form.payment_entry_date}
+              value={form.payment_entry_date} error={fieldErrors["initial_purchase_payment.entry_date"]}
               onChange={(v) => set('payment_entry_date', v)}
               type="date"
             />
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">付款備註</label>
-              <textarea
+              <label htmlFor="vehiclecreate-field-3" className="mb-1 block text-sm font-medium text-fg-muted">付款備註</label>
+              <textarea aria-invalid={Boolean(fieldErrors["initial_purchase_payment.description"])} aria-describedby={fieldErrors["initial_purchase_payment.description"] ? 'vehiclecreate-field-3-error' : undefined}
+                id="vehiclecreate-field-3"
                 value={form.payment_description}
                 onChange={(e) => set('payment_description', e.target.value)}
                 rows={2}
                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
+              {fieldErrors["initial_purchase_payment.description"] && <p id="vehiclecreate-field-3-error" className="mt-1 text-sm text-error">{fieldErrors["initial_purchase_payment.description"]}</p>}
             </div>
           </div>
         )}
@@ -356,22 +374,26 @@ export function VehicleCreate() {
         </div>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-fg-muted">貸款 / 權利問題備註</label>
-            <textarea
+            <label htmlFor="vehiclecreate-field-4" className="mb-1 block text-sm font-medium text-fg-muted">貸款 / 權利問題備註</label>
+            <textarea aria-invalid={Boolean(fieldErrors["lien_note"])} aria-describedby={fieldErrors["lien_note"] ? 'vehiclecreate-field-4-error' : undefined}
+              id="vehiclecreate-field-4"
               value={form.lien_note}
               onChange={(e) => set('lien_note', e.target.value)}
               rows={2}
               className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
             />
+              {fieldErrors["lien_note"] && <p id="vehiclecreate-field-4-error" className="mt-1 text-sm text-error">{fieldErrors["lien_note"]}</p>}
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-fg-muted">車況備註</label>
-            <textarea
+            <label htmlFor="vehiclecreate-field-5" className="mb-1 block text-sm font-medium text-fg-muted">車況備註</label>
+            <textarea aria-invalid={Boolean(fieldErrors["condition_note"])} aria-describedby={fieldErrors["condition_note"] ? 'vehiclecreate-field-5-error' : undefined}
+              id="vehiclecreate-field-5"
               value={form.condition_note}
               onChange={(e) => set('condition_note', e.target.value)}
               rows={2}
               className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
             />
+              {fieldErrors["condition_note"] && <p id="vehiclecreate-field-5-error" className="mt-1 text-sm text-error">{fieldErrors["condition_note"]}</p>}
           </div>
         </div>
 

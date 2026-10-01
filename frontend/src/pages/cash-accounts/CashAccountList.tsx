@@ -186,7 +186,7 @@ export function CashAccountList() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-fg">資金帳戶</h1>
+        <div><h1 className="text-xl font-semibold text-fg">資金帳戶</h1><p className="mt-1 text-sm text-fg-muted">目前餘額為期初餘額加上已核准收入、減去已核准支出。</p></div>
         {isAdmin && (
           <button
             onClick={() => {
@@ -206,7 +206,7 @@ export function CashAccountList() {
           <FormAlert message={createError} signal={createSubmitAttempt} focusOnShow className="mb-4" />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label htmlFor="cash-account-create-name" className="mb-1 block text-sm font-medium text-fg-muted">帳戶名稱</label>
+              <label htmlFor="cash-account-create-name" className="mb-1 block text-sm font-medium text-fg-muted">帳戶名稱 <span className="text-error">*</span></label>
               <input
                 id="cash-account-create-name"
                 type="text"
@@ -217,7 +217,7 @@ export function CashAccountList() {
               />
             </div>
             <div>
-              <label htmlFor="cash-account-create-type" className="mb-1 block text-sm font-medium text-fg-muted">類型</label>
+              <label htmlFor="cash-account-create-type" className="mb-1 block text-sm font-medium text-fg-muted">類型 <span className="text-error">*</span></label>
               <select
                 id="cash-account-create-type"
                 value={createForm.type}
@@ -230,7 +230,7 @@ export function CashAccountList() {
               </select>
             </div>
             <div>
-              <label htmlFor="cash-account-create-opening-balance" className="mb-1 block text-sm font-medium text-fg-muted">期初餘額</label>
+              <label htmlFor="cash-account-create-opening-balance" className="mb-1 block text-sm font-medium text-fg-muted">期初餘額 <span className="text-error">*</span></label>
               <input
                 id="cash-account-create-opening-balance"
                 type="number"
@@ -303,7 +303,7 @@ export function CashAccountList() {
                         <FormAlert message={editError} signal={editSubmitAttempt} focusOnShow />
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                           <div>
-                            <label htmlFor={`cash-account-${account.id}-name`} className="mb-1 block text-sm font-medium text-fg-muted">帳戶名稱</label>
+                            <label htmlFor={`cash-account-${account.id}-name`} className="mb-1 block text-sm font-medium text-fg-muted">帳戶名稱 <span className="text-error">*</span></label>
                             <input
                               id={`cash-account-${account.id}-name`}
                               type="text"
@@ -314,7 +314,7 @@ export function CashAccountList() {
                             />
                           </div>
                           <div>
-                            <label htmlFor={`cash-account-${account.id}-type`} className="mb-1 block text-sm font-medium text-fg-muted">類型</label>
+                            <label htmlFor={`cash-account-${account.id}-type`} className="mb-1 block text-sm font-medium text-fg-muted">類型 <span className="text-error">*</span></label>
                             <select
                               id={`cash-account-${account.id}-type`}
                               value={editForm.type}
@@ -327,7 +327,7 @@ export function CashAccountList() {
                             </select>
                           </div>
                           <div>
-                            <label htmlFor={`cash-account-${account.id}-opening-balance`} className="mb-1 block text-sm font-medium text-fg-muted">期初餘額</label>
+                            <label htmlFor={`cash-account-${account.id}-opening-balance`} className="mb-1 block text-sm font-medium text-fg-muted">期初餘額 <span className="text-error">*</span></label>
                             <input
                               id={`cash-account-${account.id}-opening-balance`}
                               type="number"

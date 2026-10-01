@@ -144,6 +144,28 @@ describe('Customer, audit and print presentation', () => {
     vi.restoreAllMocks()
   })
 
+  it.each(['customers', 'audit'] as const)('ignores stale %s search responses', async (page) => {
+    vi.useFakeTimers()
+    const empty = { data: [], meta: { current_page: 1, last_page: 1, per_page: 20, total: 0 } }
+    let resolveOld!: (value: typeof empty) => void
+    if (page === 'customers') {
+      vi.mocked(customersApi.listCustomers).mockImplementation((params) => params.search === '王' ? new Promise((resolve) => { resolveOld = resolve }) : Promise.resolve(empty))
+    } else {
+      vi.mocked(auditLogsApi.listAuditLogs).mockImplementation((params) => params.search === '王' ? new Promise((resolve) => { resolveOld = resolve }) : Promise.resolve(empty))
+    }
+    render(<MemoryRouter>{page === 'customers' ? <CustomerList /> : <AuditLogList />}</MemoryRouter>)
+    const input = screen.getByLabelText(page === 'customers' ? '搜尋客戶' : '搜尋稽核紀錄')
+    fireEvent.change(input, { target: { value: '王' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(300) })
+    fireEvent.change(input, { target: { value: '王小明' } })
+    await act(async () => { await vi.advanceTimersByTimeAsync(300) })
+    // A stale response must not replace the newest empty result with a pagination total.
+    await act(async () => { resolveOld({ ...empty, meta: { current_page: 1, last_page: 99, per_page: 20, total: 999 } }) })
+    expect(screen.queryByText(/999/)).toBeNull()
+    expect(screen.getByText(page === 'customers' ? '尚無符合條件的客戶' : '尚無符合條件的稽核紀錄')).toBeTruthy()
+    vi.useRealTimers()
+  })
+
   it('keeps visible customer labels, selected-data reason and removes the redundant phone placeholder', () => {
     render(<CustomerSelectHarness selected />)
 

@@ -1,3 +1,4 @@
+import { extractFieldErrors } from '../../utils/fieldErrors'
 import { useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
@@ -175,10 +176,12 @@ function Field({
 }
 
 function CashAccountField({
+  error,
   cashAccounts,
   value,
   onChange,
 }: {
+  error?: string
   cashAccounts: CashAccountOption[]
   value: string
   onChange: (value: string) => void
@@ -192,6 +195,8 @@ function CashAccountField({
         <span className="text-error"> *</span>
       </label>
       <select
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? `${selectId}-error` : undefined}
         id={selectId}
         required
         value={value}
@@ -207,6 +212,7 @@ function CashAccountField({
             </option>
           ))}
       </select>
+      {error && <p id={`${selectId}-error`} className="mt-1 text-sm text-error">{error}</p>}
     </div>
   )
 }
@@ -240,9 +246,28 @@ export function VehicleDetail() {
   const [commissionAgents, setCommissionAgents] = useState<CommissionAgent[]>([])
   const [error, setError] = useState<string | null>(null)
   const [activeModal, setActiveModal] = useState<ActiveModal>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [formError, setFormError] = useState<string | null>(null)
   const [warning, setWarning] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const operationKeys = useRef<Record<string, { key: string; payload: string }>>({})
+
+  function operationKey(slot: string, payload: object) {
+    const serialized = JSON.stringify(payload)
+    const previous = operationKeys.current[slot]
+    if (previous?.payload === serialized) return previous.key
+    const key = generateIdempotencyKey()
+    operationKeys.current[slot] = { key, payload: serialized }
+    return key
+  }
+
+  function startNewEntry(action: 'final-payment' | 'expense') {
+    if (submitting || !window.confirm('請先核對收支明細，確認前一筆已入帳。繼續後會建立另一筆交易，即使金額與內容相同。確定新增另一筆？')) return
+    delete operationKeys.current[`${vehicleId}:${action}`]
+    setFieldErrors({})
+    setFormError(null)
+    setActiveModal(null)
+  }
 
   function loadDetail(refreshErrorMessage = '車輛資料載入失敗') {
     getVehicle(vehicleId)
@@ -265,7 +290,7 @@ export function VehicleDetail() {
         .catch(() => setCommissionAgents([]))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
+  }, [id, user?.role])
 
   if (error && !detail) {
     return <FormAlert message={error} />
@@ -279,11 +304,13 @@ export function VehicleDetail() {
 
   function closeModal() {
     setActiveModal(null)
+    setFieldErrors({})
     setFormError(null)
   }
 
   async function handleEndReservation(action: 'unreserve' | 'cancel') {
     setSubmitting(true)
+    setFieldErrors({})
     setFormError(null)
     try {
       await endVehicleReservation(vehicleId, action)
@@ -298,6 +325,7 @@ export function VehicleDetail() {
 
   async function handleList(form: { asking_price: string; floor_price: string; listing_date: string; sales_note: string }) {
     setSubmitting(true)
+    setFieldErrors({})
     setFormError(null)
     try {
       await listVehicleForSale(vehicleId, {
@@ -323,46 +351,65 @@ export function VehicleDetail() {
     deposit_amount: string
     cash_account_id: string
     description: string
-    idempotency_key: string
     sales_agent_id: string
   }) {
+    if (submitting) return
+    const keySlot = `${vehicleId}:reserve`
+    const payload = {
+      buyer_name: form.buyer_name,
+      buyer_phone: form.buyer_phone || undefined,
+      buyer_customer_id: form.buyer_customer_id ? Number(form.buyer_customer_id) : undefined,
+      sold_price: Number(form.sold_price),
+      deposit_amount: Number(form.deposit_amount),
+      cash_account_id: Number(form.cash_account_id),
+      description: form.description || undefined,
+      sales_agent_id: form.sales_agent_id ? Number(form.sales_agent_id) : undefined,
+    }
+    const key = operationKey(keySlot, payload)
     setSubmitting(true)
+    setFieldErrors({})
     setFormError(null)
     try {
-      await reserveVehicle(vehicleId, {
-        buyer_name: form.buyer_name,
-        buyer_phone: form.buyer_phone || undefined,
-        buyer_customer_id: form.buyer_customer_id ? Number(form.buyer_customer_id) : undefined,
-        sold_price: Number(form.sold_price),
-        deposit_amount: Number(form.deposit_amount),
-        cash_account_id: Number(form.cash_account_id),
-        description: form.description || undefined,
-        idempotency_key: form.idempotency_key,
-        sales_agent_id: form.sales_agent_id ? Number(form.sales_agent_id) : undefined,
-      })
+      await reserveVehicle(vehicleId, { ...payload, idempotency_key: key })
+      delete operationKeys.current[keySlot]
       closeModal()
       loadDetail('操作已送出，但車輛資料可能不是最新；請重新整理後確認。')
     } catch (err) {
+      const errors = extractFieldErrors(err)
+      if (errors.idempotency_key) delete operationKeys.current[keySlot]
+      setFieldErrors(errors)
+      const status = isAxiosError(err) ? err.response?.status : undefined
+      if (!status || status >= 500) loadDetail('無法確認操作結果，請重新整理確認收支。')
       setFormError(extractErrorMessage(err, '收訂金並保留失敗，請稍後再試'))
     } finally {
       setSubmitting(false)
     }
   }
 
-  async function handleFinalPayment(form: { amount: string; cash_account_id: string; description: string; idempotency_key: string }) {
+  async function handleFinalPayment(form: { amount: string; cash_account_id: string; description: string }) {
+    if (submitting) return
+    const keySlot = `${vehicleId}:final-payment`
+    const payload = {
+      amount: Number(form.amount),
+      cash_account_id: Number(form.cash_account_id),
+      description: form.description || undefined,
+    }
+    const key = operationKey(keySlot, payload)
     setSubmitting(true)
+    setFieldErrors({})
     setFormError(null)
     try {
-      const result = await recordFinalPayment(vehicleId, {
-        amount: Number(form.amount),
-        cash_account_id: Number(form.cash_account_id),
-        idempotency_key: form.idempotency_key,
-        description: form.description || undefined,
-      })
+      const result = await recordFinalPayment(vehicleId, { ...payload, idempotency_key: key })
       setWarning(result.warning)
+      delete operationKeys.current[keySlot]
       closeModal()
       loadDetail('操作已送出，但車輛資料可能不是最新；請重新整理後確認。')
     } catch (err) {
+      const errors = extractFieldErrors(err)
+      if (errors.idempotency_key) delete operationKeys.current[keySlot]
+      setFieldErrors(errors)
+      const status = isAxiosError(err) ? err.response?.status : undefined
+      if (!status || status >= 500) loadDetail('無法確認操作結果，請重新整理確認收支。')
       setFormError(extractErrorMessage(err, '收尾款失敗，請稍後再試'))
     } finally {
       setSubmitting(false)
@@ -371,6 +418,7 @@ export function VehicleDetail() {
 
   async function handleCloseSale(form: { sold_at: string }) {
     setSubmitting(true)
+    setFieldErrors({})
     setFormError(null)
     try {
       await closeSaleVehicle(vehicleId, { sold_at: form.sold_at || undefined })
@@ -390,23 +438,32 @@ export function VehicleDetail() {
     entry_date: string
     counterparty_name: string
     description: string
-    idempotency_key: string
   }) {
+    if (submitting) return
+    const keySlot = `${vehicleId}:expense`
+    const payload = {
+      category: form.category as (typeof EXPENSE_CATEGORIES)[number],
+      amount: Number(form.amount),
+      cash_account_id: Number(form.cash_account_id),
+      entry_date: form.entry_date || undefined,
+      counterparty_name: form.counterparty_name || undefined,
+      description: form.description || undefined,
+    }
+    const key = operationKey(keySlot, payload)
     setSubmitting(true)
+    setFieldErrors({})
     setFormError(null)
     try {
-      await recordVehicleExpense(vehicleId, {
-        category: form.category as (typeof EXPENSE_CATEGORIES)[number],
-        amount: Number(form.amount),
-        cash_account_id: Number(form.cash_account_id),
-        entry_date: form.entry_date || undefined,
-        counterparty_name: form.counterparty_name || undefined,
-        description: form.description || undefined,
-        idempotency_key: form.idempotency_key,
-      })
+      await recordVehicleExpense(vehicleId, { ...payload, idempotency_key: key })
+      delete operationKeys.current[keySlot]
       closeModal()
       loadDetail('操作已送出，但車輛資料可能不是最新；請重新整理後確認。')
     } catch (err) {
+      const errors = extractFieldErrors(err)
+      if (errors.idempotency_key) delete operationKeys.current[keySlot]
+      setFieldErrors(errors)
+      const status = isAxiosError(err) ? err.response?.status : undefined
+      if (!status || status >= 500) loadDetail('無法確認操作結果，請重新整理確認收支。')
       setFormError(extractErrorMessage(err, '上報整備支出失敗，請稍後再試'))
     } finally {
       setSubmitting(false)
@@ -415,6 +472,7 @@ export function VehicleDetail() {
 
   async function handlePurchasePrice(form: { purchase_price: string }) {
     setSubmitting(true)
+    setFieldErrors({})
     setFormError(null)
     try {
       await updateVehiclePurchasePrice(vehicle, Number(form.purchase_price))
@@ -435,6 +493,7 @@ export function VehicleDetail() {
 
   async function handlePublicDescription(form: { public_description: string }) {
     setSubmitting(true)
+    setFieldErrors({})
     setFormError(null)
     try {
       await updateVehiclePublicDescription(vehicle, {
@@ -635,8 +694,9 @@ export function VehicleDetail() {
         </div>
       )}
 
-      {summary && (
+      {canViewFinance && summary && (
         <Panel title="單車收支摘要">
+          <p className="mb-3 text-sm text-fg-muted">收入、支出與毛利僅計已核准收支。</p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="rounded-xl bg-surface-2 p-4">
               <p className="text-xs text-fg-muted">單車收入合計</p>
@@ -749,11 +809,13 @@ export function VehicleDetail() {
         </Modal>
       )}
       {activeModal === 'list' && (
-        <ListModal onClose={closeModal} onSubmit={handleList} error={formError} submitting={submitting} />
+        <ListModal onClose={() => { if (!submitting) closeModal() }} onSubmit={handleList} error={formError} submitting={submitting} />
       )}
       {activeModal === 'reserve' && (
         <ReserveModal
-          onClose={closeModal}
+          fieldErrors={fieldErrors}
+          isAdmin={user?.role === 'admin'}
+          onClose={() => { if (!submitting) closeModal() }}
           onSubmit={handleReserve}
           error={formError}
           submitting={submitting}
@@ -764,7 +826,10 @@ export function VehicleDetail() {
       )}
       {activeModal === 'final-payment' && (
         <FinalPaymentModal
-          onClose={closeModal}
+          onStartNew={operationKeys.current[`${vehicleId}:final-payment`] ? () => startNewEntry('final-payment') : undefined}
+          fieldErrors={fieldErrors}
+          isAdmin={user?.role === 'admin'}
+          onClose={() => { if (!submitting) closeModal() }}
           onSubmit={handleFinalPayment}
           error={formError}
           submitting={submitting}
@@ -772,11 +837,13 @@ export function VehicleDetail() {
         />
       )}
       {activeModal === 'close-sale' && (
-        <CloseSaleModal onClose={closeModal} onSubmit={handleCloseSale} error={formError} submitting={submitting} />
+        <CloseSaleModal onClose={() => { if (!submitting) closeModal() }} onSubmit={handleCloseSale} error={formError} submitting={submitting} />
       )}
       {activeModal === 'expense' && (
         <ExpenseModal
-          onClose={closeModal}
+          onStartNew={operationKeys.current[`${vehicleId}:expense`] ? () => startNewEntry('expense') : undefined}
+          fieldErrors={fieldErrors}
+          onClose={() => { if (!submitting) closeModal() }}
           onSubmit={handleExpense}
           error={formError}
           submitting={submitting}
@@ -788,14 +855,14 @@ export function VehicleDetail() {
         <SalesPricingModal
           askingPrice={vehicle.asking_price}
           floorPrice={vehicle.floor_price}
-          onClose={closeModal}
+          onClose={() => { if (!submitting) closeModal() }}
           onSubmit={handleSalesPricing}
         />
       )}
       {activeModal === 'purchase-price' && (
         <PurchasePriceModal
           currentPrice={vehicle.purchase_price}
-          onClose={closeModal}
+          onClose={() => { if (!submitting) closeModal() }}
           onSubmit={handlePurchasePrice}
           error={formError}
           submitting={submitting}
@@ -804,7 +871,7 @@ export function VehicleDetail() {
       {activeModal === 'public-description' && (
         <PublicDescriptionModal
           currentDescription={vehicle.public_description}
-          onClose={closeModal}
+          onClose={() => { if (!submitting) closeModal() }}
           onSubmit={handlePublicDescription}
           error={formError}
           submitting={submitting}
@@ -1026,6 +1093,8 @@ function ListModal({
 }
 
 function ReserveModal({
+  isAdmin,
+  fieldErrors,
   onClose,
   onSubmit,
   error,
@@ -1034,6 +1103,8 @@ function ReserveModal({
   commissionAgents,
   isSales,
 }: {
+  isAdmin: boolean
+  fieldErrors: Record<string, string>
   onClose: () => void
   onSubmit: (form: {
     buyer_name: string
@@ -1043,7 +1114,6 @@ function ReserveModal({
     deposit_amount: string
     cash_account_id: string
     description: string
-    idempotency_key: string
     sales_agent_id: string
   }) => void
   error: string | null
@@ -1060,15 +1130,9 @@ function ReserveModal({
   const [cash_account_id, setCashAccountId] = useState('')
   const [description, setDescription] = useState('')
   const [sales_agent_id, setSalesAgentId] = useState('')
-  const idempotencyKeyRef = useRef<string | null>(null)
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    let idempotencyKey = idempotencyKeyRef.current
-    if (!idempotencyKey) {
-      idempotencyKey = generateIdempotencyKey()
-      idempotencyKeyRef.current = idempotencyKey
-    }
     onSubmit({
       buyer_name,
       buyer_phone,
@@ -1077,7 +1141,6 @@ function ReserveModal({
       deposit_amount,
       cash_account_id,
       description,
-      idempotency_key: idempotencyKey,
       sales_agent_id,
     })
   }
@@ -1086,7 +1149,10 @@ function ReserveModal({
     <Modal title="收訂金並保留" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <FormAlert message={error} focusOnShow />
+        {!isAdmin && <p className="text-sm text-fg-muted">送出後為待審核狀態，核准後才計入正式收款。</p>}
         <CustomerSelect
+          nameError={fieldErrors.buyer_name ?? fieldErrors.buyer_customer_id}
+          phoneError={fieldErrors.buyer_phone}
           nameLabel="買方姓名"
           phoneLabel="買方電話"
           customerId={buyer_customer_id}
@@ -1099,14 +1165,14 @@ function ReserveModal({
             setBuyerPhone(phone)
           }}
         />
-        <Field label="成交價" value={sold_price} onChange={setSoldPrice} type="number" required />
-        <Field label="訂金金額" value={deposit_amount} onChange={setDepositAmount} type="number" required />
+        <Field label="成交價" value={sold_price} error={fieldErrors.sold_price} onChange={setSoldPrice} type="number" required />
+        <Field label="訂金金額" value={deposit_amount} error={fieldErrors.deposit_amount} onChange={setDepositAmount} type="number" required />
         {!isSales && (
           <div>
             <label htmlFor="reserve-sales-agent" className="mb-1 block text-sm font-medium text-fg-muted">
               賣車人<span className="text-error"> *</span>
             </label>
-            <select
+            <select aria-invalid={Boolean(fieldErrors.sales_agent_id)} aria-describedby={fieldErrors.sales_agent_id ? 'reserve-sales-agent-error' : undefined}
               id="reserve-sales-agent"
               required
               value={sales_agent_id}
@@ -1116,18 +1182,20 @@ function ReserveModal({
               <option value="">請選擇實際賣車人</option>
               {commissionAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
             </select>
+              {fieldErrors.sales_agent_id && <p id="reserve-sales-agent-error" className="mt-1 text-sm text-error">{fieldErrors.sales_agent_id}</p>}
           </div>
         )}
-        <CashAccountField cashAccounts={cashAccounts} value={cash_account_id} onChange={setCashAccountId} />
+        <CashAccountField error={fieldErrors.cash_account_id} cashAccounts={cashAccounts} value={cash_account_id} onChange={setCashAccountId} />
         <div>
           <label htmlFor="reserve-description" className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
-          <textarea
+          <textarea aria-invalid={Boolean(fieldErrors.description)} aria-describedby={fieldErrors.description ? 'reserve-description-error' : undefined}
             id="reserve-description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
             className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
           />
+              {fieldErrors.description && <p id="reserve-description-error" className="mt-1 text-sm text-error">{fieldErrors.description}</p>}
         </div>
         <button
           type="submit"
@@ -1142,14 +1210,20 @@ function ReserveModal({
 }
 
 function FinalPaymentModal({
+  isAdmin,
+  fieldErrors,
+  onStartNew,
   onClose,
   onSubmit,
   error,
   submitting,
   cashAccounts,
 }: {
+  isAdmin: boolean
+  fieldErrors: Record<string, string>
+  onStartNew?: () => void
   onClose: () => void
-  onSubmit: (form: { amount: string; cash_account_id: string; description: string; idempotency_key: string }) => void
+  onSubmit: (form: { amount: string; cash_account_id: string; description: string }) => void
   error: string | null
   submitting: boolean
   cashAccounts: CashAccountOption[]
@@ -1157,33 +1231,33 @@ function FinalPaymentModal({
   const [amount, setAmount] = useState('')
   const [cash_account_id, setCashAccountId] = useState('')
   const [description, setDescription] = useState('')
-  const idempotencyKeyRef = useRef<string | null>(null)
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    let idempotencyKey = idempotencyKeyRef.current
-    if (!idempotencyKey) {
-      idempotencyKey = generateIdempotencyKey()
-      idempotencyKeyRef.current = idempotencyKey
-    }
-    onSubmit({ amount, cash_account_id, description, idempotency_key: idempotencyKey })
+    onSubmit({ amount, cash_account_id, description })
   }
 
   return (
     <Modal title="收尾款" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <FormAlert message={error} focusOnShow />
-        <Field label="尾款金額" value={amount} onChange={setAmount} type="number" required />
-        <CashAccountField cashAccounts={cashAccounts} value={cash_account_id} onChange={setCashAccountId} />
+        {onStartNew && <div className="rounded-lg border border-warning/40 p-3 text-sm">
+          <p>前次結果尚未確認；相同內容送出會重試前筆，修改內容會視為新交易。請先核對收支明細。</p>
+          <button type="button" disabled={submitting} onClick={onStartNew} className="mt-2 min-h-11 font-medium text-primary disabled:opacity-50">已確認前筆入帳，新增另一筆</button>
+        </div>}
+        {!isAdmin && <p className="text-sm text-fg-muted">送出後為待審核狀態，核准後才計入正式收款。</p>}
+        <Field label="尾款金額" value={amount} error={fieldErrors.amount} onChange={setAmount} type="number" required />
+        <CashAccountField error={fieldErrors.cash_account_id} cashAccounts={cashAccounts} value={cash_account_id} onChange={setCashAccountId} />
         <div>
           <label htmlFor="final-payment-description" className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
-          <textarea
+          <textarea aria-invalid={Boolean(fieldErrors.description)} aria-describedby={fieldErrors.description ? 'final-payment-description-error' : undefined}
             id="final-payment-description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
             className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
           />
+              {fieldErrors.description && <p id="final-payment-description-error" className="mt-1 text-sm text-error">{fieldErrors.description}</p>}
         </div>
         <button
           type="submit"
@@ -1198,6 +1272,8 @@ function FinalPaymentModal({
 }
 
 function ExpenseModal({
+  fieldErrors,
+  onStartNew,
   onClose,
   onSubmit,
   error,
@@ -1205,6 +1281,8 @@ function ExpenseModal({
   cashAccounts,
   isAdmin,
 }: {
+  fieldErrors: Record<string, string>
+  onStartNew?: () => void
   onClose: () => void
   onSubmit: (form: {
     category: string
@@ -1213,7 +1291,6 @@ function ExpenseModal({
     entry_date: string
     counterparty_name: string
     description: string
-    idempotency_key: string
   }) => void
   error: string | null
   submitting: boolean
@@ -1226,15 +1303,9 @@ function ExpenseModal({
   const [entry_date, setEntryDate] = useState('')
   const [counterparty_name, setCounterpartyName] = useState('')
   const [description, setDescription] = useState('')
-  const idempotencyKeyRef = useRef<string | null>(null)
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    let idempotencyKey = idempotencyKeyRef.current
-    if (!idempotencyKey) {
-      idempotencyKey = generateIdempotencyKey()
-      idempotencyKeyRef.current = idempotencyKey
-    }
     onSubmit({
       category,
       amount,
@@ -1242,7 +1313,6 @@ function ExpenseModal({
       entry_date,
       counterparty_name,
       description,
-      idempotency_key: idempotencyKey,
     })
   }
 
@@ -1250,11 +1320,15 @@ function ExpenseModal({
     <Modal title="上報整備支出" onClose={onClose}>
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <FormAlert message={error} focusOnShow />
+        {onStartNew && <div className="rounded-lg border border-warning/40 p-3 text-sm">
+          <p>前次結果尚未確認；相同內容送出會重試前筆，修改內容會視為新交易。請先核對收支明細。</p>
+          <button type="button" disabled={submitting} onClick={onStartNew} className="mt-2 min-h-11 font-medium text-primary disabled:opacity-50">已確認前筆入帳，新增另一筆</button>
+        </div>}
         <div>
           <label htmlFor="vehicle-expense-category" className="mb-1 block text-sm font-medium text-fg-muted">
             分類<span className="text-error"> *</span>
           </label>
-          <select
+          <select aria-invalid={Boolean(fieldErrors.category)} aria-describedby={fieldErrors.category ? 'vehicle-expense-category-error' : undefined}
             id="vehicle-expense-category"
             required
             value={category}
@@ -1267,20 +1341,22 @@ function ExpenseModal({
               </option>
             ))}
           </select>
+              {fieldErrors.category && <p id="vehicle-expense-category-error" className="mt-1 text-sm text-error">{fieldErrors.category}</p>}
         </div>
-        <Field label="金額" value={amount} onChange={setAmount} type="number" required />
-        <CashAccountField cashAccounts={cashAccounts} value={cash_account_id} onChange={setCashAccountId} />
-        <Field label="支出日期（預設今天）" value={entry_date} onChange={setEntryDate} type="date" />
-        <Field label="對象" value={counterparty_name} onChange={setCounterpartyName} />
+        <Field label="金額" value={amount} error={fieldErrors.amount} onChange={setAmount} type="number" required />
+        <CashAccountField error={fieldErrors.cash_account_id} cashAccounts={cashAccounts} value={cash_account_id} onChange={setCashAccountId} />
+        <Field label="支出日期（預設今天）" value={entry_date} error={fieldErrors.entry_date} onChange={setEntryDate} type="date" />
+        <Field label="對象" value={counterparty_name} error={fieldErrors.counterparty_name} onChange={setCounterpartyName} />
         <div>
           <label htmlFor="vehicle-expense-description" className="mb-1 block text-sm font-medium text-fg-muted">說明</label>
-          <textarea
+          <textarea aria-invalid={Boolean(fieldErrors.description)} aria-describedby={fieldErrors.description ? 'vehicle-expense-description-error' : undefined}
             id="vehicle-expense-description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
             className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
           />
+              {fieldErrors.description && <p id="vehicle-expense-description-error" className="mt-1 text-sm text-error">{fieldErrors.description}</p>}
         </div>
         <p className="text-xs text-fg-muted">
           {isAdmin ? '送出後直接計入正式支出。' : '送出後為待審核狀態，需老闆核准後才計入正式支出。'}
@@ -1578,16 +1654,18 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
                       <button
                         type="button"
                         disabled={busy || index === 0}
+                        aria-label={`向前移動照片 ${photo.original_filename}`}
                         onClick={() => handleMove(photo, 'left')}
-                        className="rounded-md border border-border-strong px-2 py-1 text-xs text-fg-muted hover:bg-surface disabled:opacity-40"
+                        className="min-h-11 min-w-11 rounded-md border border-border-strong px-2 py-1 text-sm text-fg-muted hover:bg-surface disabled:opacity-40"
                       >
                         ←
                       </button>
                       <button
                         type="button"
                         disabled={busy || index === photos.length - 1}
+                        aria-label={`向後移動照片 ${photo.original_filename}`}
                         onClick={() => handleMove(photo, 'right')}
-                        className="rounded-md border border-border-strong px-2 py-1 text-xs text-fg-muted hover:bg-surface disabled:opacity-40"
+                        className="min-h-11 min-w-11 rounded-md border border-border-strong px-2 py-1 text-sm text-fg-muted hover:bg-surface disabled:opacity-40"
                       >
                         →
                       </button>
@@ -1596,7 +1674,7 @@ function VehiclePhotosPanel({ vehicleId, canManage }: { vehicleId: number; canMa
                           type="button"
                           disabled={busy}
                           onClick={() => handleSetCover(photo)}
-                          className="rounded-md border border-border-strong px-2 py-1 text-xs text-fg-muted hover:bg-surface disabled:opacity-40"
+                          className="min-h-11 min-w-11 rounded-md border border-border-strong px-2 py-1 text-sm text-fg-muted hover:bg-surface disabled:opacity-40"
                         >
                           設封面
                         </button>

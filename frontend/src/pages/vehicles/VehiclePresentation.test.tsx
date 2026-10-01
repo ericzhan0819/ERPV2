@@ -206,6 +206,107 @@ describe('Vehicle presentation', () => {
     vi.mocked(vehiclePhotosApi.listVehiclePhotos).mockResolvedValue(photos)
   })
 
+  it.each(['final-payment', 'expense'] as const)('retains the %s key across network failure and modal reopen', async (action) => {
+    const api = action === 'final-payment' ? vi.mocked(vehiclesApi.recordFinalPayment) : vi.mocked(vehiclesApi.recordVehicleExpense)
+    api.mockRejectedValue(new Error('network'))
+    renderDetail()
+    const openLabel = action === 'final-payment' ? '收尾款' : '上報整備支出'
+    const submitLabel = action === 'final-payment' ? '確認收款' : '送出申請'
+    const amountLabel = action === 'final-payment' ? '尾款金額' : '金額'
+    await screen.findByRole('button', { name: openLabel })
+    for (let attempt = 0; attempt < 2; attempt++) {
+      fireEvent.click(screen.getByRole('button', { name: openLabel }))
+      const dialog = within(screen.getByRole('dialog'))
+      fireEvent.change(dialog.getByLabelText(new RegExp(amountLabel)), { target: { value: '1000' } })
+      fireEvent.change(dialog.getByLabelText(/收款帳戶/), { target: { value: '1' } })
+      fireEvent.click(dialog.getByRole('button', { name: submitLabel }))
+      await waitFor(() => expect(api).toHaveBeenCalledTimes(attempt + 1))
+      await waitFor(() => expect(dialog.getByRole('alert').textContent).toContain('失敗'))
+      fireEvent.click(dialog.getByRole('button', { name: '關閉' }))
+    }
+    expect(api.mock.calls[0][1].idempotency_key).toBe(api.mock.calls[1][1].idempotency_key)
+    expect(vehiclesApi.getVehicle).toHaveBeenCalledTimes(3)
+  })
+
+  it.each(['final-payment', 'expense'] as const)('starts a new %s key for changed payloads and after key conflicts', async (action) => {
+    const api = action === 'final-payment' ? vi.mocked(vehiclesApi.recordFinalPayment) : vi.mocked(vehiclesApi.recordVehicleExpense)
+    api.mockRejectedValueOnce(new Error('network'))
+      .mockRejectedValueOnce({ isAxiosError: true, response: { status: 422, data: { errors: { idempotency_key: ['識別碼衝突'] } } } })
+      .mockRejectedValue(new Error('network'))
+    renderDetail()
+    const openLabel = action === 'final-payment' ? '收尾款' : '上報整備支出'
+    const submitLabel = action === 'final-payment' ? '確認收款' : '送出申請'
+    const amountLabel = action === 'final-payment' ? '尾款金額' : '金額'
+    await screen.findByRole('button', { name: openLabel })
+    for (let attempt = 0; attempt < 3; attempt++) {
+      fireEvent.click(screen.getByRole('button', { name: openLabel }))
+      const dialog = within(screen.getByRole('dialog'))
+      fireEvent.change(dialog.getByLabelText(new RegExp(amountLabel)), { target: { value: attempt === 0 ? '1000' : '2000' } })
+      fireEvent.change(dialog.getByLabelText(/收款帳戶/), { target: { value: '1' } })
+      fireEvent.click(dialog.getByRole('button', { name: submitLabel }))
+      await waitFor(() => expect(api).toHaveBeenCalledTimes(attempt + 1))
+      await waitFor(() => expect(dialog.getByRole('alert').textContent).toContain(attempt === 1 ? '識別碼衝突' : '失敗'))
+      fireEvent.click(dialog.getByRole('button', { name: '關閉' }))
+    }
+    const keys = api.mock.calls.map((call) => call[1].idempotency_key)
+    expect(new Set(keys).size).toBe(3)
+  })
+
+  it.each(['final-payment', 'expense'] as const)('allows a separate identical %s only after explicitly confirming the previous entry', async (action) => {
+    const api = action === 'final-payment' ? vi.mocked(vehiclesApi.recordFinalPayment) : vi.mocked(vehiclesApi.recordVehicleExpense)
+    api.mockRejectedValue(new Error('network'))
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderDetail()
+    const openLabel = action === 'final-payment' ? '收尾款' : '上報整備支出'
+    const submitLabel = action === 'final-payment' ? '確認收款' : '送出申請'
+    const amountLabel = action === 'final-payment' ? '尾款金額' : '金額'
+    await screen.findByRole('button', { name: openLabel })
+    for (let attempt = 0; attempt < 2; attempt++) {
+      fireEvent.click(screen.getByRole('button', { name: openLabel }))
+      const dialog = within(screen.getByRole('dialog'))
+      fireEvent.change(dialog.getByLabelText(new RegExp(amountLabel)), { target: { value: '1000' } })
+      fireEvent.change(dialog.getByLabelText(/收款帳戶/), { target: { value: '1' } })
+      fireEvent.click(dialog.getByRole('button', { name: submitLabel }))
+      await waitFor(() => expect(dialog.getByRole('alert').textContent).toContain('失敗'))
+      if (attempt === 0) {
+        fireEvent.click(dialog.getByRole('button', { name: '已確認前筆入帳，新增另一筆' }))
+        expect(screen.getByRole('dialog')).toBeTruthy()
+        expect(api).toHaveBeenCalledTimes(1)
+        confirm.mockReturnValue(true)
+        fireEvent.click(dialog.getByRole('button', { name: '已確認前筆入帳，新增另一筆' }))
+        expect(screen.queryByRole('dialog')).toBeNull()
+      }
+    }
+    expect(api.mock.calls[0][1].idempotency_key).not.toBe(api.mock.calls[1][1].idempotency_key)
+    confirm.mockRestore()
+  })
+
+  it('keeps a submitting modal open and associates 422 errors with its fields', async () => {
+    let reject!: (error: unknown) => void
+    vi.mocked(vehiclesApi.recordFinalPayment).mockReturnValue(new Promise((_resolve, rejectPromise) => { reject = rejectPromise }))
+    renderDetail()
+    fireEvent.click(await screen.findByRole('button', { name: '收尾款' }))
+    const dialog = within(screen.getByRole('dialog'))
+    fireEvent.change(dialog.getByLabelText(/尾款金額/), { target: { value: '1000' } })
+    fireEvent.change(dialog.getByLabelText(/收款帳戶/), { target: { value: '1' } })
+    fireEvent.click(dialog.getByRole('button', { name: '確認收款' }))
+    fireEvent.keyDown(document, { key: 'Escape' })
+    fireEvent.click(dialog.getByRole('button', { name: '關閉' }))
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    reject({ isAxiosError: true, response: { status: 422, data: { errors: { amount: ['金額無效'] } } } })
+    await waitFor(() => expect(dialog.getByLabelText(/尾款金額/).getAttribute('aria-invalid')).toBe('true'))
+    const errorId = dialog.getByLabelText(/尾款金額/).getAttribute('aria-describedby')!
+    expect(document.getElementById(errorId)?.textContent).toBe('金額無效')
+    expect(vehiclesApi.getVehicle).toHaveBeenCalledTimes(1)
+  })
+
+  it('includes sold vehicles when choosing a closing month from inventory defaults', async () => {
+    vi.mocked(vehiclesApi.listVehicles).mockResolvedValue({ data: [], meta: { current_page: 1, last_page: 1, per_page: 20, total: 0 } })
+    renderList()
+    fireEvent.change(screen.getByLabelText('成交月份'), { target: { value: '2026-07' } })
+    await waitFor(() => expect(vehiclesApi.listVehicles).toHaveBeenLastCalledWith(expect.objectContaining({ sold_month: '2026-07', status: expect.arrayContaining(['sold']) })))
+  })
+
   it.each(['admin', 'manager'] as const)('lets %s edit listed prices and reloads saved values', async (role) => {
     setRole(role)
     const listed = { ...vehicle, status: 'listed' as const }
@@ -310,7 +411,7 @@ describe('Vehicle presentation', () => {
 
     renderList()
 
-    const card = await screen.findByRole('link', { name: '查看 Toyota Corolla 詳情' })
+    const card = await screen.findByRole('link', { name: /Toyota Corolla/ })
     expect(within(card).getByText('尚無照片')).toBeTruthy()
     expect(within(card).getByText('開價')).toBeTruthy()
     expect(within(card).queryByText('底價')).toBeNull()
@@ -664,10 +765,10 @@ describe('Vehicle presentation', () => {
     await screen.findByText('front.webp')
     expect(screen.getByText('封面')).toBeTruthy()
     expect(screen.getByRole('button', { name: '設封面' })).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: '←' })).toHaveLength(2)
-    expect(screen.getAllByRole('button', { name: '→' })).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: /^向前移動照片/ })).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: /^向後移動照片/ })).toHaveLength(2)
 
-    await interaction.click(screen.getAllByRole('button', { name: '→' })[0])
+    await interaction.click(screen.getAllByRole('button', { name: /^向後移動照片/ })[0])
     await waitFor(() => {
       expect(vehiclePhotosApi.reorderVehiclePhotos).toHaveBeenCalledWith(7, [2, 1])
     })

@@ -114,36 +114,86 @@ final class SalaryPeriodService
         // Resolve routing IDs before the transaction so its read view starts after the period lock.
         $periodId = SalarySettlement::query()->whereKey($settlement->id)->value('salary_period_id');
 
-        return DB::transaction(function () use ($actor, $settlement, $data, $periodId) {
-            $period = SalaryPeriod::query()->whereKey($periodId)->lockForUpdate()->firstOrFail();
-            $this->assertDraft($period);
-            $lockedSettlement = SalarySettlement::query()
-                ->whereKey($settlement->id)
-                ->where('salary_period_id', $period->id)
-                ->lockForUpdate()
-                ->firstOrFail();
-            $netPayBeforeAdjustment = (int) $lockedSettlement->net_pay;
+        try {
+            return DB::transaction(function () use ($actor, $settlement, $data, $periodId) {
+                $period = SalaryPeriod::query()->whereKey($periodId)->lockForUpdate()->firstOrFail();
+                $existing = DB::table('salary_adjustment_requests')->where('idempotency_key', $data['idempotency_key'])->lockForUpdate()->first();
+                if ($existing) {
+                    return $this->replayAdjustment($existing, $actor, $settlement, $data);
+                }
+                $this->assertDraft($period);
+                $lockedSettlement = SalarySettlement::query()
+                    ->whereKey($settlement->id)
+                    ->where('salary_period_id', $period->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+                $netPayBeforeAdjustment = (int) $lockedSettlement->net_pay;
 
-            $item = $lockedSettlement->items()->create([
-                'type' => $data['type'],
-                'amount' => (int) $data['amount'],
-                'description' => trim($data['description']),
-                'created_by' => $actor->id,
-            ]);
-            $this->updateSettlementTotals($lockedSettlement);
-            if ($data['type'] === SalarySettlementItem::TYPE_MANUAL_DEDUCTION
-                && $lockedSettlement->net_pay < 0) {
-                $message = $netPayBeforeAdjustment < 0
-                    ? '目前實發薪資已小於 0，請先用其他加給補平或調整既有扣款'
-                    : '此扣款會使實發薪資小於 0，請先調整其他薪資項目';
-                throw ValidationException::withMessages([
-                    'amount' => [$message],
+                $item = $lockedSettlement->items()->create([
+                    'type' => $data['type'],
+                    'amount' => (int) $data['amount'],
+                    'description' => trim($data['description']),
+                    'created_by' => $actor->id,
                 ]);
-            }
-            $this->auditLogService->recordSalaryAdjustmentAction($period, $item, AuditLog::ACTION_CREATED, $actor);
+                DB::table('salary_adjustment_requests')->insert([
+                    'idempotency_key' => $data['idempotency_key'],
+                    'salary_settlement_id' => $lockedSettlement->id,
+                    'salary_settlement_item_id' => $item->id,
+                    'created_by' => $actor->id,
+                    'type' => $data['type'],
+                    'amount' => $data['amount'],
+                    'description' => trim($data['description']),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                $this->updateSettlementTotals($lockedSettlement);
+                if ($data['type'] === SalarySettlementItem::TYPE_MANUAL_DEDUCTION
+                    && $lockedSettlement->net_pay < 0) {
+                    $message = $netPayBeforeAdjustment < 0
+                        ? '目前實發薪資已小於 0，請先用其他加給補平或調整既有扣款'
+                        : '此扣款會使實發薪資小於 0，請先調整其他薪資項目';
+                    throw ValidationException::withMessages([
+                        'amount' => [$message],
+                    ]);
+                }
+                $this->auditLogService->recordSalaryAdjustmentAction($period, $item, AuditLog::ACTION_CREATED, $actor);
 
-            return $item;
-        }, self::TRANSACTION_ATTEMPTS);
+                return $item;
+            }, self::TRANSACTION_ATTEMPTS);
+        } catch (QueryException $exception) {
+            if (($exception->errorInfo[0] ?? null) !== '23000'
+                || ! str_contains($exception->getMessage(), 'salary_adjustment_requests')
+                || ! str_contains($exception->getMessage(), 'idempotency_key')) {
+                throw $exception;
+            }
+
+            // The losing transaction has rolled back; use a fresh read view for the committed winner.
+            return DB::transaction(function () use ($exception, $actor, $settlement, $data, $periodId) {
+                SalaryPeriod::query()->whereKey($periodId)->lockForUpdate()->firstOrFail();
+                $existing = DB::table('salary_adjustment_requests')->where('idempotency_key', $data['idempotency_key'])->lockForUpdate()->first();
+                if (! $existing) {
+                    throw $exception;
+                }
+
+                return $this->replayAdjustment($existing, $actor, $settlement, $data);
+            });
+        }
+    }
+
+    private function replayAdjustment(object $existing, User $actor, SalarySettlement $settlement, array $data): SalarySettlementItem
+    {
+        if ((int) $existing->salary_settlement_id !== (int) $settlement->id
+            || (int) $existing->created_by !== (int) $actor->id
+            || $existing->type !== $data['type']
+            || (int) $existing->amount !== $data['amount']
+            || $existing->description !== trim($data['description'])) {
+            throw ValidationException::withMessages(['idempotency_key' => ['此請求識別碼已用於不同的加扣項，請確認原項目。']]);
+        }
+        if (! $existing->salary_settlement_item_id) {
+            throw ValidationException::withMessages(['idempotency_key' => ['原加扣項已刪除，不能重送此請求。']]);
+        }
+
+        return SalarySettlementItem::query()->findOrFail($existing->salary_settlement_item_id);
     }
 
     public function deleteAdjustment(User $actor, SalarySettlementItem $item): void
@@ -724,6 +774,10 @@ final class SalaryPeriodService
     /** @param array<string, mixed> $data */
     private function assertAdjustmentData(array $data): void
     {
+        if (! isset($data['idempotency_key']) || ! is_string($data['idempotency_key'])
+            || trim($data['idempotency_key']) === '' || strlen($data['idempotency_key']) > 100) {
+            throw ValidationException::withMessages(['idempotency_key' => ['請提供有效的請求識別碼。']]);
+        }
         if (! isset($data['type']) || ! in_array($data['type'], SalarySettlementItem::MANUAL_TYPES, true)) {
             throw ValidationException::withMessages(['type' => ['手動項目只允許其他加給或其他扣款']]);
         }

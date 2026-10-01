@@ -44,6 +44,7 @@ export function VehicleClosingPrint() {
       </div>
 
       <h1 className="print-title">成交結案收支明細</h1>
+      <p>本表收支與毛利僅計已核准項目。</p>
       <div className="print-meta">列印日期：{formatBusinessDateTime(printedAt)}</div>
 
       <div className="print-section">

@@ -17,6 +17,7 @@ use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -44,6 +45,36 @@ class SalaryPeriodWorkflowTest extends TestCase
     {
         Carbon::setTestNow();
         parent::tearDown();
+    }
+
+    public function test_adjustment_replays_without_changing_totals_and_rejects_conflicts_or_deleted_items(): void
+    {
+        $this->plan('六月方案', '2026-01-01', 2000);
+        $period = $this->service->createDraft($this->admin, '2026-06');
+        $settlement = $period->settlements->firstWhere('user_id', $this->agent->id);
+        $before = $settlement->net_pay;
+        $payload = [
+            'idempotency_key' => (string) Str::uuid(),
+            'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
+            'amount' => 1000,
+            'description' => '加給',
+        ];
+        $item = $this->service->addAdjustment($this->admin, $settlement, $payload);
+        $replay = $this->service->addAdjustment($this->admin, $settlement, $payload);
+        $this->assertSame($item->id, $replay->id);
+        $this->assertSame($before + 1000, $settlement->fresh()->net_pay);
+        $this->assertDatabaseCount('salary_adjustment_requests', 1);
+        foreach (['amount' => 2000, 'description' => '不同說明', 'type' => SalarySettlementItem::TYPE_MANUAL_DEDUCTION] as $key => $value) {
+            $this->expectValidation(fn () => $this->service->addAdjustment($this->admin, $settlement, array_replace($payload, [$key => $value])), 'idempotency_key');
+        }
+        $otherAdmin = User::factory()->admin()->create();
+        $this->expectValidation(fn () => $this->service->addAdjustment($otherAdmin, $settlement, $payload), 'idempotency_key');
+        $this->service->recalculateDraft($this->admin, $period);
+        $this->assertSame($item->id, $this->service->addAdjustment($this->admin, $settlement, $payload)->id);
+        $this->service->deleteAdjustment($this->admin, $item);
+        $this->expectValidation(fn () => $this->service->addAdjustment($this->admin, $settlement, $payload), 'idempotency_key');
+        $this->assertSame($before, $settlement->fresh()->net_pay);
+        $this->assertDatabaseCount('salary_adjustment_requests', 1);
     }
 
     public function test_create_draft_uses_effective_plan_snapshots_profile_and_builds_deterministic_totals(): void
@@ -112,6 +143,7 @@ class SalaryPeriodWorkflowTest extends TestCase
 
         try {
             $this->service->addAdjustment($this->admin, $settlement, [
+                'idempotency_key' => (string) Str::uuid(),
                 'type' => SalarySettlementItem::TYPE_MANUAL_DEDUCTION,
                 'amount' => 100,
                 'description' => '負薪時新增扣款',
@@ -123,6 +155,7 @@ class SalaryPeriodWorkflowTest extends TestCase
         $this->assertDatabaseMissing('salary_settlement_items', ['description' => '負薪時新增扣款']);
 
         $this->service->addAdjustment($this->admin, $settlement, [
+            'idempotency_key' => (string) Str::uuid(),
             'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
             'amount' => 1500,
             'description' => '淡月扣款補平',
@@ -137,6 +170,7 @@ class SalaryPeriodWorkflowTest extends TestCase
         $period = $this->service->createDraft($this->admin, '2026-06');
         $settlement = $period->settlements->firstWhere('user_id', $this->agent->id);
         $deduction = $this->service->addAdjustment($this->admin, $settlement, [
+            'idempotency_key' => (string) Str::uuid(),
             'type' => SalarySettlementItem::TYPE_MANUAL_DEDUCTION,
             'amount' => 5000,
             'description' => '借支扣還',
@@ -162,6 +196,7 @@ class SalaryPeriodWorkflowTest extends TestCase
         $period = $this->service->createDraft($this->admin, '2026-06');
         $settlement = $period->settlements->firstWhere('user_id', $this->agent->id);
         $manual = $this->service->addAdjustment($this->admin, $settlement, [
+            'idempotency_key' => (string) Str::uuid(),
             'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
             'amount' => 500,
             'description' => '本月加給',
@@ -198,6 +233,7 @@ class SalaryPeriodWorkflowTest extends TestCase
         foreach ([$this->agent, User::factory()->manager()->create(['is_active' => true])] as $unauthorized) {
             try {
                 $this->service->addAdjustment($unauthorized, $settlement, [
+                    'idempotency_key' => (string) Str::uuid(),
                     'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION, 'amount' => 1, 'description' => 'x',
                 ]);
                 $this->fail('非 admin 不得新增薪資加扣項');
@@ -206,15 +242,18 @@ class SalaryPeriodWorkflowTest extends TestCase
             }
         }
         $this->expectValidation(fn () => $this->service->addAdjustment($this->admin, $settlement, [
+            'idempotency_key' => (string) Str::uuid(),
             'type' => SalarySettlementItem::TYPE_BASE_SALARY, 'amount' => 1, 'description' => 'x',
         ]), 'type');
         $this->expectValidation(fn () => $this->service->addAdjustment($this->admin, $settlement, [
+            'idempotency_key' => (string) Str::uuid(),
             'type' => SalarySettlementItem::TYPE_MANUAL_DEDUCTION, 'amount' => 50000, 'description' => '過額扣款',
         ]), 'amount');
         $this->assertDatabaseMissing('salary_settlement_items', ['description' => '過額扣款']);
         $this->expectValidation(fn () => $this->service->deleteAdjustment($this->admin, $settlement->items->first()), 'item');
 
         $item = $this->service->addAdjustment($this->admin, $settlement, [
+            'idempotency_key' => (string) Str::uuid(),
             'type' => SalarySettlementItem::TYPE_MANUAL_DEDUCTION,
             'amount' => 100,
             'description' => '用品扣款',
@@ -229,6 +268,7 @@ class SalaryPeriodWorkflowTest extends TestCase
 
         $period->update(['status' => SalaryPeriod::STATUS_CONFIRMED]);
         $this->expectValidation(fn () => $this->service->addAdjustment($this->admin, $settlement, [
+            'idempotency_key' => (string) Str::uuid(),
             'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION, 'amount' => 1, 'description' => 'x',
         ]), 'status');
 
@@ -353,6 +393,7 @@ class SalaryPeriodWorkflowTest extends TestCase
         });
 
         $item = $this->service->addAdjustment($this->admin, $settlement, [
+            'idempotency_key' => (string) Str::uuid(),
             'type' => SalarySettlementItem::TYPE_MANUAL_ADDITION,
             'amount' => 1000,
             'description' => '加給',
@@ -365,10 +406,11 @@ class SalaryPeriodWorkflowTest extends TestCase
         foreach ($queries as $operation => $sql) {
             // SQLite omits FOR UPDATE; the real lock is covered by the MySQL concurrency test.
             $this->assertStringContainsString('from salary_periods', $sql[0], $operation);
-            $this->assertStringContainsString('from salary_settlements', $sql[1], $operation);
+            $settlementRead = $operation === 'add' ? 2 : 1;
+            $this->assertStringContainsString('from salary_settlements', $sql[$settlementRead], $operation);
             if (DB::connection()->getDriverName() === 'mysql') {
                 $this->assertStringContainsString('for update', $sql[0], $operation);
-                $this->assertStringContainsString('for update', $sql[1], $operation);
+                $this->assertStringContainsString('for update', $sql[$settlementRead], $operation);
             }
         }
     }

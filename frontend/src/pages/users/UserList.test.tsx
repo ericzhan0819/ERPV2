@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, waitFor, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as usersApi from '../../api/users'
@@ -59,6 +59,22 @@ describe('UserList presentation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(usersApi.listUsers).mockResolvedValue([currentUser, employee])
+  })
+
+  it('applies a draft role only after confirmation and prevents duplicate submissions', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    vi.mocked(usersApi.setUserRole).mockReturnValue(new Promise(() => {}))
+    renderUserList()
+    const row = within((await screen.findByText(employee.name)).closest('tr')!)
+    fireEvent.change(row.getByRole('combobox'), { target: { value: 'admin' } })
+    expect(usersApi.setUserRole).not.toHaveBeenCalled()
+    fireEvent.click(row.getByRole('button', { name: '套用角色' }))
+    expect(usersApi.setUserRole).not.toHaveBeenCalled()
+    confirm.mockReturnValue(true)
+    fireEvent.click(row.getByRole('button', { name: '套用角色' }))
+    fireEvent.click(row.getByRole('button', { name: '套用角色' }))
+    await waitFor(() => expect(usersApi.setUserRole).toHaveBeenCalledExactlyOnceWith(2, 'admin'))
+    expect((row.getByRole('combobox') as HTMLSelectElement).disabled).toBe(true)
   })
 
   it('keeps self restrictions visible and associates every restricted control', async () => {

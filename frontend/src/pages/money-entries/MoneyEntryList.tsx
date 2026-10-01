@@ -4,11 +4,10 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { SlidersHorizontal } from 'lucide-react'
 import { listCashAccountOptions } from '../../api/cashAccounts'
 import { approveMoneyEntry, listMoneyEntries, rejectMoneyEntry } from '../../api/moneyEntries'
-import { listVehicleOptions } from '../../api/vehicles'
+import { VehicleSelect } from '../../components/VehicleSelect'
 import { useAuth } from '../../hooks/useAuth'
 import type { CashAccountOption } from '../../types/cashAccount'
 import type { MoneyDirection, MoneyEntry, MoneyEntryApprovalStatus, MoneyEntryListMeta } from '../../types/moneyEntry'
-import type { Vehicle } from '../../types/vehicle'
 import { categoriesForDirection, directionLabels } from '../../utils/moneyEntryCategory'
 import { MoneyDirectionBadge } from '../../components/MoneyDirectionBadge'
 import { ApprovalStatusBadge } from '../../components/ApprovalStatusBadge'
@@ -41,7 +40,6 @@ function MoneyEntryFilterFields({
   filters,
   cashAccounts,
   canViewFinance,
-  vehicles,
   onChange,
   debounceSearch = false,
   idPrefix,
@@ -49,7 +47,6 @@ function MoneyEntryFilterFields({
   filters: MoneyEntryListFilters
   canViewFinance: boolean
   cashAccounts: CashAccountOption[]
-  vehicles: Vehicle[]
   onChange: MoneyFilterChangeHandler
   debounceSearch?: boolean
   idPrefix: string
@@ -113,17 +110,7 @@ function MoneyEntryFilterFields({
         </select>
       </label>}
 
-      <label className="flex flex-col gap-1 text-sm font-medium text-fg-muted">
-        關聯車輛
-        <select
-          value={filters.vehicleId ?? ''}
-          onChange={(event) => onChange({ vehicleId: event.target.value ? Number(event.target.value) : null })}
-          className={fieldClassName}
-        >
-          <option value="">全部車輛</option>
-          {vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.stock_no}（{vehicle.brand} {vehicle.model}）</option>)}
-        </select>
-      </label>
+      <VehicleSelect value={filters.vehicleId} onChange={(vehicleId) => onChange({ vehicleId })} />
 
       <label className="flex flex-col gap-1 text-sm font-medium text-fg-muted">
         起始日期
@@ -168,7 +155,6 @@ export function MoneyEntryList() {
   const [entries, setEntries] = useState<MoneyEntry[]>([])
   const [meta, setMeta] = useState<MoneyEntryListMeta | null>(null)
   const [cashAccounts, setCashAccounts] = useState<CashAccountOption[]>([])
-  const [vehicles, setVehicles] = useState<Vehicle[]>([])
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -237,7 +223,6 @@ export function MoneyEntryList() {
 
   useEffect(() => {
     listCashAccountOptions().then(setCashAccounts).catch(() => setCashAccounts([]))
-    listVehicleOptions().then(setVehicles).catch(() => setVehicles([]))
   }, [])
 
   useEffect(() => {
@@ -324,6 +309,7 @@ export function MoneyEntryList() {
   }
 
   async function handleReject(entry: MoneyEntry) {
+    if (reviewingId !== null || !window.confirm(`確定駁回 ${entry.entry_date} ${entry.category} ${(entry.amount === undefined ? '金額未提供' : currencyFormatter.format(entry.amount))}？駁回後無法恢復。`)) return
     setReviewError(null)
     setReviewingId(entry.id)
     setFocusPageError(true)
@@ -351,7 +337,6 @@ export function MoneyEntryList() {
     filters.approvalStatus,
   ].filter(Boolean).length
   const selectedAccount = cashAccounts.find((account) => account.id === filters.cashAccountId)
-  const selectedVehicle = vehicles.find((vehicle) => vehicle.id === filters.vehicleId)
 
   return (
     <div className="flex flex-col gap-6">
@@ -379,7 +364,6 @@ export function MoneyEntryList() {
           filters={draftFilters}
           cashAccounts={cashAccounts}
           canViewFinance={canViewFinance}
-          vehicles={vehicles}
           debounceSearch
           onChange={(updates, options) => {
             setDraftFilters((current) => ({ ...current, ...updates, page: 1 }))
@@ -415,7 +399,7 @@ export function MoneyEntryList() {
           {filters.direction && <ActiveFilterChip label={`方向：${directionLabels[filters.direction]}`} onRemove={() => updateFilters({ direction: '', category: '' })} />}
           {filters.category && <ActiveFilterChip label={`分類：${filters.category}`} onRemove={() => updateFilters({ category: '' })} />}
           {filters.cashAccountId && <ActiveFilterChip label={`資金帳戶：${selectedAccount?.name ?? `#${filters.cashAccountId}`}`} onRemove={() => updateFilters({ cashAccountId: null })} />}
-          {filters.vehicleId && <ActiveFilterChip label={`車輛：${selectedVehicle?.stock_no ?? `#${filters.vehicleId}`}`} onRemove={() => updateFilters({ vehicleId: null })} />}
+          {filters.vehicleId && <ActiveFilterChip label={`車輛：#${filters.vehicleId}`} onRemove={() => updateFilters({ vehicleId: null })} />}
           {filters.dateFrom && <ActiveFilterChip label={`起始日期：${filters.dateFrom}`} onRemove={() => updateFilters({ dateFrom: '' })} />}
           {filters.dateTo && <ActiveFilterChip label={`結束日期：${filters.dateTo}`} onRemove={() => updateFilters({ dateTo: '' })} />}
           {filters.approvalStatus && <ActiveFilterChip label={`審核：${approvalStatusLabels[filters.approvalStatus]}`} onRemove={() => updateFilters({ approvalStatus: '' })} />}
@@ -440,7 +424,6 @@ export function MoneyEntryList() {
           filters={draftFilters}
           cashAccounts={cashAccounts}
           canViewFinance={canViewFinance}
-          vehicles={vehicles}
           onChange={(updates) => setDraftFilters((current) => ({ ...current, ...updates, page: 1 }))}
         />
       </MobileFilterDrawer>
@@ -538,20 +521,22 @@ export function MoneyEntryList() {
                   {isAdmin && (
                     <td className="px-4 py-3">
                       {entry.approval_status === 'pending' ? (
-                        <div className="flex gap-2">
+                        <div className="flex gap-4">
                           <button
                             type="button"
                             disabled={reviewingId === entry.id}
+                            aria-label={`核准 ${entry.entry_date} ${entry.category} ${(entry.amount === undefined ? '金額未提供' : currencyFormatter.format(entry.amount))}`}
                             onClick={() => handleApprove(entry)}
-                            className="rounded-lg border border-border-strong px-2.5 py-1 text-xs font-medium text-success hover:bg-surface-2 disabled:opacity-50"
+                            className="rounded-lg border border-border-strong min-h-11 min-w-11 px-3 py-2 text-sm font-medium text-success hover:bg-surface-2 disabled:opacity-50"
                           >
                             核准
                           </button>
                           <button
                             type="button"
                             disabled={reviewingId === entry.id}
+                            aria-label={`駁回 ${entry.entry_date} ${entry.category} ${(entry.amount === undefined ? '金額未提供' : currencyFormatter.format(entry.amount))}`}
                             onClick={() => handleReject(entry)}
-                            className="rounded-lg border border-border-strong px-2.5 py-1 text-xs font-medium text-error hover:bg-surface-2 disabled:opacity-50"
+                            className="rounded-lg border border-border-strong min-h-11 min-w-11 px-3 py-2 text-sm font-medium text-error hover:bg-surface-2 disabled:opacity-50"
                           >
                             駁回
                           </button>

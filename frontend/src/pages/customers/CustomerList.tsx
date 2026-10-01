@@ -1,3 +1,4 @@
+import { DebouncedSearchInput } from '../../components/DebouncedSearchInput'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listCustomers } from '../../api/customers'
@@ -29,15 +30,18 @@ export function CustomerList() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let active = true
     setLoading(true)
     setError(null)
     listCustomers({ search: search || undefined, customer_type: customerType || undefined, page })
       .then((response) => {
+        if (!active) return
         setCustomers(response.data)
         setMeta(response.meta)
       })
-      .catch(() => setError('客戶列表載入失敗'))
-      .finally(() => setLoading(false))
+      .catch(() => { if (active) setError('客戶列表載入失敗') })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
   }, [search, customerType, page])
 
   return (
@@ -53,16 +57,18 @@ export function CustomerList() {
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <input
-          type="text"
+        <DebouncedSearchInput
+          id="customer-search"
+          label="搜尋客戶"
           placeholder="搜尋姓名 / 電話 / Line ID"
           value={search}
-          onChange={(e) => {
+          onCommit={(value) => {
             setPage(1)
-            setSearch(e.target.value)
+            setSearch(value)
           }}
           className="w-72 rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
         />
+        <label className="flex flex-col gap-1 text-sm font-medium text-fg-muted">客戶類型
         <select
           value={customerType}
           onChange={(e) => {
@@ -77,6 +83,7 @@ export function CustomerList() {
             </option>
           ))}
         </select>
+        </label>
       </div>
 
       <FormAlert message={error} />

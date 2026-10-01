@@ -1,13 +1,13 @@
+import { extractFieldErrors } from '../../utils/fieldErrors'
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { isAxiosError } from 'axios'
 import { listCashAccountOptions } from '../../api/cashAccounts'
 import { createMoneyEntry } from '../../api/moneyEntries'
-import { listVehicleOptions } from '../../api/vehicles'
+import { VehicleSelect } from '../../components/VehicleSelect'
 import type { CashAccountOption } from '../../types/cashAccount'
 import type { CreateMoneyEntryPayload, MoneyDirection } from '../../types/moneyEntry'
-import type { Vehicle } from '../../types/vehicle'
 import { generateIdempotencyKey } from '../../utils/idempotency'
 import { formatBusinessDate } from '../../utils/dateTime'
 import { categoriesForDirection, directionLabels } from '../../utils/moneyEntryCategory'
@@ -34,7 +34,6 @@ export function MoneyEntryCreate() {
   const initialDirection = searchParams.get('direction') === 'expense' ? 'expense' : 'income'
 
   const [cashAccounts, setCashAccounts] = useState<CashAccountOption[]>([])
-  const [vehicles, setVehicles] = useState<Vehicle[]>([])
 
   const [entryDate, setEntryDate] = useState(formatBusinessDate())
   const [direction, setDirection] = useState<MoneyDirection>(initialDirection)
@@ -45,7 +44,7 @@ export function MoneyEntryCreate() {
   const [counterpartyName, setCounterpartyName] = useState('')
   const [description, setDescription] = useState('')
 
-  const [fieldErrors, setFieldErrors] = useState<Partial<Record<'entryDate' | 'category' | 'cashAccountId' | 'amount', string>>>({})
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({})
   const [validationAttempt, setValidationAttempt] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -54,7 +53,6 @@ export function MoneyEntryCreate() {
 
   useEffect(() => {
     listCashAccountOptions().then((accounts) => setCashAccounts(accounts.filter((a) => a.is_active))).catch(() => setCashAccounts([]))
-    listVehicleOptions().then(setVehicles).catch(() => setVehicles([]))
   }, [])
 
   useEffect(() => {
@@ -104,13 +102,13 @@ export function MoneyEntryCreate() {
       await createMoneyEntry(payload)
       navigate('/money-entries')
     } catch (err) {
-      const amountError = isAxiosError<{ errors?: { amount?: string[] } }>(err) ? err.response?.data.errors?.amount?.[0] : undefined
-      if (amountError) {
-        setFieldErrors((current) => ({ ...current, amount: amountError }))
-        setValidationAttempt((current) => current + 1)
-      } else {
+      const errors = extractFieldErrors(err)
+      setFieldErrors({ ...errors, entryDate: errors.entry_date, cashAccountId: errors.cash_account_id })
+      setValidationAttempt((current) => current + 1)
+      if (Object.keys(errors).length === 0 || errors.idempotency_key) {
         setError(extractErrorMessage(err, '新增收支失敗，請稍後再試'))
       }
+
     } finally {
       setSubmitting(false)
     }
@@ -127,7 +125,7 @@ export function MoneyEntryCreate() {
         <FormAlert message={error} focusOnShow className="mb-4" />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label htmlFor="money-entry-date" className="mb-1 block text-sm font-medium text-fg-muted">日期</label>
+            <label htmlFor="money-entry-date" className="mb-1 block text-sm font-medium text-fg-muted">日期 <span className="text-error">*</span></label>
             <input
               id="money-entry-date"
               type="date"
@@ -145,8 +143,11 @@ export function MoneyEntryCreate() {
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-fg-muted">收入 / 支出</label>
+            <label htmlFor="moneyentrycreate-field-1" className="mb-1 block text-sm font-medium text-fg-muted">收入 / 支出 <span className="text-error">*</span></label>
             <select
+              id="moneyentrycreate-field-1"
+              aria-invalid={Boolean(fieldErrors.direction)}
+              aria-describedby={fieldErrors.direction ? "moneyentrycreate-field-1-error" : undefined}
               value={direction}
               onChange={(e) => {
                 setDirection(e.target.value as MoneyDirection)
@@ -157,10 +158,11 @@ export function MoneyEntryCreate() {
               <option value="income">{directionLabels.income}</option>
               <option value="expense">{directionLabels.expense}</option>
             </select>
+          {fieldErrors.direction && <p id="moneyentrycreate-field-1-error" className="text-sm text-error">{fieldErrors.direction}</p>}
           </div>
 
           <div>
-            <label htmlFor="money-entry-category" className="mb-1 block text-sm font-medium text-fg-muted">分類</label>
+            <label htmlFor="money-entry-category" className="mb-1 block text-sm font-medium text-fg-muted">分類 <span className="text-error">*</span></label>
             <select
               id="money-entry-category"
               required
@@ -184,7 +186,7 @@ export function MoneyEntryCreate() {
           </div>
 
           <div>
-            <label htmlFor="money-entry-amount" className="mb-1 block text-sm font-medium text-fg-muted">金額</label>
+            <label htmlFor="money-entry-amount" className="mb-1 block text-sm font-medium text-fg-muted">金額 <span className="text-error">*</span></label>
             <input
               id="money-entry-amount"
               type="number"
@@ -203,7 +205,7 @@ export function MoneyEntryCreate() {
           </div>
 
           <div>
-            <label htmlFor="money-entry-cash-account" className="mb-1 block text-sm font-medium text-fg-muted">資金帳戶</label>
+            <label htmlFor="money-entry-cash-account" className="mb-1 block text-sm font-medium text-fg-muted">資金帳戶 <span className="text-error">*</span></label>
             <select
               id="money-entry-cash-account"
               required
@@ -226,41 +228,35 @@ export function MoneyEntryCreate() {
             {fieldErrors.cashAccountId && <p id="money-entry-cash-account-error" className="mt-1 text-xs text-error">{fieldErrors.cashAccountId}</p>}
           </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-fg-muted">關聯車輛（可空白）</label>
-            <select
-              value={vehicleId}
-              onChange={(e) => setVehicleId(e.target.value)}
-              className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
-            >
-              <option value="">不綁定車輛</option>
-              {vehicles.map((vehicle) => (
-                <option key={vehicle.id} value={vehicle.id}>
-                  {vehicle.stock_no}（{vehicle.brand} {vehicle.model}）
-                </option>
-              ))}
-            </select>
-          </div>
+          <VehicleSelect error={fieldErrors.vehicle_id} value={vehicleId ? Number(vehicleId) : null} onChange={(value) => setVehicleId(value === null ? '' : String(value))} inventoryOnly label="關聯車輛（可空白）" emptyLabel="不綁定車輛" />
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-fg-muted">對象</label>
+            <label htmlFor="moneyentrycreate-field-2" className="mb-1 block text-sm font-medium text-fg-muted">對象</label>
             <input
+              id="moneyentrycreate-field-2"
+              aria-invalid={Boolean(fieldErrors.counterparty_name)}
+              aria-describedby={fieldErrors.counterparty_name ? "moneyentrycreate-field-2-error" : undefined}
               type="text"
               value={counterpartyName}
               onChange={(e) => setCounterpartyName(e.target.value)}
               className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
             />
+            {fieldErrors.counterparty_name && <p id="moneyentrycreate-field-2-error" className="text-sm text-error">{fieldErrors.counterparty_name}</p>}
           </div>
         </div>
 
         <div className="mt-4">
-          <label className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
+          <label htmlFor="moneyentrycreate-field-3" className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
           <textarea
+            id="moneyentrycreate-field-3"
+            aria-invalid={Boolean(fieldErrors.description)}
+            aria-describedby={fieldErrors.description ? "moneyentrycreate-field-3-error" : undefined}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={3}
             className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
           />
+          {fieldErrors.description && <p id="moneyentrycreate-field-3-error" className="text-sm text-error">{fieldErrors.description}</p>}
         </div>
 
         <div className="mt-6 flex gap-3">

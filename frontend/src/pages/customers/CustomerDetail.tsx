@@ -1,3 +1,5 @@
+import { extractFieldErrors } from '../../utils/fieldErrors'
+import { VehicleStatusBadge } from '../../components/VehicleStatusBadge'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
@@ -70,7 +72,7 @@ function VehicleTable({ vehicles, canViewSalesPrice }: { vehicles: CustomerRelat
               <td className="px-3 py-2">
                 {vehicle.brand} {vehicle.model}
               </td>
-              <td className="px-3 py-2">{vehicle.status}</td>
+              <td className="px-3 py-2"><VehicleStatusBadge status={vehicle.status} /></td>
               {canViewSalesPrice && <td className="px-3 py-2 tabular-nums">{formatCurrency(vehicle.sold_price)}</td>}
               <td className="px-3 py-2">{vehicle.sold_at ? vehicle.sold_at.slice(0, 10) : '-'}</td>
             </tr>
@@ -82,6 +84,7 @@ function VehicleTable({ vehicles, canViewSalesPrice }: { vehicles: CustomerRelat
 }
 
 export function CustomerDetail() {
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const { user } = useAuth()
   const canViewSalesPrice = canViewSalesPricing(user?.role)
   const canDelete = canDeleteCustomer(user?.role)
@@ -139,6 +142,7 @@ export function CustomerDetail() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    setFieldErrors({})
     setFormError(null)
     setSubmitting(true)
     try {
@@ -155,6 +159,7 @@ export function CustomerDetail() {
       setEditing(false)
       loadDetail('資料已儲存，但客戶資料可能不是最新；請重新整理後確認。')
     } catch (err) {
+      setFieldErrors(extractFieldErrors(err))
       setFormError(extractErrorMessage(err, '更新客戶失敗，請稍後再試'))
     } finally {
       setSubmitting(false)
@@ -220,37 +225,44 @@ export function CustomerDetail() {
             <FormAlert message={formError} focusOnShow />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className="mb-1 block text-sm font-medium text-fg-muted">
+                <label htmlFor="customerdetail-field-1" className="mb-1 block text-sm font-medium text-fg-muted">
                   姓名<span className="text-error"> *</span>
                 </label>
-                <input
+                <input aria-invalid={Boolean(fieldErrors["name"])} aria-describedby={fieldErrors["name"] ? 'customerdetail-field-1-error' : undefined}
+                  id="customerdetail-field-1"
                   required
                   value={form.name}
                   onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
                   className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                 />
+              {fieldErrors["name"] && <p id="customerdetail-field-1-error" className="mt-1 text-sm text-error">{fieldErrors["name"]}</p>}
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-fg-muted">電話</label>
-                <input
+                <label htmlFor="customerdetail-field-2" className="mb-1 block text-sm font-medium text-fg-muted">電話</label>
+                <input aria-invalid={Boolean(fieldErrors["phone"])} aria-describedby={fieldErrors["phone"] ? 'customerdetail-field-2-error' : undefined}
+                  id="customerdetail-field-2"
                   value={form.phone}
                   onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
                   className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                 />
+              {fieldErrors["phone"] && <p id="customerdetail-field-2-error" className="mt-1 text-sm text-error">{fieldErrors["phone"]}</p>}
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-fg-muted">Line ID</label>
-                <input
+                <label htmlFor="customerdetail-field-3" className="mb-1 block text-sm font-medium text-fg-muted">Line ID</label>
+                <input aria-invalid={Boolean(fieldErrors["line_id"])} aria-describedby={fieldErrors["line_id"] ? 'customerdetail-field-3-error' : undefined}
+                  id="customerdetail-field-3"
                   value={form.line_id}
                   onChange={(e) => setForm((prev) => ({ ...prev, line_id: e.target.value }))}
                   className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                 />
+              {fieldErrors["line_id"] && <p id="customerdetail-field-3-error" className="mt-1 text-sm text-error">{fieldErrors["line_id"]}</p>}
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-fg-muted">
+                <label htmlFor="customerdetail-field-4" className="mb-1 block text-sm font-medium text-fg-muted">
                   類型<span className="text-error"> *</span>
                 </label>
-                <select
+                <select aria-invalid={Boolean(fieldErrors["customer_type"])} aria-describedby={fieldErrors["customer_type"] ? 'customerdetail-field-4-error' : undefined}
+                  id="customerdetail-field-4"
                   required
                   value={form.customer_type}
                   onChange={(e) => setForm((prev) => ({ ...prev, customer_type: e.target.value as CustomerType }))}
@@ -261,32 +273,39 @@ export function CustomerDetail() {
                   <option value="both">買賣方</option>
                   <option value="other">其他</option>
                 </select>
+              {fieldErrors["customer_type"] && <p id="customerdetail-field-4-error" className="mt-1 text-sm text-error">{fieldErrors["customer_type"]}</p>}
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-fg-muted">來源</label>
-                <input
+                <label htmlFor="customerdetail-field-5" className="mb-1 block text-sm font-medium text-fg-muted">來源</label>
+                <input aria-invalid={Boolean(fieldErrors["source"])} aria-describedby={fieldErrors["source"] ? 'customerdetail-field-5-error' : undefined}
+                  id="customerdetail-field-5"
                   value={form.source}
                   onChange={(e) => setForm((prev) => ({ ...prev, source: e.target.value }))}
                   className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                 />
+              {fieldErrors["source"] && <p id="customerdetail-field-5-error" className="mt-1 text-sm text-error">{fieldErrors["source"]}</p>}
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-fg-muted">地址</label>
-                <input
+                <label htmlFor="customerdetail-field-6" className="mb-1 block text-sm font-medium text-fg-muted">地址</label>
+                <input aria-invalid={Boolean(fieldErrors["address"])} aria-describedby={fieldErrors["address"] ? 'customerdetail-field-6-error' : undefined}
+                  id="customerdetail-field-6"
                   value={form.address}
                   onChange={(e) => setForm((prev) => ({ ...prev, address: e.target.value }))}
                   className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
                 />
+              {fieldErrors["address"] && <p id="customerdetail-field-6-error" className="mt-1 text-sm text-error">{fieldErrors["address"]}</p>}
               </div>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
-              <textarea
+              <label htmlFor="customerdetail-field-7" className="mb-1 block text-sm font-medium text-fg-muted">備註</label>
+              <textarea aria-invalid={Boolean(fieldErrors["notes"])} aria-describedby={fieldErrors["notes"] ? 'customerdetail-field-7-error' : undefined}
+                id="customerdetail-field-7"
                 value={form.notes}
                 onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
                 rows={3}
                 className="w-full rounded-lg border border-border-strong px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
+              {fieldErrors["notes"] && <p id="customerdetail-field-7-error" className="mt-1 text-sm text-error">{fieldErrors["notes"]}</p>}
             </div>
             <div className="flex gap-3">
               <button
