@@ -8,6 +8,8 @@ The format is based on Keep a Changelog, and this project uses Semantic Versioni
 
 ### Fixed
 
+- Wait for loaded Dashboard data in presentation tests to avoid intermittent CI failures.
+
 - Update Axios, Laravel and Flysystem security fixes; run dependency audits after functional checks and add MariaDB integration CI with skipped-test reporting.
 - Protect initial administrator setup and seed reruns, enforce disposable test databases, and isolate review-evidence test storage.
 - Document production frontend hosting, photo upload limits, upgrades and coordinated database/storage backup and restore; describe current contracts without obsolete development versions.

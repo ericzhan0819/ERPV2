@@ -57,7 +57,7 @@ function userWithRole(role: UserRole): User {
   }
 }
 
-function renderDashboard(role: UserRole) {
+async function renderDashboard(role: UserRole) {
   vi.mocked(useAuth).mockReturnValue({
     user: userWithRole(role),
   } as ReturnType<typeof useAuth>)
@@ -67,6 +67,9 @@ function renderDashboard(role: UserRole) {
       <Dashboard />
     </MemoryRouter>,
   )
+
+  // Section headings exist during loading; wait for API-backed content instead.
+  await screen.findByRole('link', { name: '待整備 1 台' })
 }
 
 describe('Dashboard presentation', () => {
@@ -76,7 +79,7 @@ describe('Dashboard presentation', () => {
   })
 
   it('keeps work KPI labels, values, units, icons and filter links without repeated descriptions', async () => {
-    renderDashboard('admin')
+    await renderDashboard('admin')
 
     const workSection = (await screen.findByRole('heading', { name: '工作概況' })).closest('section')
     expect(workSection).not.toBeNull()
@@ -103,7 +106,7 @@ describe('Dashboard presentation', () => {
   })
 
   it('keeps the business date and approved-only contract once while preserving KPI links', async () => {
-    renderDashboard('admin')
+    await renderDashboard('admin')
 
     const businessSection = (await screen.findByRole('heading', { name: '經營概況' })).closest('section')
     expect(businessSection).not.toBeNull()
@@ -126,7 +129,7 @@ describe('Dashboard presentation', () => {
   })
 
   it('keeps chart period, units and accessible descriptions', async () => {
-    renderDashboard('admin')
+    await renderDashboard('admin')
 
     expect(await screen.findByText('近 30 天（含今天）')).toBeTruthy()
     expect(screen.getByRole('img', { name: /近 30 天成交量 單位：台/ })).toBeTruthy()
@@ -143,7 +146,7 @@ describe('Dashboard presentation', () => {
     ['manager', true, false],
     ['sales', false, false],
   ] as const)('keeps %s financial and approval visibility', async (role, showsFinance, showsApproval) => {
-    renderDashboard(role)
+    await renderDashboard(role)
     await screen.findByRole('heading', { name: '工作概況' })
 
     expect(screen.queryByText('現金帳面餘額') !== null).toBe(showsFinance)
